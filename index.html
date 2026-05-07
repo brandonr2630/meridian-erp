@@ -4434,7 +4434,7 @@ async function saveVendorPayment() {
     const [payment] = await sbPost('payments', {
       company_id: currentCompany.id, contact_id: bill.contact_id,
       payment_no: paymentNo, payment_date: date,
-      payment_type: 'vendor_payment', payment_method: method,
+      payment_type: 'payment', payment_method: method,
       currency: bill.currency, amount, bank_account_id: bankAccId,
       reference, notes, journal_id: journalId, status: 'posted'
     });
@@ -4567,7 +4567,7 @@ async function voidVendorPayment(paymentId, billId) {
     }
 
     // Mark payment voided
-    await sbPatch('payments', paymentId, { status: 'voided', voided_at: nowISO(), void_reason: reason });
+    await sbPatch('payments', paymentId, { status: 'void', voided_at: nowISO(), void_reason: reason });
 
     // Recalculate bill balances
     const newAmountPaid = Math.max(0, parseFloat(bill.amount_paid || 0) - amount);
