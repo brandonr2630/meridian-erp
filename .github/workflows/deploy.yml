@@ -1,0 +1,20 @@
+name: Deploy to cPanel
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger cPanel Git Deploy
+        run: |
+          curl -s -X POST \
+            "https://terranresources.com:2083/execute/VersionControl/update" \
+            -H "Authorization: cpanel terranre:${{ secrets.CPANEL_API_TOKEN }}" \
+            --data-urlencode "repository_root=/home/terranre/repositories/meridian-erp" \
+            --fail \
+            -o response.json
+          cat response.json
