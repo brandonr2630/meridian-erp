@@ -4416,7 +4416,7 @@ async function saveVendorPayment() {
           const [je]    = await sbPost('journal_entries', {
             company_id: currentCompany.id, entry_no: entryNo, entry_date: date,
             description: `Vendor payment — ${bill.bill_no}`, reference: paymentNo,
-            currency: bill.currency, entry_type: 'vendor_payment',
+            currency: bill.currency, entry_type: 'payment',
             status: 'posted', posted_at: nowISO()
           });
           await sbPost('journal_lines', [
@@ -4554,7 +4554,7 @@ async function voidVendorPayment(paymentId, billId) {
             entry_date: new Date().toISOString().slice(0, 10),
             description: `Void of ${payment.payment_no} — ${reason}`,
             reference: payment.payment_no, currency: payment.currency,
-            entry_type: 'vendor_payment', status: 'posted', posted_at: nowISO()
+            entry_type: 'payment', status: 'posted', posted_at: nowISO()
           });
           await sbPost('journal_lines', [
             { journal_id: je.id, account_id: bankAcc.account_id, description: `Reversal — ${payment.payment_no}`, debit: amount, credit: 0,      line_order: 0 },
@@ -8200,7 +8200,7 @@ async function postCNJournal({ invoiceId, total, subtotal, taxAmt, currency, cnN
     const [je]      = await sbPost('journal_entries', {
       company_id: currentCompany.id, entry_no: entryNo,
       entry_date: todayDate(), description: `Credit Note ${cnNo}`,
-      reference: cnNo, currency, entry_type: 'credit_note',
+      reference: cnNo, currency, entry_type: 'adjustment',
       status: 'posted', posted_at: nowISO(), invoice_id: invoiceId
     });
     // Reverse: Cr AR (debit), Dr Revenue (credit)
