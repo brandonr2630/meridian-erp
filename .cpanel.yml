@@ -1,0 +1,5 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/terranre/public_html/erp.terranresources.com/
+    - /bin/cp index.html $DEPLOYPATH
