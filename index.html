@@ -4344,7 +4344,7 @@ function openPayBillModal(billId) {
   document.getElementById('bill-pay-date').value   = new Date().toISOString().slice(0, 10);
   document.getElementById('bill-pay-amount').value = parseFloat(bill.balance_due).toFixed(2);
   document.getElementById('bill-pay-amount').max   = parseFloat(bill.balance_due).toFixed(2);
-  document.getElementById('bill-pay-method').value = 'Cheque';
+  document.getElementById('bill-pay-method').value = 'cheque';
   document.getElementById('bill-pay-reference').value = '';
   document.getElementById('bill-pay-notes').value  = '';
 
