@@ -9,12 +9,21 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger cPanel Git Deploy
+      - name: Pull latest code
         run: |
           curl -s -X POST \
             "https://chi203.greengeeks.net:2083/execute/VersionControl/update" \
             -H "Authorization: cpanel terranre:${{ secrets.CPANEL_API_TOKEN }}" \
             --data-urlencode "repository_root=/home/terranre/public_html/erp.terranresources.com" \
             --fail \
-            -o response.json
-          cat response.json
+            -o pull.json
+          cat pull.json
+      - name: Run deployment tasks
+        run: |
+          curl -s -X POST \
+            "https://chi203.greengeeks.net:2083/execute/VersionControlDeployment/create" \
+            -H "Authorization: cpanel terranre:${{ secrets.CPANEL_API_TOKEN }}" \
+            --data-urlencode "repository_root=/home/terranre/public_html/erp.terranresources.com" \
+            --fail \
+            -o deploy.json
+          cat deploy.json
