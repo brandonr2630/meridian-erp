@@ -14,7 +14,7 @@ jobs:
           curl -s -X POST \
             "https://chi203.greengeeks.net:2083/execute/VersionControl/update" \
             -H "Authorization: cpanel terranre:${{ secrets.CPANEL_API_TOKEN }}" \
-            --data-urlencode "repository_root=/home/terranre/public_html/erp.terranresources.com" \
+            --data-urlencode "repository_root=/home/terranre/repositories/meridian-erp" \
             --fail \
             -o pull.json
           cat pull.json
@@ -23,7 +23,7 @@ jobs:
           curl -s -X POST \
             "https://chi203.greengeeks.net:2083/execute/VersionControlDeployment/create" \
             -H "Authorization: cpanel terranre:${{ secrets.CPANEL_API_TOKEN }}" \
-            --data-urlencode "repository_root=/home/terranre/public_html/erp.terranresources.com" \
+            --data-urlencode "repository_root=/home/terranre/repositories/meridian-erp" \
             --fail \
             -o deploy.json
           cat deploy.json
