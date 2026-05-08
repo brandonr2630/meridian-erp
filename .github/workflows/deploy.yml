@@ -14,7 +14,7 @@ jobs:
           curl -s -X POST \
             "https://terranresources.com:2083/execute/VersionControl/update" \
             -H "Authorization: cpanel terranre:${{ secrets.CPANEL_API_TOKEN }}" \
-            --data-urlencode "repository_root=/home/terranre/repositories/meridian-erp" \
+            --data-urlencode "repository_root=/home/terranre/public_html/erp.terranresources.com" \
             --fail \
             -o response.json
           cat response.json
