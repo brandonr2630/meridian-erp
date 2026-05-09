@@ -9,21 +9,70 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Pull latest code
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Upload changed files to cPanel
+        env:
+          TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
         run: |
-          curl -s -X POST \
-            "https://chi203.greengeeks.net:2083/execute/VersionControl/update" \
-            -H "Authorization: cpanel terranre:${{ secrets.CPANEL_API_TOKEN }}" \
-            --data-urlencode "repository_root=/home/terranre/repositories/meridian-erp" \
-            --fail \
-            -o pull.json
-          cat pull.json
-      - name: Run deployment tasks
-        run: |
-          curl -s -X POST \
-            "https://chi203.greengeeks.net:2083/execute/VersionControlDeployment/create" \
-            -H "Authorization: cpanel terranre:${{ secrets.CPANEL_API_TOKEN }}" \
-            --data-urlencode "repository_root=/home/terranre/repositories/meridian-erp" \
-            --fail \
-            -o deploy.json
-          cat deploy.json
+          HOST="https://chi203.greengeeks.net:2083"
+          CPANEL_USER="terranre"
+          DEPLOY_DIR="/home/terranre/public_html/erp.terranresources.com"
+          BEFORE="${{ github.event.before }}"
+          AFTER="${{ github.sha }}"
+
+          if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            FILES=$(git ls-files)
+          else
+            FILES=$(git diff --name-only --diff-filter=ACM "$BEFORE" "$AFTER")
+          fi
+
+          FILES=$(echo "$FILES" | grep -Ev '^\.github/|^\.cpanel\.yml$' || true)
+
+          if [ -z "$FILES" ]; then
+            echo "No deployable files changed. Done."
+            exit 0
+          fi
+
+          echo "=== Files to deploy ==="
+          echo "$FILES"
+          echo "======================"
+
+          FAILED=0
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            [ ! -f "$file" ] && continue
+
+            SUBDIR=$(dirname "$file")
+            if [ "$SUBDIR" = "." ]; then
+              REMOTE_DIR="$DEPLOY_DIR"
+            else
+              REMOTE_DIR="$DEPLOY_DIR/$SUBDIR"
+            fi
+            FNAME=$(basename "$file")
+
+            echo "→ Uploading: $file"
+            STATUS=$(curl -s -o result.json -w "%{http_code}" -X POST \
+              "$HOST/execute/Fileman/save_file_content" \
+              -H "Authorization: cpanel $CPANEL_USER:$TOKEN" \
+              --data-urlencode "dir=$REMOTE_DIR" \
+              --data-urlencode "file=$FNAME" \
+              --data-urlencode "content@$file")
+
+            CPANEL_STATUS=$(python3 -c "import sys,json; d=json.load(open('result.json')); print(d.get('status',0))" 2>/dev/null || echo "0")
+
+            if [ "$STATUS" != "200" ] || [ "$CPANEL_STATUS" != "1" ]; then
+              echo "  ✖ FAILED (HTTP $STATUS, cPanel status $CPANEL_STATUS)"
+              cat result.json
+              FAILED=1
+            else
+              echo "  ✔ OK"
+            fi
+          done <<< "$FILES"
+
+          if [ "$FAILED" = "1" ]; then
+            echo "One or more files failed to upload."
+            exit 1
+          fi
