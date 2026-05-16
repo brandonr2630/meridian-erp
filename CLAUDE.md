@@ -1,0 +1,33 @@
+# CLAUDE.md — Meridian ERP
+
+Live URL: `erp.terranresources.com` · Repo: `brandonr2630/meridian-erp`
+
+## Architecture
+
+**Single-file app** — the entire application is `index.html` (~8400 lines of inline CSS + JS). Never edit `index2–5.html`; those are archives.
+
+- **Backend:** Supabase, called via a thin fetch wrapper. All DB access goes through `sb()` → `sbGet / sbPost / sbPatch / sbPatchWhere / sbDelete / sbDeleteWhere`.
+- **Auth:** Supabase JWT. Session persisted to `localStorage` and restored on load by `tryRestoreSession()`.
+- **Multi-company:** every record scoped to `currentCompany.id`. Company switcher in topbar; `switchCompany(id)` reloads view data.
+- **Navigation:** `navigate(view)` sets `currentView` and calls `loadViewData(view)`.
+- **State:** global vars declared at `// ── STATE ──` (~line 3373): `currentUser`, `currentCompany`, `accounts`, `contacts`, `journalEntries`, `bankAccounts`, etc.
+
+## Roles
+
+`super_admin` > `admin` > `sales` > `user`. Finance modules (AP, Bank, CoA, Journal, Reports) are admin-only. Check `canPost()`, `canVoid()`, `canFinance()` before rendering controls.
+
+## Modules (by JS comment header)
+
+Dashboard · Chart of Accounts · Journal Entries · AR · AP · Vendor Payments · Clients · Vendors · ERP Companies · Settings · Bank Accounts · Bank Transactions & Reconciliation · Bills (AP) · Financial Reports · Quotations · Sales Leads · PDF generation
+
+## Currencies
+
+TTD (`TT$`), USD (`US$`), GYD (`G$`) — formatted via `fmt(amount, currency)`.
+
+## Deployment
+
+Push to `master` auto-deploys via GitHub Actions → cPanel Fileman API (GreenGeeks). Deploy dir: `/home/terranre/public_html/erp.terranresources.com`. Manual redeploy: Actions → Deploy to cPanel → Run workflow.
+
+## Session context
+
+See `handoff.md` for the running log of completed work and known issues.
