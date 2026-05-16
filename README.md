@@ -2,7 +2,7 @@
 
 Internal ERP system for the Terran Resources group of companies.
 
-**Live:** internal use only (not publicly hosted)
+**Live:** https://erp.terranresources.com
 
 ## Structure
 
@@ -23,7 +23,18 @@ Dashboard · Chart of Accounts · Journal Entries · AR · AP · Vendor Payments
 
 ## Deployment
 
-No automated deploy workflow — this is an internal tool, not hosted on GreenGeeks.
+Every push to `master` auto-deploys via GitHub Actions → cPanel Fileman API (GreenGeeks).
+
+- **Incremental push:** only files changed in the push are uploaded
+- **Full redeploy:** trigger manually via Actions → Deploy to cPanel → Run workflow
+
+### Required GitHub Secrets
+
+| Secret | Value |
+|--------|-------|
+| `CPANEL_API_TOKEN` | cPanel API token |
+| `CPANEL_HOST` | `https://chi203.greengeeks.net:2083` |
+| `CPANEL_USER` | `terranre` |
 
 ## Repository
 
