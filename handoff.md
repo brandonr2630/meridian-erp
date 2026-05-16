@@ -2,6 +2,27 @@
 
 ---
 
+## Session 3 — GitHub Infrastructure
+
+**Date:** 2026-05-16
+**Commit:** `f6ca401`
+
+### What Changed
+
+Switched to the centralised reusable deploy workflow. All deploy logic now lives in `brandonr2630/projects`.
+
+| Change | Detail |
+|--------|--------|
+| Reusable deploy workflow | `deploy.yml` reduced from 130 lines to 14 — calls `brandonr2630/projects/.github/workflows/deploy.yml@master` |
+| Auto-merge enabled | PRs merge as soon as opened (no required status checks) |
+| GitHub Projects board | [github.com/users/brandonr2630/projects/1](https://github.com/users/brandonr2630/projects/1) — all 5 repos linked |
+
+### Outstanding
+
+- No known outstanding items
+
+---
+
 ## Session 2 — Infrastructure Overhaul
 
 **Date:** 2026-05-16
@@ -108,4 +129,4 @@ PDFs rendered client-side with a custom multi-page renderer. SheetJS lazy-loaded
 
 ---
 
-**Last Updated:** 2026-05-16 (Session 2)
+**Last Updated:** 2026-05-16 (Session 3)
