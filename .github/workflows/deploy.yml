@@ -18,8 +18,8 @@ jobs:
         env:
           TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
         run: |
-          HOST="https://chi203.greengeeks.net:2083"
-          CPANEL_USER="terranre"
+          HOST="${{ secrets.CPANEL_HOST }}"
+          CPANEL_USER="${{ secrets.CPANEL_USER }}"
           DEPLOY_DIR="/home/terranre/public_html/erp.terranresources.com"
           BEFORE="${{ github.event.before }}"
           AFTER="${{ github.sha }}"
