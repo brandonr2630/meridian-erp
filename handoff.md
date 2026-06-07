@@ -1,6 +1,20 @@
-# Meridian ERP Handoff
+# Meridian ERP — Handoff
+
+*Last updated: 2026-05-16 · Session 3*
 
 ---
+
+## Quick Reference
+
+| Item | Value |
+|------|-------|
+| Live URL | `https://erp.terranresources.com` |
+| GitHub repo | `brandonr2630/meridian-erp` |
+| Deploy | Push to `master` via PR → GitHub Actions → GreenGeeks cPanel auto-deploys |
+
+---
+
+## Sessions
 
 ## Session 3 — GitHub Infrastructure
 
@@ -120,13 +134,19 @@ PDFs rendered client-side with a custom multi-page renderer. SheetJS lazy-loaded
 
 ---
 
+## Known Issues
+
+No known issues.
+
+## Next Up
+
+- CRM module (3 tables: contacts, activities, deals) — design drafted, not yet built. See memory for details.
+
+---
+
 ## References
 
 - **Repository:** https://github.com/brandonr2630/meridian-erp
 - **Live Site:** https://erp.terranresources.com
 - **Deploy workflow:** `.github/workflows/deploy.yml`
 - **Deployment:** cPanel Fileman API → GreenGeeks (`chi203.greengeeks.net`)
-
----
-
-**Last Updated:** 2026-05-16 (Session 3)
