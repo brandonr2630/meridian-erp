@@ -3418,7 +3418,7 @@ body {
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-payment-confirmed')">Close</button>
-      <button class="btn btn-primary" id="pconf-print-btn" onclick="openReceiptPDF(_lastReceiptId)">Print Receipt</button>
+      <button class="btn btn-primary" onclick="openReceiptPDF(_lastReceiptId)">Print Receipt</button>
     </div>
   </div>
 </div>
@@ -5456,7 +5456,7 @@ async function savePayment() {
       bank_account_id: bankAccId, receipt_no: receiptNo,
       receipt_date: date, amount, currency: inv.currency,
       payment_method: method, reference, notes,
-      journal_id: journalId, status: 'posted'
+      journal_id: journalId, status: 'posted', balance_after: newBalance
     });
 
     // Update invoice balance and status
@@ -5487,6 +5487,10 @@ async function savePayment() {
 // ── RECEIPT PDF ───────────────────────────────────────────────────
 
 let _lastReceiptId = null;
+
+function escHTML(s) {
+  return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : '';
+}
 
 function amountToWords(amount, currency) {
   const ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine',
@@ -5533,7 +5537,7 @@ function buildReceiptPDFHTML(receipt, invoice, contact, bankAcc) {
   const headerHTML = buildPDFHeader(co, 'Receipt', receipt.receipt_no, 'Amount Received',
     fmt(receipt.amount, receipt.currency), contact, metaRows);
 
-  const balAfter = parseFloat(invoice.balance_due ?? 0);
+  const balAfter = parseFloat(receipt.balance_after ?? invoice.balance_due ?? 0);
 
   const invoiceTableHTML = `
     <div style="margin-bottom:20px;">
@@ -5569,7 +5573,7 @@ function buildReceiptPDFHTML(receipt, invoice, contact, bankAcc) {
   const notesHTML = receipt.notes
     ? `<div style="margin-bottom:20px;padding:12px 14px;background:#f9f9f9;border:1px solid #e8e8e8;border-radius:4px;">
         <div style="font-size:9px;color:#999;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Remarks</div>
-        <div style="font-size:11px;color:#444;line-height:1.6;">${receipt.notes}</div>
+        <div style="font-size:11px;color:#444;line-height:1.6;">${escHTML(receipt.notes)}</div>
        </div>`
     : '';
 
@@ -5618,8 +5622,8 @@ async function openReceiptPDF(receiptId) {
     const receipt  = receipts[0];
     if (!receipt) { showToast('Receipt not found.', 'error'); return; }
 
-    const [invArr] = await Promise.all([sbGet('invoices', `id=eq.${receipt.invoice_id}`)]);
-    const invoice  = invArr[0] || {};
+    const invArr  = await sbGet('invoices', `id=eq.${receipt.invoice_id}`);
+    const invoice = invArr[0] || {};
     const contact  = contacts.find(c => c.id === (receipt.contact_id || invoice.contact_id)) || {};
     const bankAcc  = bankAccounts.find(b => b.id === receipt.bank_account_id) || {};
 
@@ -5667,7 +5671,7 @@ async function openInvoiceReceiptHistory(invoiceId) {
               <td class="mono">${r.receipt_date}</td>
               <td>${methodLabels[r.payment_method] || r.payment_method || '—'}</td>
               <td style="font-size:11px;">${bankMap[r.bank_account_id] || '—'}</td>
-              <td class="mono" style="font-size:11px;">${r.reference || '—'}</td>
+              <td class="mono" style="font-size:11px;">${escHTML(r.reference) || '—'}</td>
               <td class="right mono">${fmt(r.amount, r.currency)}</td>
               <td><span class="badge badge-${voided ? 'void' : 'paid'}">${voided ? 'voided' : 'posted'}</span></td>
               <td class="right">
