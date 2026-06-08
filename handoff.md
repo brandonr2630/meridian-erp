@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-08 · Session 7*
+*Last updated: 2026-06-08 · Session 8*
 
 ---
 
@@ -15,6 +15,32 @@
 ---
 
 ## Sessions
+
+## Session 8 — Table Pagination
+
+**Date:** 2026-06-08
+**Branch:** `feat/table-pagination` → [PR #27](https://github.com/brandonr2630/meridian-erp/pull/27)
+
+### What Changed
+
+| Change | Detail |
+|--------|--------|
+| `PAGE_SIZE = 50` constant | Shared page size used across all paginated tables |
+| `renderPager()` helper | Returns a `.table-pager` bar with "Showing X–Y of Z" and ← Prev / Next → buttons; returns empty string if data fits on one page |
+| `.table-pager` CSS | Flex bar below each table; `border-top: 1px solid var(--border)` |
+| AR Invoices pagination | `renderARTable` slices by `arPage`; `filterAR` resets page; `setArPage(n)` for nav |
+| AP Bills pagination | `renderAPTable` extracted from inline `loadAP`; `filterAP` implemented (was empty stub — now searches bill no. / supplier, filters by status); `setApPage(n)` |
+| Quotations pagination | `renderQuotationsTable` slices by `quoPage`; `filterQuotations` resets page; `setQuoPage(n)` |
+| Clients pagination | `renderClientsTable` slices by `clientsPage`; `filterClients` resets page; `setClientsPage(n)` |
+| Vendors pagination | `renderVendorsTable` slices by `vendorsPage`; `filterVendors` resets page; `setVendorsPage(n)` |
+
+Summary stat cards and all global `.find()` lookups are unaffected — full datasets are still fetched.
+
+### Outstanding
+
+- CRM module (3 tables: contacts, activities, deals) — design drafted, not yet built
+
+---
 
 ## Session 7 — Receipt History Modal Layout
 
@@ -223,11 +249,10 @@ No known issues.
 
 ## To Do — Code Review Backlog
 
-Items 1–4 from the June 2026 code review are resolved (PRs #22–#25). Items 5–17 remain:
+Items 1–5 from the June 2026 code review are resolved (PRs #22–#25, #27). Items 6–17 remain:
 
 | # | Priority | Area | Task |
 |---|----------|------|------|
-| 5 | High | Performance | Add pagination (`limit`/`offset`) to heavy tables — AR invoices, quotations, bills, clients, vendors all load the full dataset |
 | 6 | High | Maintainability | Z-index constants — define `--z-dropdown: 100; --z-modal: 600; --z-overlay: 700; --z-toast: 1000` in CSS vars and replace all magic numbers |
 | 7 | High | Accessibility | Add `aria-label` to all icon-only buttons (topbar `🔔`, `🌙`, `⚙️` and table action icons) |
 | 8 | Medium | Correctness | Date string comparisons — replace `i.due_date < today` with `new Date(i.due_date) < new Date(today)` to handle ISO timestamp suffixes |
