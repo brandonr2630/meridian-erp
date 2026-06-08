@@ -5530,7 +5530,7 @@ function buildReceiptPDFHTML(receipt, invoice, contact, bankAcc) {
   const metaRows = [
     ['Receipt Date :', formatDateDisplay(receipt.receipt_date)],
     ['Method :', methodLabels[receipt.payment_method] || receipt.payment_method || '—'],
-    ...(receipt.reference ? [['Reference :', receipt.reference]] : []),
+    ...(receipt.reference ? [['Reference :', escHTML(receipt.reference)]] : []),
     ['Received Into :', bankAcc?.account_name || '—'],
   ];
 
@@ -5676,7 +5676,7 @@ async function openInvoiceReceiptHistory(invoiceId) {
               <td><span class="badge badge-${voided ? 'void' : 'paid'}">${voided ? 'voided' : 'posted'}</span></td>
               <td class="right">
                 ${!voided
-                  ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="openReceiptPDF('${r.id}')" style="font-size:15px;padding:4px 7px;" title="Print Receipt">🖨</button>`
+                  ? `<div style="display:flex;gap:4px;justify-content:flex-end;"><button class="btn btn-ghost btn-sm btn-icon" onclick="openReceiptPDF('${r.id}')" style="font-size:15px;padding:4px 7px;" title="Print Receipt">🖨</button>${canVoid() ? `<button class="btn btn-danger btn-sm" onclick="voidARReceipt('${r.id}','${invoiceId}')">Void</button>` : ''}</div>`
                   : `<span style="font-size:10px;color:var(--text-3);">Voided</span>`}
               </td>
             </tr>`;
@@ -5685,6 +5685,66 @@ async function openInvoiceReceiptHistory(invoiceId) {
       </table>`;
   } catch(e) {
     listEl.innerHTML = `<div style="padding:20px;color:var(--red);">Error: ${e.message}</div>`;
+  }
+}
+
+async function voidARReceipt(receiptId, invoiceId) {
+  const reason = await showVoidReason();
+  if (reason === null) return;
+  if (!reason) { showToast('A reason is required to void a receipt.', 'warn'); return; }
+
+  const inv = invoices.find(i => i.id === invoiceId);
+  if (!inv) return;
+
+  try {
+    const [receipt] = await sbGet('payment_receipts', `id=eq.${receiptId}`);
+    if (!receipt || receipt.status === 'voided') { showToast('Receipt is already voided.', 'warn'); return; }
+
+    const amount = parseFloat(receipt.amount);
+
+    // Reverse journal entry: Dr AR / Cr Bank (opposite of the original Dr Bank / Cr AR)
+    if (receipt.journal_id) {
+      const bankAcc   = bankAccounts.find(a => a.id === receipt.bank_account_id);
+      const arAccounts = await sbGet('accounts', `company_id=eq.${currentCompany.id}&account_subtype=eq.receivable&is_active=eq.true&limit=1`);
+      if (arAccounts.length && bankAcc?.account_id) {
+        const jeCounters = await sbGet('sequence_counters', `company_id=eq.${currentCompany.id}&sequence_type=eq.journal`);
+        const jeCounter  = jeCounters[0];
+        if (jeCounter) {
+          const jeNum   = (jeCounter.last_number || 0) + 1;
+          const entryNo = `JE-${String(jeNum).padStart(jeCounter.padding || 4, '0')}`;
+          const [je]    = await sbPost('journal_entries', {
+            company_id:  currentCompany.id, entry_no: entryNo,
+            entry_date:  new Date().toISOString().slice(0, 10),
+            description: `Void of ${receipt.receipt_no} — ${reason}`,
+            reference:   receipt.receipt_no, currency: receipt.currency,
+            entry_type:  'receipt', status: 'posted', posted_at: nowISO()
+          });
+          await sbPost('journal_lines', [
+            { journal_id: je.id, account_id: arAccounts[0].id,   description: `Void ${receipt.receipt_no}`, debit: amount, credit: 0,      line_order: 0 },
+            { journal_id: je.id, account_id: bankAcc.account_id, description: `Void ${receipt.receipt_no}`, debit: 0,      credit: amount, line_order: 1 }
+          ]);
+          await sbPatch('sequence_counters', jeCounter.id, { last_number: jeNum });
+          await sbPatch('bank_accounts', receipt.bank_account_id, { current_balance: Math.max(0, parseFloat(bankAcc.current_balance || 0) - amount) });
+        }
+      }
+    }
+
+    // Mark receipt voided
+    await sbPatch('payment_receipts', receiptId, { status: 'voided' });
+
+    // Restore invoice balance and status
+    const newBalance = parseFloat(inv.balance_due) + amount;
+    const invTotal   = parseFloat(inv.total);
+    const newStatus  = newBalance <= 0.005 ? 'paid' : newBalance < invTotal - 0.005 ? 'partial' : 'posted';
+    await sbPatch('invoices', invoiceId, { balance_due: newBalance, status: newStatus });
+
+    showToast(`Receipt ${receipt.receipt_no} voided and reversed.`, 'success');
+    closeModal('modal-invoice-receipts');
+    await loadAR();
+    await loadDashboard();
+    try { bankAccounts = await sbGet('bank_accounts', `company_id=eq.${currentCompany.id}&is_active=eq.true&order=account_name`); } catch(e) {}
+  } catch(e) {
+    showToast('Error voiding receipt: ' + e.message, 'error');
   }
 }
 
@@ -8910,8 +8970,8 @@ function buildPDFTotals(subtotal, taxRate, taxAmt, total, currency, incoterms, i
         <td style="padding:10px 12px;font-weight:700;font-size:14px;text-align:right;font-family:monospace;border-top:2px solid #1a1a1a;">${fmt(total, currency)}</td>
       </tr>
     </table>
-    ${incoterms ? `<div style="margin-top:16px;padding:10px 14px;background:#f9f9f9;border:1px solid #e8e8e8;border-radius:4px;display:flex;align-items:center;gap:12px;"><span style="background:#1a1a1a;color:#fff;font-size:10px;font-weight:700;letter-spacing:1px;padding:3px 8px;border-radius:3px;">${incoterms}</span><span style="font-size:11px;color:#555;"><strong>${INCOTERMS_DESC[incoterms]||incoterms}</strong>${incotermsPlace ? ` — ${incotermsPlace}` : ''}</span></div>` : ''}
-    ${notesText ? `<div style="margin-top:20px;padding-top:16px;border-top:1px solid #e8e8e8;"><div style="font-size:9px;color:#999;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Notes</div><div style="font-size:11px;color:#444;line-height:1.7;white-space:pre-wrap;">${notesText.replace(/\n/g,'<br>')}</div></div>` : ''}
+    ${incoterms ? `<div style="margin-top:16px;padding:10px 14px;background:#f9f9f9;border:1px solid #e8e8e8;border-radius:4px;display:flex;align-items:center;gap:12px;"><span style="background:#1a1a1a;color:#fff;font-size:10px;font-weight:700;letter-spacing:1px;padding:3px 8px;border-radius:3px;">${incoterms}</span><span style="font-size:11px;color:#555;"><strong>${INCOTERMS_DESC[incoterms]||incoterms}</strong>${incotermsPlace ? ` — ${escHTML(incotermsPlace)}` : ''}</span></div>` : ''}
+    ${notesText ? `<div style="margin-top:20px;padding-top:16px;border-top:1px solid #e8e8e8;"><div style="font-size:9px;color:#999;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Notes</div><div style="font-size:11px;color:#444;line-height:1.7;white-space:pre-wrap;">${escHTML(notesText).replace(/\n/g,'<br>')}</div></div>` : ''}
     <div style="margin-top:40px;width:200px;border-top:1px solid #999;padding-top:6px;font-size:10px;color:#999;">Authorized Signature</div>`;
 }
 
@@ -9046,7 +9106,7 @@ async function openInvoicePDF(id) {
     ['Invoice Date :', formatDateDisplay(inv.invoice_date)],
     ['Terms :', inv.payment_terms || '—'],
     ['Due Date :', inv.due_date ? formatDateDisplay(inv.due_date) : '—'],
-    ...(inv.client_ref ? [['Client Ref :', inv.client_ref]] : [])
+    ...(inv.client_ref ? [['Client Ref :', escHTML(inv.client_ref)]] : [])
   ];
 
   const docNo      = inv.invoice_no || 'DRAFT';
@@ -9079,8 +9139,8 @@ async function openQuoPDF(id) {
     ['Quote Date :', formatDateDisplay(quo.quote_date)],
     ['Valid Until :', quo.valid_until ? formatDateDisplay(quo.valid_until) : '—'],
     ['Terms :', quo.payment_terms || '—'],
-    ...(quo.client_ref ? [['Client Ref :', quo.client_ref]] : []),
-    ...(lead ? [['Prepared By :', lead.name]] : [])
+    ...(quo.client_ref ? [['Client Ref :', escHTML(quo.client_ref)]] : []),
+    ...(lead ? [['Prepared By :', escHTML(lead.name)]] : [])
   ];
 
   const headerHTML = buildPDFHeader(co, 'Quotation', quo.quote_no || 'DRAFT', 'Total Value',
@@ -9112,12 +9172,12 @@ async function openDNPDF(id) {
   const metaRows = [
     ['DN Date :', formatDateDisplay(dn.dn_date)],
     ['Delivery Date :', dn.delivery_date ? formatDateDisplay(dn.delivery_date) : '—'],
-    ...(dn.client_ref ? [['Client Ref :', dn.client_ref]] : []),
-    ...(dn.carrier ? [['Carrier :', dn.carrier]] : []),
-    ...(dn.driver ? [['Driver :', dn.driver]] : []),
-    ...(dn.vehicle_ref ? [['Vehicle :', dn.vehicle_ref]] : []),
-    ...(dn.recipient_name ? [['Recipient :', dn.recipient_name]] : []),
-    ...(delAddr ? [['Deliver To :', delAddr]] : [])
+    ...(dn.client_ref ? [['Client Ref :', escHTML(dn.client_ref)]] : []),
+    ...(dn.carrier ? [['Carrier :', escHTML(dn.carrier)]] : []),
+    ...(dn.driver ? [['Driver :', escHTML(dn.driver)]] : []),
+    ...(dn.vehicle_ref ? [['Vehicle :', escHTML(dn.vehicle_ref)]] : []),
+    ...(dn.recipient_name ? [['Recipient :', escHTML(dn.recipient_name)]] : []),
+    ...(delAddr ? [['Deliver To :', escHTML(delAddr)]] : [])
   ];
 
   const headerHTML = buildPDFHeader(co, 'Delivery Note', dn.dn_no, 'Status',
@@ -9145,7 +9205,7 @@ async function openCNPDF(id) {
   const metaRows = [
     ['CN Date :', formatDateDisplay(cn.cn_date)],
     ['Ref Invoice :', inv?.invoice_no || '—'],
-    ['Reason :', cn.reason || '—']
+    ['Reason :', escHTML(cn.reason) || '—']
   ];
 
   const headerHTML = buildPDFHeader(co, 'Credit Note', cn.cn_no, 'Credit Amount',

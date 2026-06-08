@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-08 · Session 4*
+*Last updated: 2026-06-08 · Session 5*
 
 ---
 
@@ -15,6 +15,25 @@
 ---
 
 ## Sessions
+
+## Session 5 — AR Void + PDF Escaping
+
+**Date:** 2026-06-08
+**Branch:** `fix/ar-void-pdf-escaping`
+
+### What Changed
+
+| Change | Detail |
+|--------|--------|
+| AR receipt void | `voidARReceipt(receiptId, invoiceId)` — prompts for reason, reverses JE (Dr AR / Cr Bank), marks `payment_receipts.status = 'voided'`, restores invoice `balance_due` and recalculates status (`posted`/`partial`/`paid`), reverses bank account balance |
+| Void button in receipt history | "Receipts" modal action column now shows a Void button (admin-only via `canVoid()`) alongside the print button for non-voided receipts |
+| PDF metaRows HTML escaping | `escHTML()` applied to 12 user-entered fields across 6 PDF functions: `inv.client_ref`, `quo.client_ref`, `lead.name`, 6× DN fields (`client_ref`, `carrier`, `driver`, `vehicle_ref`, `recipient_name`, `delAddr`), `cn.reason`, `receipt.reference`, `incotermsPlace`, `notesText` |
+
+### Outstanding
+
+- CRM module (3 tables: contacts, activities, deals) — design drafted, not yet built
+
+---
 
 ## Session 4 — Receipt PDF
 
@@ -36,8 +55,6 @@ Added a full receipt issuance system for AR client payments — PDF generation, 
 
 ### Outstanding
 
-- Void propagation: when an AR payment is voided, `payment_receipts.status` should be set to `voided` (AR payment void not yet implemented — AP void is complete)
-- PDF metaRows escaping (see below)
 - CRM module (3 tables: contacts, activities, deals) — design drafted, not yet built
 
 ---
@@ -167,40 +184,6 @@ No known issues.
 ## Next Up
 
 - CRM module (3 tables: contacts, activities, deals) — design drafted, not yet built. See memory for details.
-
----
-
-## Scoped Work — PDF metaRows HTML Escaping
-
-**Priority:** Low · **Effort:** ~14 line changes · **Risk:** Very low (purely defensive)
-
-### Background
-
-`buildPDFHeader` renders `metaRows` values raw into iframe HTML:
-```javascript
-${metaRows.map(([k,v]) => `<div ...>${k}</div><div ...>${v}</div>`).join('')}
-```
-An `escHTML()` helper exists (added in Session 4). It needs to be applied to user-entered fields at every call site.
-
-`buildPDFTotals` has the same issue with `incotermsPlace` and `notesText`.
-
-### Changes required (all in `index.html`)
-
-| Function | Fields to wrap with `escHTML()` |
-|----------|--------------------------------|
-| `openInvoicePDF` metaRows | `inv.client_ref` |
-| `openQuoPDF` metaRows | `quo.client_ref` · `lead.name` (Prepared By) |
-| `openDNPDF` metaRows | `dn.client_ref` · `dn.carrier` · `dn.driver` · `dn.vehicle_ref` · `dn.recipient_name` · `delAddr` |
-| `openCNPDF` metaRows | `cn.reason` |
-| `buildReceiptPDFHTML` metaRows | `receipt.reference` |
-| `buildPDFTotals` (inside function) | `incotermsPlace` · `notesText` |
-
-**Total:** 12 fields across 6 locations. No logic changes — purely wrapping existing values.
-
-### Not in scope
-- `buildPDFHeader` company/contact address fields (`co.name`, `contact.trading_name`, billing address parts) — these are admin-entered trusted data, lower risk, separate cleanup if desired.
-
----
 
 ## References
 
