@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-08 · Session 7*
+*Last updated: 2026-06-08 · Session 8*
 
 ---
 
@@ -15,6 +15,32 @@
 ---
 
 ## Sessions
+
+## Session 8 — Table Pagination
+
+**Date:** 2026-06-08
+**Branch:** `feat/table-pagination` → [PR #27](https://github.com/brandonr2630/meridian-erp/pull/27)
+
+### What Changed
+
+| Change | Detail |
+|--------|--------|
+| `PAGE_SIZE = 50` constant | Shared page size used across all paginated tables |
+| `renderPager()` helper | Returns a `.table-pager` bar with "Showing X–Y of Z" and ← Prev / Next → buttons; returns empty string if data fits on one page |
+| `.table-pager` CSS | Flex bar below each table; `border-top: 1px solid var(--border)` |
+| AR Invoices pagination | `renderARTable` slices by `arPage`; `filterAR` resets page; `setArPage(n)` for nav |
+| AP Bills pagination | `renderAPTable` extracted from inline `loadAP`; `filterAP` implemented (was empty stub — now searches bill no. / supplier, filters by status); `setApPage(n)` |
+| Quotations pagination | `renderQuotationsTable` slices by `quoPage`; `filterQuotations` resets page; `setQuoPage(n)` |
+| Clients pagination | `renderClientsTable` slices by `clientsPage`; `filterClients` resets page; `setClientsPage(n)` |
+| Vendors pagination | `renderVendorsTable` slices by `vendorsPage`; `filterVendors` resets page; `setVendorsPage(n)` |
+
+Summary stat cards and all global `.find()` lookups are unaffected — full datasets are still fetched.
+
+### Outstanding
+
+- CRM module (3 tables: contacts, activities, deals) — design drafted, not yet built
+
+---
 
 ## Session 7 — Receipt History Modal Layout
 
@@ -220,6 +246,25 @@ No known issues.
 ## Next Up
 
 - CRM module (3 tables: contacts, activities, deals) — design drafted, not yet built. See memory for details.
+
+## To Do — Code Review Backlog
+
+Items 1–5 from the June 2026 code review are resolved (PRs #22–#25, #27). Items 6–17 remain:
+
+| # | Priority | Area | Task |
+|---|----------|------|------|
+| 6 | High | Maintainability | Z-index constants — define `--z-dropdown: 100; --z-modal: 600; --z-overlay: 700; --z-toast: 1000` in CSS vars and replace all magic numbers |
+| 7 | High | Accessibility | Add `aria-label` to all icon-only buttons (topbar `🔔`, `🌙`, `⚙️` and table action icons) |
+| 8 | Medium | Correctness | Date string comparisons — replace `i.due_date < today` with `new Date(i.due_date) < new Date(today)` to handle ISO timestamp suffixes |
+| 9 | Medium | Correctness | Null-coalesce all foreign-key dereferences — deleted contacts/accounts produce silent `undefined` crashes (e.g. `contactMap[inv.contact_id].trading_name`) |
+| 10 | Medium | Performance | Collapse N+1 fetches in dashboard load — companies → contacts, bank accounts, exchange rates should be `Promise.all()` where not already |
+| 11 | Medium | Performance | Add `loading="lazy"` to company logo `<img>` tags — currently all logos are fetched on app load |
+| 12 | Medium | Design | Change `@page { size: letter portrait }` to A4 (or make it a company setting) — US Letter clips output for Caribbean/UK users |
+| 13 | Medium | Design | Standardise modal max-width — apply `min(560px, 95vw)` (or appropriate size) to all modals; Session 7 already uses the right pattern |
+| 14 | Medium | Maintainability | Refactor `searchInvContact` / `searchBillVendor` / `searchQuoContact` / `searchDNContact` into a single `createContactSearch(inputId, resultsId, filter)` factory (~120 lines removed) |
+| 15 | Medium | Maintainability | Extract repeated Supabase filter strings (`'is_active=eq.true&order=code'` etc.) as named constants — currently hardcoded inline 50+ times |
+| 16 | Medium | UX | Add in-flight loading state during in-view data refreshes — e.g. `table.style.opacity = '0.5'` while fetch is pending |
+| 17 | Medium | UX | Validate MIME type on logo file upload — size is checked but not type; add `['image/jpeg','image/png','image/webp'].includes(file.type)` guard |
 
 ## References
 
