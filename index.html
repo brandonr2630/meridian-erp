@@ -6261,12 +6261,19 @@ function previewReport(type, title) {
   if (!html) { showToast('Run the report first.', 'warn'); return; }
   document.getElementById('report-preview-title').textContent = title + ' — Preview';
   const iframe = document.getElementById('report-preview-frame');
+  iframe.style.minHeight = '1100px';
+  const resizeIframe = () => {
+    try {
+      const h = iframe.contentDocument.body.scrollHeight;
+      if (h > 200) iframe.style.minHeight = h + 'px';
+    } catch(e) {}
+  };
+  iframe.onload = resizeIframe;
   const doc = iframe.contentDocument || iframe.contentWindow.document;
   doc.open(); doc.write(html); doc.close();
-  iframe.onload = () => {
-    try { iframe.style.minHeight = iframe.contentDocument.body.scrollHeight + 'px'; } catch(e) {}
-  };
   document.getElementById('modal-report-preview').classList.add('show');
+  // Fallback: re-measure after fonts and images settle
+  setTimeout(resizeIframe, 600);
 }
 
 function downloadReport(type) {
