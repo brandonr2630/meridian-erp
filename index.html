@@ -6218,9 +6218,16 @@ function buildReportHTML(type, title) {
   .stat-card { flex:1; background:#f8f8f8; border:1px solid #e8e8e8; border-radius:6px; padding:10px 12px; }
   .stat-label { font-size:8px; text-transform:uppercase; letter-spacing:1px; color:#888; margin-bottom:3px; }
   .stat-value { font-family:'DM Mono',monospace; font-size:13px; font-weight:600; color:#1a1a1a; }
-  .report-footer { margin-top:32px; padding-top:10px; border-top:1px solid #e0e0e0; display:flex; justify-content:space-between; font-size:8px; color:#bbb; }
+  .report-footer { margin-top:32px; padding-top:10px; border-top:1px solid #e0e0e0; display:flex; justify-content:space-between; align-items:center; font-size:8px; color:#bbb; }
+  .report-page-num { display:none; }
   @page { size:letter portrait; margin:0; }
-  @media print { body { background:none; padding:0; } .page { box-shadow:none; min-height:auto; } }
+  @media print {
+    body { background:none; padding:0; }
+    .page { box-shadow:none; min-height:auto; padding-bottom:0.65in; }
+    .report-footer { position:fixed; bottom:0.2in; left:0.6in; right:0.6in; margin-top:0; background:white; }
+    .report-page-num { display:inline; }
+    .report-pg-cur::before { content:counter(page); }
+  }
 </style>
 </head>
 <body>
@@ -6240,10 +6247,18 @@ function buildReportHTML(type, title) {
   ${wrap.innerHTML}
   <div class="report-footer">
     <span>${co.name}</span>
-    <span>${title}</span>
     <span>Meridian &mdash; SME Solutions</span>
+    <span class="report-page-num">Page <span class="report-pg-cur"></span><span class="report-pg-tot"></span></span>
   </div>
 </div>
+<script>
+window.addEventListener('load', function() {
+  var p = document.querySelector('.page');
+  if (!p) return;
+  var total = Math.max(1, Math.ceil(p.scrollHeight / 1056));
+  document.querySelectorAll('.report-pg-tot').forEach(function(e) { e.textContent = ' of ' + total; });
+});
+</script>
 </body></html>`;
 }
 
