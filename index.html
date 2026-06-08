@@ -1042,14 +1042,14 @@ body {
 }
 @media print {
   html, body { width: 100%; height: 100%; margin: 0; padding: 0; }
-  body > *:not(#modal-pdf-preview):not(#modal-quo-pdf):not(#modal-dn-pdf):not(#modal-cn-pdf):not(#modal-report-preview) { display:none !important; }
+  body > *:not(#modal-pdf-preview):not(#modal-quo-pdf):not(#modal-dn-pdf):not(#modal-cn-pdf):not(#modal-report-preview):not(#modal-receipt-pdf) { display:none !important; }
 
-  #modal-pdf-preview, #modal-quo-pdf, #modal-dn-pdf, #modal-cn-pdf, #modal-report-preview {
+  #modal-pdf-preview, #modal-quo-pdf, #modal-dn-pdf, #modal-cn-pdf, #modal-report-preview, #modal-receipt-pdf {
     position:static !important; background:none !important;
     padding:0 !important; margin:0 !important; overflow:visible !important;
     width:100% !important; height:auto !important;
   }
-  #modal-pdf-preview .modal, #modal-quo-pdf .modal, #modal-dn-pdf .modal, #modal-cn-pdf .modal, #modal-report-preview .modal {
+  #modal-pdf-preview .modal, #modal-quo-pdf .modal, #modal-dn-pdf .modal, #modal-cn-pdf .modal, #modal-report-preview .modal, #modal-receipt-pdf .modal {
     box-shadow:none !important; border:none !important;
     max-width:100% !important; width:100% !important;
     margin:0 !important; padding:0 !important; overflow:visible !important;
@@ -1058,11 +1058,12 @@ body {
   #modal-quo-pdf .modal-header,     #modal-quo-pdf .modal-footer,
   #modal-dn-pdf .modal-header,      #modal-dn-pdf .modal-footer,
   #modal-cn-pdf .modal-header,      #modal-cn-pdf .modal-footer,
-  #modal-report-preview .modal-header, #modal-report-preview .modal-footer { display:none !important; }
+  #modal-report-preview .modal-header, #modal-report-preview .modal-footer,
+  #modal-receipt-pdf .modal-header, #modal-receipt-pdf .modal-footer { display:none !important; }
 
   #modal-pdf-preview .modal-body, #modal-quo-pdf .modal-body,
   #modal-dn-pdf .modal-body,      #modal-cn-pdf .modal-body,
-  #modal-report-preview .modal-body {
+  #modal-report-preview .modal-body, #modal-receipt-pdf .modal-body {
     padding:0 !important; margin:0 !important; overflow:visible !important;
     background:none !important;
   }
@@ -3362,6 +3363,82 @@ body {
   </div>
 </div>
 
+<!-- ── RECEIPT PDF MODAL ── -->
+<div class="modal-overlay" id="modal-receipt-pdf" onclick="if(event.target===this)closeModal('modal-receipt-pdf')">
+  <div class="modal modal-xl" style="max-width:900px;width:95vw;">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Payment Receipt</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:3px;" id="receipt-pdf-subtitle">—</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary btn-sm" onclick="printPDF(this)">⬇ Print / Save PDF</button>
+        <button class="modal-close" onclick="closeModal('modal-receipt-pdf')">✕</button>
+      </div>
+    </div>
+    <div class="modal-body" style="padding:16px;background:#555;overflow-x:auto;color-scheme:light;">
+      <iframe id="receipt-pdf-content" style="width:860px;min-height:1050px;border:none;display:block;margin:0 auto;" scrolling="yes"></iframe>
+    </div>
+  </div>
+</div>
+
+<!-- ── PAYMENT CONFIRMED MODAL ── -->
+<div class="modal-overlay" id="modal-payment-confirmed" onclick="if(event.target===this)closeModal('modal-payment-confirmed')">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <div class="modal-title" style="color:var(--green);">Payment Recorded</div>
+      <button class="modal-close" onclick="closeModal('modal-payment-confirmed')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;">
+        <div style="width:44px;height:44px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;font-size:20px;color:#fff;flex-shrink:0;">✓</div>
+        <div>
+          <div style="font-weight:600;font-size:15px;color:var(--text);" id="pconf-receipt-no">—</div>
+          <div style="font-size:12px;color:var(--text-3);margin-top:2px;" id="pconf-invoice-ref">—</div>
+        </div>
+      </div>
+      <div style="background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+          <span style="font-size:12px;color:var(--text-3);">Amount Received</span>
+          <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:600;color:var(--green);" id="pconf-amount">—</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+          <span style="font-size:12px;color:var(--text-3);">Date</span>
+          <span style="font-family:'DM Mono',monospace;font-size:12px;" id="pconf-date">—</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+          <span style="font-size:12px;color:var(--text-3);">Method</span>
+          <span style="font-size:12px;" id="pconf-method">—</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:8px;margin-top:4px;">
+          <span style="font-size:12px;color:var(--text-3);">Balance Remaining</span>
+          <span style="font-family:'DM Mono',monospace;font-size:12px;font-weight:600;" id="pconf-balance">—</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-payment-confirmed')">Close</button>
+      <button class="btn btn-primary" onclick="openReceiptPDF(_lastReceiptId)">Print Receipt</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── INVOICE RECEIPTS HISTORY MODAL ── -->
+<div class="modal-overlay" id="modal-invoice-receipts" onclick="if(event.target===this)closeModal('modal-invoice-receipts')">
+  <div class="modal" style="max-width:700px;">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Receipts</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:3px;" id="inv-receipts-subtitle">—</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('modal-invoice-receipts')">✕</button>
+    </div>
+    <div class="modal-body" id="inv-receipts-list">
+      <div style="padding:28px;text-align:center;color:var(--text-3);font-size:13px;">Loading…</div>
+    </div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════════════════════
 //  TERRAN GROUP ERP — Finance Module
@@ -5373,26 +5450,242 @@ async function savePayment() {
     }
 
     // Save receipt record
-    await sbPost('payment_receipts', {
+    const [receipt] = await sbPost('payment_receipts', {
       company_id: currentCompany.id, invoice_id: invoiceId,
+      contact_id: inv.contact_id,
       bank_account_id: bankAccId, receipt_no: receiptNo,
       receipt_date: date, amount, currency: inv.currency,
       payment_method: method, reference, notes,
-      journal_id: journalId
+      journal_id: journalId, status: 'posted', balance_after: newBalance
     });
 
     // Update invoice balance and status
     await sbPatch('invoices', invoiceId, { balance_due: newBalance, status: newStatus });
 
-    showToast(`Payment ${receiptNo} recorded. Invoice ${newStatus === 'paid' ? 'fully paid ✓' : 'partially paid'}.`, 'success');
     closeModal('modal-payment');
     await loadAR();
     await loadDashboard();
-    // Refresh bank accounts cache
     try { bankAccounts = await sbGet('bank_accounts', `company_id=eq.${currentCompany.id}&is_active=eq.true&order=account_name`); } catch(e) {}
+
+    // Open payment confirmation modal
+    _lastReceiptId = receipt.id;
+    const _methodLabels = { bank_transfer:'Bank Transfer', cheque:'Cheque', cash:'Cash', card:'Card', other:'Other' };
+    const _client = contacts.find(c => c.id === inv.contact_id);
+    document.getElementById('pconf-receipt-no').textContent   = receiptNo;
+    document.getElementById('pconf-invoice-ref').textContent  = `Invoice ${inv.invoice_no} · ${_client?.trading_name || _client?.name || '—'}`;
+    document.getElementById('pconf-amount').textContent       = fmt(amount, inv.currency);
+    document.getElementById('pconf-date').textContent         = formatDateDisplay(date);
+    document.getElementById('pconf-method').textContent       = _methodLabels[method] || method;
+    document.getElementById('pconf-balance').textContent      = fmt(newBalance, inv.currency);
+    document.getElementById('pconf-balance').style.color      = newBalance <= 0.005 ? 'var(--green)' : 'var(--amber)';
+    document.getElementById('modal-payment-confirmed').classList.add('show');
   } catch(e) {
     showToast('Error recording payment: ' + e.message, 'error');
   } finally { btn.disabled = false; btn.textContent = 'Record Payment'; }
+}
+
+// ── RECEIPT PDF ───────────────────────────────────────────────────
+
+let _lastReceiptId = null;
+
+function escHTML(s) {
+  return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : '';
+}
+
+function amountToWords(amount, currency) {
+  const ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine',
+    'Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+  const tensW = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+
+  function w3(n) {
+    if (n === 0) return '';
+    if (n < 20) return ones[n];
+    if (n < 100) return tensW[Math.floor(n/10)] + (n%10 ? ' '+ones[n%10] : '');
+    return ones[Math.floor(n/100)] + ' Hundred' + (n%100 ? ' '+w3(n%100) : '');
+  }
+
+  function toWords(n) {
+    if (n === 0) return 'Zero';
+    let r = '';
+    if (n >= 1000000) { r += w3(Math.floor(n/1000000)) + ' Million '; n %= 1000000; }
+    if (n >= 1000)    { r += w3(Math.floor(n/1000))    + ' Thousand '; n %= 1000; }
+    if (n > 0)        { r += w3(n); }
+    return r.trim();
+  }
+
+  const names = { TTD:{d:'Trinidad and Tobago Dollar',c:'Cent'}, USD:{d:'United States Dollar',c:'Cent'}, GYD:{d:'Guyana Dollar',c:'Cent'} };
+  const cur = names[currency] || { d:'Dollar', c:'Cent' };
+  const total   = Math.round(Math.abs(amount) * 100);
+  const dollars = Math.floor(total / 100);
+  const cents   = total % 100;
+  let words = toWords(dollars) + ' ' + cur.d + (dollars !== 1 ? 's' : '');
+  if (cents > 0) words += ' and ' + toWords(cents) + ' ' + cur.c + (cents !== 1 ? 's' : '');
+  return words + ' Only';
+}
+
+function buildReceiptPDFHTML(receipt, invoice, contact, bankAcc) {
+  const co = currentCompany;
+  const methodLabels = { bank_transfer:'Bank Transfer', cheque:'Cheque', cash:'Cash', card:'Card', other:'Other' };
+
+  const metaRows = [
+    ['Receipt Date :', formatDateDisplay(receipt.receipt_date)],
+    ['Method :', methodLabels[receipt.payment_method] || receipt.payment_method || '—'],
+    ...(receipt.reference ? [['Reference :', receipt.reference]] : []),
+    ['Received Into :', bankAcc?.account_name || '—'],
+  ];
+
+  const headerHTML = buildPDFHeader(co, 'Receipt', receipt.receipt_no, 'Amount Received',
+    fmt(receipt.amount, receipt.currency), contact, metaRows);
+
+  const balAfter = parseFloat(receipt.balance_after ?? invoice.balance_due ?? 0);
+
+  const invoiceTableHTML = `
+    <div style="margin-bottom:20px;">
+      <div style="font-size:9px;color:#999;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Invoice Details</div>
+      <table style="width:100%;border-collapse:collapse;border:1px solid #e8e8e8;">
+        <thead>
+          <tr style="background:#1a1a1a;">
+            <th style="padding:8px 12px;font-size:10px;font-weight:700;color:#fff;text-align:left;border-right:1px solid rgba(255,255,255,0.15);">Invoice No.</th>
+            <th style="padding:8px 12px;font-size:10px;font-weight:700;color:#fff;text-align:center;border-right:1px solid rgba(255,255,255,0.15);">Invoice Date</th>
+            <th style="padding:8px 12px;font-size:10px;font-weight:700;color:#fff;text-align:right;border-right:1px solid rgba(255,255,255,0.15);">Invoice Total</th>
+            <th style="padding:8px 12px;font-size:10px;font-weight:700;color:#fff;text-align:right;border-right:1px solid rgba(255,255,255,0.15);">This Payment</th>
+            <th style="padding:8px 12px;font-size:10px;font-weight:700;color:#fff;text-align:right;">Balance After</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding:9px 12px;font-size:12px;font-weight:700;border-right:1px solid #e8e8e8;">${invoice.invoice_no || '—'}</td>
+            <td style="padding:9px 12px;font-size:11px;color:#333;text-align:center;font-family:monospace;border-right:1px solid #e8e8e8;">${formatDateDisplay(invoice.invoice_date)}</td>
+            <td style="padding:9px 12px;font-size:11px;color:#333;text-align:right;font-family:monospace;border-right:1px solid #e8e8e8;">${fmt(invoice.total, receipt.currency)}</td>
+            <td style="padding:9px 12px;font-size:12px;font-weight:700;text-align:right;font-family:monospace;border-right:1px solid #e8e8e8;">${fmt(receipt.amount, receipt.currency)}</td>
+            <td style="padding:9px 12px;font-size:11px;text-align:right;font-family:monospace;font-weight:600;color:${balAfter <= 0.005 ? '#2a7a4f' : '#b85c00'};">${fmt(balAfter, receipt.currency)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>`;
+
+  const wordsHTML = `
+    <div style="padding:14px 16px;background:#f9f9f9;border:1px solid #e8e8e8;border-radius:4px;margin-bottom:20px;">
+      <div style="font-size:9px;color:#999;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Amount in Words</div>
+      <div style="font-size:13px;font-weight:600;color:#1a1a1a;font-style:italic;">${amountToWords(receipt.amount, receipt.currency)}</div>
+    </div>`;
+
+  const notesHTML = receipt.notes
+    ? `<div style="margin-bottom:20px;padding:12px 14px;background:#f9f9f9;border:1px solid #e8e8e8;border-radius:4px;">
+        <div style="font-size:9px;color:#999;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Remarks</div>
+        <div style="font-size:11px;color:#444;line-height:1.6;">${escHTML(receipt.notes)}</div>
+       </div>`
+    : '';
+
+  const sigHTML = `
+    <div style="margin-top:48px;display:flex;justify-content:space-between;align-items:flex-end;">
+      <div style="width:200px;border-top:1px solid #999;padding-top:6px;font-size:10px;color:#999;">Authorized Signature</div>
+      <div style="width:200px;border-top:1px solid #999;padding-top:6px;font-size:10px;color:#999;text-align:right;">Received By</div>
+    </div>`;
+
+  const pageHTML = `
+    <div style="position:relative;width:8.5in;min-height:11in;box-sizing:border-box;background:#fff;font-family:'DM Sans',sans-serif;font-size:14px;padding:0.5in;margin:0 auto;border:2px solid #1a1a1a;box-shadow:0 0 0 6px #f0f0f0,0 0 0 7px #ddd;">
+      <div style="padding-bottom:60px;">
+        ${headerHTML}
+        ${invoiceTableHTML}
+        ${wordsHTML}
+        ${notesHTML}
+        ${sigHTML}
+      </div>
+      ${buildPDFFooter(co.name, receipt.receipt_no, 1, 1)}
+    </div>`;
+
+  return `<!DOCTYPE html>
+<html style="color-scheme:light;">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="light">
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  body { background: #666; padding: 20px; font-family: 'DM Sans', sans-serif; color-scheme: light; }
+  @page { size: letter portrait; margin: 0; }
+  @media print {
+    body { background: none; padding: 0; }
+    div[style*="border:2px solid"] { box-shadow: none !important; border: none !important; margin: 0 !important; }
+  }
+</style>
+</head>
+<body>${pageHTML}</body>
+</html>`;
+}
+
+async function openReceiptPDF(receiptId) {
+  if (!receiptId) return;
+  try {
+    const receipts = await sbGet('payment_receipts', `id=eq.${receiptId}`);
+    const receipt  = receipts[0];
+    if (!receipt) { showToast('Receipt not found.', 'error'); return; }
+
+    const invArr  = await sbGet('invoices', `id=eq.${receipt.invoice_id}`);
+    const invoice = invArr[0] || {};
+    const contact  = contacts.find(c => c.id === (receipt.contact_id || invoice.contact_id)) || {};
+    const bankAcc  = bankAccounts.find(b => b.id === receipt.bank_account_id) || {};
+
+    const html   = buildReceiptPDFHTML(receipt, invoice, contact, bankAcc);
+    const iframe = document.getElementById('receipt-pdf-content');
+    const doc    = iframe.contentDocument || iframe.contentWindow.document;
+    doc.open(); doc.write(html); doc.close();
+
+    document.getElementById('receipt-pdf-subtitle').textContent =
+      `${receipt.receipt_no} · ${contact.trading_name || contact.name || '—'}`;
+    document.getElementById('modal-receipt-pdf').classList.add('show');
+  } catch(e) { showToast('Error loading receipt: ' + e.message, 'error'); }
+}
+
+async function openInvoiceReceiptHistory(invoiceId) {
+  const inv = invoices.find(i => i.id === invoiceId);
+  if (!inv) return;
+  const contact = contacts.find(c => c.id === inv.contact_id);
+  document.getElementById('inv-receipts-subtitle').textContent =
+    `${inv.invoice_no} · ${contact?.trading_name || contact?.name || '—'} · Total: ${fmt(inv.total, inv.currency)}`;
+
+  const listEl = document.getElementById('inv-receipts-list');
+  listEl.innerHTML = '<div style="padding:28px;text-align:center;color:var(--text-3);font-size:13px;">Loading…</div>';
+  document.getElementById('modal-invoice-receipts').classList.add('show');
+
+  try {
+    const receipts = await sbGet('payment_receipts', `invoice_id=eq.${invoiceId}&order=receipt_date.desc`);
+    if (!receipts.length) {
+      listEl.innerHTML = '<div style="padding:28px;text-align:center;color:var(--text-3);font-size:13px;">No receipts found for this invoice.</div>';
+      return;
+    }
+    const methodLabels = { bank_transfer:'Bank Transfer', cheque:'Cheque', cash:'Cash', card:'Card', other:'Other' };
+    const bankMap = Object.fromEntries(bankAccounts.map(b => [b.id, b.account_name]));
+    listEl.innerHTML = `
+      <table class="data-table" style="margin:0;">
+        <thead><tr>
+          <th>Receipt No.</th><th>Date</th><th>Method</th><th>Account</th>
+          <th>Reference</th><th class="right">Amount</th><th>Status</th><th class="right">Action</th>
+        </tr></thead>
+        <tbody>
+          ${receipts.map(r => {
+            const voided = r.status === 'voided';
+            return `<tr style="${voided ? 'opacity:0.55;' : ''}">
+              <td class="mono bold" style="color:var(--gold);">${r.receipt_no}</td>
+              <td class="mono">${r.receipt_date}</td>
+              <td>${methodLabels[r.payment_method] || r.payment_method || '—'}</td>
+              <td style="font-size:11px;">${bankMap[r.bank_account_id] || '—'}</td>
+              <td class="mono" style="font-size:11px;">${escHTML(r.reference) || '—'}</td>
+              <td class="right mono">${fmt(r.amount, r.currency)}</td>
+              <td><span class="badge badge-${voided ? 'void' : 'paid'}">${voided ? 'voided' : 'posted'}</span></td>
+              <td class="right">
+                ${!voided
+                  ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="openReceiptPDF('${r.id}')" style="font-size:15px;padding:4px 7px;" title="Print Receipt">🖨</button>`
+                  : `<span style="font-size:10px;color:var(--text-3);">Voided</span>`}
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+  } catch(e) {
+    listEl.innerHTML = `<div style="padding:20px;color:var(--red);">Error: ${e.message}</div>`;
+  }
 }
 
 // ── BANK ACCOUNTS (Settings) ──────────────────────────────────────
@@ -6773,6 +7066,7 @@ function renderARTable(invs, contactMap) {
             ${inv.status === 'draft' ? `<button class="btn btn-outline btn-sm" onclick="postInvoice('${inv.id}')">Post</button>` : ''}
             ${inv.status === 'draft' ? `<button class="btn btn-danger btn-sm" onclick="deleteDocument('invoice','${inv.id}','${inv.invoice_no||'this draft invoice'}')">Delete</button>` : ''}
             ${['posted','partial','overdue'].includes(inv.status) ? `<button class="btn btn-primary btn-sm" onclick="openReceivePayment('${inv.id}')">$ Pay</button>` : ''}
+            ${['partial','paid'].includes(inv.status) ? `<button class="btn btn-ghost btn-sm" onclick="openInvoiceReceiptHistory('${inv.id}')">Receipts</button>` : ''}
             ${inv.status === 'posted' ? `<button class="btn btn-ghost btn-sm" onclick="voidInvoice('${inv.id}')">Void</button>` : ''}
           </td>
         </tr>`).join('')}
