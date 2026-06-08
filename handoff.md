@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-05-16 · Session 3*
+*Last updated: 2026-06-08 · Session 4*
 
 ---
 
@@ -15,6 +15,31 @@
 ---
 
 ## Sessions
+
+## Session 4 — Receipt PDF
+
+**Date:** 2026-06-08
+**Branch:** `feature/receipt-pdf`
+
+### What Changed
+
+Added a full receipt issuance system for AR client payments — PDF generation, post-payment confirmation modal, and receipt reprint history.
+
+| Change | Detail |
+|--------|--------|
+| Supabase migration | Added `contact_id` (FK → contacts) and `status` (`posted`/`voided`) to `payment_receipts`; backfilled `contact_id` from invoices |
+| Post-payment confirmation modal | `modal-payment-confirmed` — shows receipt no., invoice ref, amount, method, remaining balance with "Print Receipt" button |
+| Receipt PDF | `openReceiptPDF(id)` + `buildReceiptPDFHTML()` — single-page receipt with company header, invoice table (No./Date/Total/This Payment/Balance After), amount in words, remarks, dual signature line |
+| Amount in words | `amountToWords(amount, currency)` — handles TTD, USD, GYD |
+| Receipt history | "Receipts" button on partial/paid AR invoice rows → `openInvoiceReceiptHistory()` → list of all receipts with per-row reprint button |
+| Print CSS | `modal-receipt-pdf` added to all `@media print` rules |
+
+### Outstanding
+
+- Void propagation: when an AR payment is voided, `payment_receipts.status` should be set to `voided` (AR payment void not yet implemented — AP void is complete)
+- CRM module (3 tables: contacts, activities, deals) — design drafted, not yet built
+
+---
 
 ## Session 3 — GitHub Infrastructure
 
