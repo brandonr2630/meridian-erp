@@ -221,6 +221,26 @@ No known issues.
 
 - CRM module (3 tables: contacts, activities, deals) — design drafted, not yet built. See memory for details.
 
+## To Do — Code Review Backlog
+
+Items 1–4 from the June 2026 code review are resolved (PRs #22–#25). Items 5–17 remain:
+
+| # | Priority | Area | Task |
+|---|----------|------|------|
+| 5 | High | Performance | Add pagination (`limit`/`offset`) to heavy tables — AR invoices, quotations, bills, clients, vendors all load the full dataset |
+| 6 | High | Maintainability | Z-index constants — define `--z-dropdown: 100; --z-modal: 600; --z-overlay: 700; --z-toast: 1000` in CSS vars and replace all magic numbers |
+| 7 | High | Accessibility | Add `aria-label` to all icon-only buttons (topbar `🔔`, `🌙`, `⚙️` and table action icons) |
+| 8 | Medium | Correctness | Date string comparisons — replace `i.due_date < today` with `new Date(i.due_date) < new Date(today)` to handle ISO timestamp suffixes |
+| 9 | Medium | Correctness | Null-coalesce all foreign-key dereferences — deleted contacts/accounts produce silent `undefined` crashes (e.g. `contactMap[inv.contact_id].trading_name`) |
+| 10 | Medium | Performance | Collapse N+1 fetches in dashboard load — companies → contacts, bank accounts, exchange rates should be `Promise.all()` where not already |
+| 11 | Medium | Performance | Add `loading="lazy"` to company logo `<img>` tags — currently all logos are fetched on app load |
+| 12 | Medium | Design | Change `@page { size: letter portrait }` to A4 (or make it a company setting) — US Letter clips output for Caribbean/UK users |
+| 13 | Medium | Design | Standardise modal max-width — apply `min(560px, 95vw)` (or appropriate size) to all modals; Session 7 already uses the right pattern |
+| 14 | Medium | Maintainability | Refactor `searchInvContact` / `searchBillVendor` / `searchQuoContact` / `searchDNContact` into a single `createContactSearch(inputId, resultsId, filter)` factory (~120 lines removed) |
+| 15 | Medium | Maintainability | Extract repeated Supabase filter strings (`'is_active=eq.true&order=code'` etc.) as named constants — currently hardcoded inline 50+ times |
+| 16 | Medium | UX | Add in-flight loading state during in-view data refreshes — e.g. `table.style.opacity = '0.5'` while fetch is pending |
+| 17 | Medium | UX | Validate MIME type on logo file upload — size is checked but not type; add `['image/jpeg','image/png','image/webp'].includes(file.type)` guard |
+
 ## References
 
 - **Repository:** https://github.com/brandonr2630/meridian-erp
