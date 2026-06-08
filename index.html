@@ -3588,6 +3588,7 @@ function fmt(amount, currency) {
 function fmtNum(n) {
   return parseFloat(n || 0).toLocaleString('en-TT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+function round2(n) { return Math.round(n * 100) / 100; }
 function nowISO()   { return new Date().toISOString(); }
 function todayDate(){ return new Date().toISOString().slice(0, 10); }
 function getJWTSub(token) {
@@ -6164,15 +6165,15 @@ function recalcBillTotals() {
   document.querySelectorAll('#bill-lines-body tr').forEach(tr => {
     const inputs = tr.querySelectorAll('input[type="number"]');
     const qty = parseFloat(inputs[0]?.value)||0, rate = parseFloat(inputs[1]?.value)||0;
-    const amt = qty * rate; subtotal += amt;
+    const amt = round2(qty * rate); subtotal += amt;
     const amtEl = tr.querySelector('[id$="-amt"]');
     if (amtEl) amtEl.textContent = fmtNum(amt);
   });
   const tax = parseFloat(document.getElementById('bill-tax-rate').value)||0;
-  const taxAmt = subtotal * tax / 100;
+  const taxAmt = round2(subtotal * tax / 100);
   document.getElementById('bill-subtotal').textContent    = fmtNum(subtotal);
   document.getElementById('bill-tax-amount').textContent  = fmtNum(taxAmt);
-  document.getElementById('bill-grand-total').textContent = fmtNum(subtotal + taxAmt);
+  document.getElementById('bill-grand-total').textContent = fmtNum(round2(subtotal + taxAmt));
 }
 
 function searchBillVendor() {
@@ -6211,14 +6212,14 @@ async function saveBill(status) {
     const desc = descEl?.value.trim()||'';
     if (!desc && !qty && !rate) return;
     if (!desc) { showToast(`Line ${idx+1}: description required.`, 'warn'); return; }
-    const amt = qty * rate; subtotal += amt;
+    const amt = round2(qty * rate); subtotal += amt;
     lines.push({ description: desc, quantity: qty, unit_price: rate, amount: amt, line_order: idx });
   });
   if (!lines.length) { showToast('Add at least one line item.', 'warn'); return; }
 
   const taxRate = parseFloat(document.getElementById('bill-tax-rate').value)||0;
-  const taxAmt  = subtotal * taxRate / 100;
-  const total   = subtotal + taxAmt;
+  const taxAmt  = round2(subtotal * taxRate / 100);
+  const total   = round2(subtotal + taxAmt);
   const dueDate = document.getElementById('bill-due-date').value || null;
 
   const btn = document.getElementById(status === 'draft' ? 'bill-draft-btn' : 'bill-approve-btn');
@@ -6965,7 +6966,7 @@ function recalcLine(lid) {
   const inputs = tr.querySelectorAll('input[type="number"]');
   const qty    = parseFloat(inputs[0]?.value) || 0;
   const rate   = parseFloat(inputs[1]?.value) || 0;
-  const amt    = qty * rate;
+  const amt    = round2(qty * rate);
   const amtEl  = document.getElementById(lid + '-amt');
   if (amtEl) amtEl.textContent = fmtNum(amt);
   recalcInvTotals();
@@ -6977,11 +6978,11 @@ function recalcInvTotals() {
     const inputs = tr.querySelectorAll('input[type="number"]');
     const qty    = parseFloat(inputs[0]?.value) || 0;
     const rate   = parseFloat(inputs[1]?.value) || 0;
-    subtotal    += qty * rate;
+    subtotal    += round2(qty * rate);
   });
   const taxRate = parseFloat(document.getElementById('inv-tax-rate')?.value) || 0;
-  const taxAmt  = subtotal * taxRate / 100;
-  const total   = subtotal + taxAmt;
+  const taxAmt  = round2(subtotal * taxRate / 100);
+  const total   = round2(subtotal + taxAmt);
 
   
   document.getElementById('inv-subtotal').textContent   = fmtNum(subtotal);
@@ -7009,7 +7010,7 @@ async function saveInvoice(status) {
     const desc   = descEl?.value.trim() || '';
     if (!desc && !qty && !rate) { hasBlank = true; return; }
     if (!desc) { showToast(`Line ${idx+1}: description is required.`, 'warn'); hasBlank = true; return; }
-    const amt = qty * rate;
+    const amt = round2(qty * rate);
     subtotal += amt;
     lines.push({ description: desc, quantity: qty, unit_price: rate, amount: amt, line_order: idx });
   });
@@ -7017,8 +7018,8 @@ async function saveInvoice(status) {
   if (!lines.length) { showToast('Add at least one line item.', 'warn'); return; }
 
   const taxRate  = parseFloat(document.getElementById('inv-tax-rate').value) || 0;
-  const taxAmt   = subtotal * taxRate / 100;
-  const total    = subtotal + taxAmt;
+  const taxAmt   = round2(subtotal * taxRate / 100);
+  const total    = round2(subtotal + taxAmt);
   const dueDate  = document.getElementById('inv-due-date').value || null;
   const terms    = document.getElementById('inv-terms').value;
   const termsLabel = terms === '0' ? 'Due on Receipt' : terms === 'custom' ? 'Custom' : `Net ${terms}`;
@@ -7675,14 +7676,14 @@ function recalcQuoTotals() {
     const inputs = tr.querySelectorAll('input[type="number"]');
     const qty  = parseFloat(inputs[0]?.value) || 0;
     const rate = parseFloat(inputs[1]?.value) || 0;
-    const amt  = qty * rate;
+    const amt  = round2(qty * rate);
     subtotal  += amt;
     const amtEl = tr.querySelector('[id^="quo-line-amt-"]');
     if (amtEl) amtEl.textContent = fmtNum(amt);
   });
   const taxRate = parseFloat(document.getElementById('quo-tax-rate')?.value) || 0;
-  const taxAmt  = subtotal * taxRate / 100;
-  const total   = subtotal + taxAmt;
+  const taxAmt  = round2(subtotal * taxRate / 100);
+  const total   = round2(subtotal + taxAmt);
   
   document.getElementById('quo-subtotal').textContent    = fmtNum(subtotal);
   document.getElementById('quo-tax-amount').textContent  = fmtNum(taxAmt);
@@ -7730,15 +7731,15 @@ async function saveQuotation(status) {
     const desc   = descEl?.value.trim() || '';
     if (!desc && !qty && !rate) { hasBlank = true; return; }
     if (!desc) { showToast(`Line ${idx+1}: description is required.`, 'warn'); hasBlank = true; return; }
-    const amt = qty * rate;
+    const amt = round2(qty * rate);
     subtotal += amt;
     lines.push({ description: desc, quantity: qty, unit_price: rate, amount: amt, line_order: idx });
   });
   if (!lines.length) { showToast('Add at least one line item.', 'warn'); return; }
 
   const taxRate        = parseFloat(document.getElementById('quo-tax-rate').value) || 0;
-  const taxAmt         = subtotal * taxRate / 100;
-  const total          = subtotal + taxAmt;
+  const taxAmt         = round2(subtotal * taxRate / 100);
+  const total          = round2(subtotal + taxAmt);
   const validUntil     = document.getElementById('quo-valid-until').value || null;
   const terms          = document.getElementById('quo-terms').value;
   const clientRef      = document.getElementById('quo-client-ref').value.trim() || null;
@@ -8603,15 +8604,15 @@ function recalcCNTotals() {
   document.querySelectorAll('#cn-lines-body tr').forEach(tr => {
     const inputs = tr.querySelectorAll('input[type="number"]');
     const qty = parseFloat(inputs[0]?.value)||0, rate = parseFloat(inputs[1]?.value)||0;
-    const amt = qty * rate; subtotal += amt;
+    const amt = round2(qty * rate); subtotal += amt;
     const amtEl = tr.querySelector('[id$="-amt"]');
     if (amtEl) amtEl.textContent = fmtNum(amt);
   });
   const tax = parseFloat(document.getElementById('cn-tax-rate').value)||0;
-  const taxAmt = subtotal * tax / 100;
+  const taxAmt = round2(subtotal * tax / 100);
   document.getElementById('cn-subtotal').textContent    = fmtNum(subtotal);
   document.getElementById('cn-tax-amount').textContent  = fmtNum(taxAmt);
-  document.getElementById('cn-grand-total').textContent = fmtNum(subtotal + taxAmt);
+  document.getElementById('cn-grand-total').textContent = fmtNum(round2(subtotal + taxAmt));
 }
 
 async function saveCreditNote(status) {
@@ -8630,14 +8631,14 @@ async function saveCreditNote(status) {
     const desc = descEl?.value.trim()||'';
     if (!desc && !qty && !rate) return;
     if (!desc) { showToast(`Line ${idx+1}: description required.`, 'warn'); return; }
-    const amt = qty * rate; subtotal += amt;
+    const amt = round2(qty * rate); subtotal += amt;
     lines.push({ description: desc, quantity: qty, unit_price: rate, line_total: amt, line_order: idx });
   });
   if (!lines.length) { showToast('Add at least one line item.', 'warn'); return; }
 
   const taxRate = parseFloat(document.getElementById('cn-tax-rate').value)||0;
-  const taxAmt  = subtotal * taxRate / 100;
-  const total   = subtotal + taxAmt;
+  const taxAmt  = round2(subtotal * taxRate / 100);
+  const total   = round2(subtotal + taxAmt);
   const currency = document.getElementById('cn-currency').value;
   const inv     = invoices.find(i => i.id === invoiceId);
 
