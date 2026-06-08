@@ -8690,95 +8690,93 @@ async function runAgedAR() {
     if (from)      qs += `&invoice_date=gte.${from}`;
     if (contactId) qs += `&contact_id=eq.${contactId}`;
     const allInvs = await sbGet('invoices', qs);
-    const base = currentCompany.base_currency || currentCompany.currency;
-
     const cMap = {}; contacts.forEach(c => { cMap[c.id] = c.trading_name || c.name; });
+    const showClient = !contactId;
 
-    // Bucket each invoice
-    const buckets = { current:[], d1_30:[], d31_60:[], d61_90:[], d90plus:[] };
-    allInvs.forEach(inv => {
-      if (parseFloat(inv.balance_due||0) <= 0) return;
-      const dueDate = inv.due_date ? new Date(inv.due_date) : new Date(inv.invoice_date);
-      const daysOverdue = Math.floor((asAtDate - dueDate) / 86400000);
-      if (daysOverdue <= 0)       buckets.current.push(inv);
-      else if (daysOverdue <= 30) buckets.d1_30.push(inv);
-      else if (daysOverdue <= 60) buckets.d31_60.push(inv);
-      else if (daysOverdue <= 90) buckets.d61_90.push(inv);
-      else                        buckets.d90plus.push(inv);
+    const invs = allInvs.filter(inv => parseFloat(inv.balance_due || 0) > 0);
+    if (!invs.length) {
+      wrap.innerHTML = '<div class="table-empty" style="margin-top:40px;">No outstanding invoices for the selected period.</div>';
+      return;
+    }
+
+    const byCcy = {};
+    invs.forEach(inv => {
+      const ccy = inv.currency || currentCompany.base_currency;
+      (byCcy[ccy] = byCcy[ccy] || []).push(inv);
     });
+    const ccys = Object.keys(byCcy).sort();
+    const multi = ccys.length > 1;
 
-    const bucketTotal = (list) => list.reduce((s,i) => {
-      const { amount } = convertToBase(i.balance_due, i.currency);
-      return s + amount;
-    }, 0);
+    const ageOf = inv => Math.floor((asAtDate - new Date((inv.due_date || inv.invoice_date) + 'T00:00:00')) / 86400000);
 
-    const totals = {
-      current: bucketTotal(buckets.current),
-      d1_30:   bucketTotal(buckets.d1_30),
-      d31_60:  bucketTotal(buckets.d31_60),
-      d61_90:  bucketTotal(buckets.d61_90),
-      d90plus: bucketTotal(buckets.d90plus)
-    };
-    const grandTotal = Object.values(totals).reduce((s,v) => s+v, 0);
+    const tblHead = `<thead><tr>
+      <th>Invoice</th>${showClient ? '<th>Customer</th>' : ''}
+      <th>Invoice Date</th><th>Due Date</th>
+      <th class="right">Balance Due</th>
+      <th class="right">Current</th>
+      <th class="right">1–30 Days</th>
+      <th class="right">31–60 Days</th>
+      <th class="right">61–90 Days</th>
+      <th class="right">&gt;90 Days</th>
+      <th class="right">Age</th>
+    </tr></thead>`;
 
-    const renderRows = (list) => list.map(inv => {
-      const { amount: baseAmt } = convertToBase(inv.balance_due, inv.currency);
-      const dueDate = inv.due_date ? new Date(inv.due_date) : new Date(inv.invoice_date);
-      const days = Math.max(0, Math.floor((asAtDate - dueDate) / 86400000));
-      return `<tr>
-        <td class="mono bold">${inv.invoice_no}</td>
-        <td>${cMap[inv.contact_id]||'—'}</td>
-        <td class="mono">${inv.invoice_date}</td>
-        <td class="mono">${inv.due_date||'—'}</td>
-        <td class="mono">${inv.currency}</td>
-        <td class="right mono">${fmt(inv.balance_due, inv.currency)}</td>
-        <td class="right mono">${fmt(baseAmt, base)}</td>
-        <td class="right mono" style="color:${days>90?'var(--red)':days>60?'var(--amber)':'var(--text-2)'}">${days}</td>
-      </tr>`;
-    }).join('');
+    const ccyTables = ccys.map(ccy => {
+      const list = byCcy[ccy];
+      let totBal=0, totCur=0, tot130=0, tot3160=0, tot6190=0, tot90p=0;
 
-    const sectionHTML = (label, list, total, color='var(--text)') => !list.length ? '' : `
-      <tr class="header-row"><td colspan="8" style="padding:10px 16px;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:${color};">${label} <span style="font-weight:400;color:var(--text-3);">(${list.length})</span></td></tr>
-      ${renderRows(list)}
-      <tr style="background:var(--bg-3);border-top:1px solid var(--border);">
-        <td colspan="6" style="padding:8px 16px;font-weight:600;color:${color};">Subtotal — ${label}</td>
-        <td class="right mono" style="font-weight:600;color:${color};">${fmt(total, base)}</td>
-        <td></td>
-      </tr>`;
+      const rows = list.map(inv => {
+        const days  = ageOf(inv);
+        const bal   = parseFloat(inv.balance_due || 0);
+        const cur   = days <= 0              ? bal : 0;
+        const d130  = days >= 1  && days <= 30 ? bal : 0;
+        const d3160 = days >= 31 && days <= 60 ? bal : 0;
+        const d6190 = days >= 61 && days <= 90 ? bal : 0;
+        const d90p  = days > 90               ? bal : 0;
+        totBal += bal; totCur += cur; tot130 += d130;
+        tot3160 += d3160; tot6190 += d6190; tot90p += d90p;
+        const ageColor = days > 90 ? 'var(--red)' : days > 60 ? 'var(--amber)' : 'var(--text-2)';
+        const cell = v => v > 0
+          ? `<td class="right mono">${fmt(v, ccy)}</td>`
+          : `<td class="right mono" style="color:var(--text-3);">—</td>`;
+        return `<tr>
+          <td class="mono bold">${inv.invoice_no}</td>
+          ${showClient ? `<td>${cMap[inv.contact_id]||'—'}</td>` : ''}
+          <td class="mono">${inv.invoice_date}</td>
+          <td class="mono">${inv.due_date||'—'}</td>
+          <td class="right mono">${fmt(bal, ccy)}</td>
+          ${cell(cur)}${cell(d130)}${cell(d3160)}${cell(d6190)}${cell(d90p)}
+          <td class="right mono" style="color:${ageColor};">${Math.max(0,days)}</td>
+        </tr>`;
+      }).join('');
 
-    wrap.innerHTML = `
-      <div style="max-width:900px;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
-          <div>
-            <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;">${currentCompany.name}</div>
-            <div style="font-size:12px;color:var(--text-3);">Aged Receivables · ${from ? formatDateDisplay(from)+' → ' : 'As at '}${formatDateDisplay(asAt)}${contactId ? ' · '+(cMap[contactId]||'') : ''} · Amounts in ${base}</div>
-          </div>
-          <div class="stat-grid" style="grid-template-columns:repeat(5,1fr);gap:8px;">
-            <div class="stat-card" style="padding:10px 12px;"><div class="stat-label" style="font-size:9px;">Current</div><div class="stat-value" style="font-size:14px;">${fmt(totals.current,base)}</div></div>
-            <div class="stat-card" style="padding:10px 12px;"><div class="stat-label" style="font-size:9px;">1–30 Days</div><div class="stat-value" style="font-size:14px;color:var(--amber);">${fmt(totals.d1_30,base)}</div></div>
-            <div class="stat-card" style="padding:10px 12px;"><div class="stat-label" style="font-size:9px;">31–60 Days</div><div class="stat-value" style="font-size:14px;color:var(--amber);">${fmt(totals.d31_60,base)}</div></div>
-            <div class="stat-card" style="padding:10px 12px;"><div class="stat-label" style="font-size:9px;">61–90 Days</div><div class="stat-value" style="font-size:14px;color:var(--red);">${fmt(totals.d61_90,base)}</div></div>
-            <div class="stat-card" style="padding:10px 12px;"><div class="stat-label" style="font-size:9px;">90+ Days</div><div class="stat-value" style="font-size:14px;color:var(--red);">${fmt(totals.d90plus,base)}</div></div>
-          </div>
-        </div>
-        <table class="data-table">
-          <thead><tr>
-            <th>Invoice</th><th>Customer</th><th>Invoice Date</th><th>Due Date</th>
-            <th>Ccy</th><th class="right">Balance Due</th><th class="right">Base (${base})</th><th class="right">Days</th>
-          </tr></thead>
+      const labelCols = showClient ? 4 : 3;
+      const tf = v => `<td class="right mono" style="font-weight:700;color:var(--gold);">${fmt(v, ccy)}</td>`;
+      return `
+        ${multi ? `<div style="font-family:'Syne',sans-serif;font-size:12px;font-weight:700;margin:20px 0 8px;padding-bottom:6px;border-bottom:2px solid var(--border);letter-spacing:1px;text-transform:uppercase;color:var(--text-2);">Currency: ${ccy}</div>` : ''}
+        <table class="data-table" style="margin-bottom:${multi?'0':'0'};">
+          ${tblHead}
           <tbody>
-            ${sectionHTML('Current', buckets.current, totals.current, 'var(--green)')}
-            ${sectionHTML('1–30 Days', buckets.d1_30, totals.d1_30, 'var(--amber)')}
-            ${sectionHTML('31–60 Days', buckets.d31_60, totals.d31_60, 'var(--amber)')}
-            ${sectionHTML('61–90 Days', buckets.d61_90, totals.d61_90, 'var(--red)')}
-            ${sectionHTML('90+ Days', buckets.d90plus, totals.d90plus, 'var(--red)')}
+            ${rows}
             <tr style="border-top:3px solid var(--text);background:var(--gold-bg);">
-              <td colspan="6" style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;padding:12px 16px;color:var(--gold);">Total Outstanding</td>
-              <td class="right mono" style="font-weight:700;font-size:14px;color:var(--gold);">${fmt(grandTotal, base)}</td>
+              <td colspan="${labelCols}" style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;padding:10px 16px;color:var(--gold);">Total Outstanding</td>
+              ${tf(totBal)}${tf(totCur)}${tf(tot130)}${tf(tot3160)}${tf(tot6190)}${tf(tot90p)}
               <td></td>
             </tr>
           </tbody>
-        </table>
+        </table>`;
+    }).join('');
+
+    const contactLabel = contactId ? ` · ${cMap[contactId]||''}` : '';
+    const dateRange = from ? `${formatDateDisplay(from)} → ${formatDateDisplay(asAt)}` : `As at ${formatDateDisplay(asAt)}`;
+
+    wrap.innerHTML = `
+      <div style="max-width:1100px;">
+        <div style="margin-bottom:20px;">
+          <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;">${currentCompany.name}</div>
+          <div style="font-size:12px;color:var(--text-3);">Aged Receivables · ${dateRange}${contactLabel}${multi ? ' · Multiple currencies' : ' · '+ccys[0]}</div>
+        </div>
+        ${ccyTables}
       </div>`;
   } catch(e) { wrap.innerHTML = `<div class="table-empty">Error: ${e.message}</div>`; }
 }
@@ -8796,93 +8794,93 @@ async function runAgedAP() {
     if (from)      qs += `&bill_date=gte.${from}`;
     if (contactId) qs += `&contact_id=eq.${contactId}`;
     const allBills = await sbGet('bills', qs);
-    const base = currentCompany.base_currency || currentCompany.currency;
     const cMap = {}; contacts.forEach(c => { cMap[c.id] = c.trading_name || c.name; });
+    const showVendor = !contactId;
 
-    const buckets = { current:[], d1_30:[], d31_60:[], d61_90:[], d90plus:[] };
-    allBills.forEach(b => {
-      if (parseFloat(b.balance_due||0) <= 0) return;
-      const dueDate = b.due_date ? new Date(b.due_date) : new Date(b.bill_date);
-      const days = Math.floor((asAtDate - dueDate) / 86400000);
-      if (days <= 0)       buckets.current.push(b);
-      else if (days <= 30) buckets.d1_30.push(b);
-      else if (days <= 60) buckets.d31_60.push(b);
-      else if (days <= 90) buckets.d61_90.push(b);
-      else                 buckets.d90plus.push(b);
+    const bills = allBills.filter(b => parseFloat(b.balance_due || 0) > 0);
+    if (!bills.length) {
+      wrap.innerHTML = '<div class="table-empty" style="margin-top:40px;">No outstanding bills for the selected period.</div>';
+      return;
+    }
+
+    const byCcy = {};
+    bills.forEach(b => {
+      const ccy = b.currency || currentCompany.base_currency;
+      (byCcy[ccy] = byCcy[ccy] || []).push(b);
     });
+    const ccys = Object.keys(byCcy).sort();
+    const multi = ccys.length > 1;
 
-    const bucketTotal = list => list.reduce((s,b) => {
-      const { amount } = convertToBase(b.balance_due, b.currency);
-      return s + amount;
-    }, 0);
+    const ageOf = b => Math.floor((asAtDate - new Date((b.due_date || b.bill_date) + 'T00:00:00')) / 86400000);
 
-    const totals = {
-      current: bucketTotal(buckets.current),
-      d1_30:   bucketTotal(buckets.d1_30),
-      d31_60:  bucketTotal(buckets.d31_60),
-      d61_90:  bucketTotal(buckets.d61_90),
-      d90plus: bucketTotal(buckets.d90plus)
-    };
-    const grandTotal = Object.values(totals).reduce((s,v) => s+v, 0);
+    const tblHead = `<thead><tr>
+      <th>Bill No.</th>${showVendor ? '<th>Vendor</th>' : ''}
+      <th>Bill Date</th><th>Due Date</th>
+      <th class="right">Balance Due</th>
+      <th class="right">Current</th>
+      <th class="right">1–30 Days</th>
+      <th class="right">31–60 Days</th>
+      <th class="right">61–90 Days</th>
+      <th class="right">&gt;90 Days</th>
+      <th class="right">Age</th>
+    </tr></thead>`;
 
-    const renderRows = list => list.map(b => {
-      const { amount: baseAmt } = convertToBase(b.balance_due, b.currency);
-      const dueDate = b.due_date ? new Date(b.due_date) : new Date(b.bill_date);
-      const days = Math.max(0, Math.floor((asAtDate - dueDate) / 86400000));
-      return `<tr>
-        <td class="mono bold">${b.bill_no || '—'}</td>
-        <td>${cMap[b.contact_id]||'—'}</td>
-        <td class="mono">${b.bill_date}</td>
-        <td class="mono">${b.due_date||'—'}</td>
-        <td class="mono">${b.currency}</td>
-        <td class="right mono">${fmt(b.balance_due, b.currency)}</td>
-        <td class="right mono">${fmt(baseAmt, base)}</td>
-        <td class="right mono" style="color:${days>90?'var(--red)':days>60?'var(--amber)':'var(--text-2)'}">${days}</td>
-      </tr>`;
-    }).join('');
+    const ccyTables = ccys.map(ccy => {
+      const list = byCcy[ccy];
+      let totBal=0, totCur=0, tot130=0, tot3160=0, tot6190=0, tot90p=0;
 
-    const sectionHTML = (label, list, total, color='var(--text)') => !list.length ? '' : `
-      <tr class="header-row"><td colspan="8" style="padding:10px 16px;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:${color};">${label} <span style="font-weight:400;color:var(--text-3);">(${list.length})</span></td></tr>
-      ${renderRows(list)}
-      <tr style="background:var(--bg-3);border-top:1px solid var(--border);">
-        <td colspan="6" style="padding:8px 16px;font-weight:600;color:${color};">Subtotal — ${label}</td>
-        <td class="right mono" style="font-weight:600;color:${color};">${fmt(total, base)}</td>
-        <td></td>
-      </tr>`;
+      const rows = list.map(b => {
+        const days  = ageOf(b);
+        const bal   = parseFloat(b.balance_due || 0);
+        const cur   = days <= 0              ? bal : 0;
+        const d130  = days >= 1  && days <= 30 ? bal : 0;
+        const d3160 = days >= 31 && days <= 60 ? bal : 0;
+        const d6190 = days >= 61 && days <= 90 ? bal : 0;
+        const d90p  = days > 90               ? bal : 0;
+        totBal += bal; totCur += cur; tot130 += d130;
+        tot3160 += d3160; tot6190 += d6190; tot90p += d90p;
+        const ageColor = days > 90 ? 'var(--red)' : days > 60 ? 'var(--amber)' : 'var(--text-2)';
+        const cell = v => v > 0
+          ? `<td class="right mono">${fmt(v, ccy)}</td>`
+          : `<td class="right mono" style="color:var(--text-3);">—</td>`;
+        return `<tr>
+          <td class="mono bold">${b.bill_no||'—'}</td>
+          ${showVendor ? `<td>${cMap[b.contact_id]||'—'}</td>` : ''}
+          <td class="mono">${b.bill_date}</td>
+          <td class="mono">${b.due_date||'—'}</td>
+          <td class="right mono">${fmt(bal, ccy)}</td>
+          ${cell(cur)}${cell(d130)}${cell(d3160)}${cell(d6190)}${cell(d90p)}
+          <td class="right mono" style="color:${ageColor};">${Math.max(0,days)}</td>
+        </tr>`;
+      }).join('');
 
-    wrap.innerHTML = `
-      <div style="max-width:900px;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
-          <div>
-            <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;">${currentCompany.name}</div>
-            <div style="font-size:12px;color:var(--text-3);">Aged Payables · ${from ? formatDateDisplay(from)+' → ' : 'As at '}${formatDateDisplay(asAt)}${contactId ? ' · '+(cMap[contactId]||'') : ''} · Amounts in ${base}</div>
-          </div>
-          <div class="stat-grid" style="grid-template-columns:repeat(5,1fr);gap:8px;">
-            <div class="stat-card" style="padding:10px 12px;"><div class="stat-label" style="font-size:9px;">Current</div><div class="stat-value" style="font-size:14px;">${fmt(totals.current,base)}</div></div>
-            <div class="stat-card" style="padding:10px 12px;"><div class="stat-label" style="font-size:9px;">1–30 Days</div><div class="stat-value" style="font-size:14px;color:var(--amber);">${fmt(totals.d1_30,base)}</div></div>
-            <div class="stat-card" style="padding:10px 12px;"><div class="stat-label" style="font-size:9px;">31–60 Days</div><div class="stat-value" style="font-size:14px;color:var(--amber);">${fmt(totals.d31_60,base)}</div></div>
-            <div class="stat-card" style="padding:10px 12px;"><div class="stat-label" style="font-size:9px;">61–90 Days</div><div class="stat-value" style="font-size:14px;color:var(--red);">${fmt(totals.d61_90,base)}</div></div>
-            <div class="stat-card" style="padding:10px 12px;"><div class="stat-label" style="font-size:9px;">90+ Days</div><div class="stat-value" style="font-size:14px;color:var(--red);">${fmt(totals.d90plus,base)}</div></div>
-          </div>
-        </div>
+      const labelCols = showVendor ? 4 : 3;
+      const tf = v => `<td class="right mono" style="font-weight:700;color:var(--gold);">${fmt(v, ccy)}</td>`;
+      return `
+        ${multi ? `<div style="font-family:'Syne',sans-serif;font-size:12px;font-weight:700;margin:20px 0 8px;padding-bottom:6px;border-bottom:2px solid var(--border);letter-spacing:1px;text-transform:uppercase;color:var(--text-2);">Currency: ${ccy}</div>` : ''}
         <table class="data-table">
-          <thead><tr>
-            <th>Bill No.</th><th>Supplier</th><th>Bill Date</th><th>Due Date</th>
-            <th>Ccy</th><th class="right">Balance Due</th><th class="right">Base (${base})</th><th class="right">Days</th>
-          </tr></thead>
+          ${tblHead}
           <tbody>
-            ${sectionHTML('Current', buckets.current, totals.current, 'var(--green)')}
-            ${sectionHTML('1–30 Days', buckets.d1_30, totals.d1_30, 'var(--amber)')}
-            ${sectionHTML('31–60 Days', buckets.d31_60, totals.d31_60, 'var(--amber)')}
-            ${sectionHTML('61–90 Days', buckets.d61_90, totals.d61_90, 'var(--red)')}
-            ${sectionHTML('90+ Days', buckets.d90plus, totals.d90plus, 'var(--red)')}
+            ${rows}
             <tr style="border-top:3px solid var(--text);background:var(--gold-bg);">
-              <td colspan="6" style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;padding:12px 16px;color:var(--gold);">Total Outstanding</td>
-              <td class="right mono" style="font-weight:700;font-size:14px;color:var(--gold);">${fmt(grandTotal, base)}</td>
+              <td colspan="${labelCols}" style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;padding:10px 16px;color:var(--gold);">Total Outstanding</td>
+              ${tf(totBal)}${tf(totCur)}${tf(tot130)}${tf(tot3160)}${tf(tot6190)}${tf(tot90p)}
               <td></td>
             </tr>
           </tbody>
-        </table>
+        </table>`;
+    }).join('');
+
+    const contactLabel = contactId ? ` · ${cMap[contactId]||''}` : '';
+    const dateRange = from ? `${formatDateDisplay(from)} → ${formatDateDisplay(asAt)}` : `As at ${formatDateDisplay(asAt)}`;
+
+    wrap.innerHTML = `
+      <div style="max-width:1100px;">
+        <div style="margin-bottom:20px;">
+          <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;">${currentCompany.name}</div>
+          <div style="font-size:12px;color:var(--text-3);">Aged Payables · ${dateRange}${contactLabel}${multi ? ' · Multiple currencies' : ' · '+ccys[0]}</div>
+        </div>
+        ${ccyTables}
       </div>`;
   } catch(e) { wrap.innerHTML = `<div class="table-empty">Error: ${e.message}</div>`; }
 }
