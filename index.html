@@ -525,6 +525,8 @@ body {
 .table-actions { margin-left: auto; display: flex; gap: 8px; }
 
 .data-table { width: 100%; border-collapse: collapse; }
+.data-table-compact th, .data-table-compact td { padding: 9px 10px !important; }
+.data-table-compact td.mono { font-size: 12px; }
 .data-table thead tr { border-bottom: 1px solid var(--border); }
 .data-table th {
   font-size: 11px;
@@ -3425,7 +3427,7 @@ body {
 
 <!-- ── INVOICE RECEIPTS HISTORY MODAL ── -->
 <div class="modal-overlay" id="modal-invoice-receipts" onclick="if(event.target===this)closeModal('modal-invoice-receipts')">
-  <div class="modal" style="max-width:700px;">
+  <div class="modal" style="max-width:min(880px,95vw);">
     <div class="modal-header">
       <div>
         <div class="modal-title">Receipts</div>
@@ -3433,7 +3435,7 @@ body {
       </div>
       <button class="modal-close" onclick="closeModal('modal-invoice-receipts')">✕</button>
     </div>
-    <div class="modal-body" id="inv-receipts-list">
+    <div class="modal-body" style="padding:16px 0;" id="inv-receipts-list">
       <div style="padding:28px;text-align:center;color:var(--text-3);font-size:13px;">Loading…</div>
     </div>
   </div>
@@ -5658,7 +5660,7 @@ async function openInvoiceReceiptHistory(invoiceId) {
     const methodLabels = { bank_transfer:'Bank Transfer', cheque:'Cheque', cash:'Cash', card:'Card', other:'Other' };
     const bankMap = Object.fromEntries(bankAccounts.map(b => [b.id, b.account_name]));
     listEl.innerHTML = `
-      <table class="data-table" style="margin:0;">
+      <table class="data-table data-table-compact" style="margin:0;">
         <thead><tr>
           <th>Receipt No.</th><th>Date</th><th>Method</th><th>Account</th>
           <th>Reference</th><th class="right">Amount</th><th>Status</th><th class="right">Action</th>
