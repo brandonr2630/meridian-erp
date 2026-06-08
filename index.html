@@ -4070,7 +4070,7 @@ async function loadCoA() {
     renderCoA(accounts);
   } catch(e) {
     showToast('Failed to load CoA: ' + e.message, 'error');
-    document.getElementById('coa-table-wrap').innerHTML = `<div class="table-empty">Error: ${e.message}</div>`;
+    document.getElementById('coa-table-wrap').innerHTML = `<div class="table-empty">Error: ${escHTML(e.message)}</div>`;
   }
 }
 
@@ -4701,7 +4701,7 @@ async function openBillPaymentHistory(billId) {
         </tbody>
       </table>`;
   } catch(e) {
-    listEl.innerHTML = `<div style="padding:20px;color:var(--red);">Error: ${e.message}</div>`;
+    listEl.innerHTML = `<div style="padding:20px;color:var(--red);">Error: ${escHTML(e.message)}</div>`;
   }
 }
 
@@ -5801,7 +5801,7 @@ async function openInvoiceReceiptHistory(invoiceId) {
         </tbody>
       </table>`;
   } catch(e) {
-    listEl.innerHTML = `<div style="padding:20px;color:var(--red);">Error: ${e.message}</div>`;
+    listEl.innerHTML = `<div style="padding:20px;color:var(--red);">Error: ${escHTML(e.message)}</div>`;
   }
 }
 
@@ -5893,7 +5893,7 @@ async function loadSettingsBankAccounts() {
           </td>
         </tr>`).join('')}
       </tbody></table>`;
-  } catch(e) { wrap.innerHTML = `<div class="table-empty">Error: ${e.message}</div>`; }
+  } catch(e) { wrap.innerHTML = `<div class="table-empty">Error: ${escHTML(e.message)}</div>`; }
 }
 
 function openAddBankAccount() {
@@ -6007,7 +6007,7 @@ async function loadBankTxns() {
   try {
     bankTxns = await sbGet('bank_transactions', `bank_account_id=eq.${id}&order=transaction_date.desc`);
     renderBankTxns(bankTxns);
-  } catch(e) { wrap.innerHTML = `<div class="table-empty">Error: ${e.message}</div>`; }
+  } catch(e) { wrap.innerHTML = `<div class="table-empty">Error: ${escHTML(e.message)}</div>`; }
 }
 
 function renderBankTxns(txns) {
@@ -6182,11 +6182,16 @@ function searchBillVendor() {
   const pool = contacts.filter(c => (c.contact_type === 'supplier' || c.contact_type === 'both') && c.is_active !== false &&
     (!q || (c.name||'').toLowerCase().includes(q) || (c.trading_name||'').toLowerCase().includes(q)));
   if (!pool.length) { res.classList.remove('open'); return; }
-  res.innerHTML = pool.slice(0,8).map(c => `
-    <div class="contact-result-item" onclick="selectBillVendor('${c.id}','${(c.trading_name||c.name).replace(/'/g,"\\'")}','${c.name.replace(/'/g,"\\'")}')">
-      <div class="contact-result-name">${c.trading_name||c.name}</div>
-      <div class="contact-result-sub">${c.name}</div>
+  const slice = pool.slice(0, 8);
+  res.innerHTML = slice.map(c => `
+    <div class="contact-result-item">
+      <div class="contact-result-name">${escHTML(c.trading_name||c.name)}</div>
+      <div class="contact-result-sub">${escHTML(c.name)}</div>
     </div>`).join('');
+  res.querySelectorAll('.contact-result-item').forEach((el, i) => {
+    const c = slice[i];
+    el.addEventListener('click', () => selectBillVendor(c.id, c.trading_name||c.name, c.name));
+  });
   res.classList.add('open');
 }
 
@@ -6584,7 +6589,7 @@ async function runPL() {
           </tbody>
         </table>
       </div>`;
-  } catch(e) { wrap.innerHTML = `<div class="table-empty">Error: ${e.message}</div>`; }
+  } catch(e) { wrap.innerHTML = `<div class="table-empty">Error: ${escHTML(e.message)}</div>`; }
 }
 
 async function runBS() {
@@ -6641,7 +6646,7 @@ async function runBS() {
           </tr>
         </tbody></table>
       </div>`;
-  } catch(e) { wrap.innerHTML = `<div class="table-empty">Error: ${e.message}</div>`; }
+  } catch(e) { wrap.innerHTML = `<div class="table-empty">Error: ${escHTML(e.message)}</div>`; }
 }
 
 async function runTB() {
@@ -6697,7 +6702,7 @@ async function runTB() {
           ? '<div style="margin-top:12px;padding:10px 14px;background:var(--green-bg);border:1px solid rgba(76,175,125,.2);border-radius:var(--radius);font-size:12px;color:var(--green);">✓ Balanced — debits equal credits</div>'
           : '<div style="margin-top:12px;padding:10px 14px;background:var(--red-bg);border:1px solid rgba(224,92,92,.2);border-radius:var(--radius);font-size:12px;color:var(--red);">⚠ Out of balance by ' + fmt(Math.abs(totalDr - totalCr), currentCompany.currency) + '</div>'}
       </div>`;
-  } catch(e) { wrap.innerHTML = `<div class="table-empty">Error: ${e.message}</div>`; }
+  } catch(e) { wrap.innerHTML = `<div class="table-empty">Error: ${escHTML(e.message)}</div>`; }
 }
 
 // ── REPORT HELPERS ────────────────────────────────────────────────
@@ -6895,11 +6900,16 @@ function searchInvContact() {
     (!q || c.name.toLowerCase().includes(q) || (c.trading_name||'').toLowerCase().includes(q) || (c.code||'').toLowerCase().includes(q))
   );
   if (!pool.length) { res.classList.remove('open'); return; }
-  res.innerHTML = pool.slice(0, 8).map(c => `
-    <div class="contact-result-item" onclick="selectInvContact('${c.id}','${(c.trading_name||c.name).replace(/'/g,"\\'")}','${(c.name).replace(/'/g,"\\'")}',${c.payment_terms||30})">
-      <div class="contact-result-name">${c.trading_name || c.name}</div>
-      <div class="contact-result-sub">${c.name}${c.code ? ' · '+c.code : ''} · ${c.currency}</div>
+  const slice = pool.slice(0, 8);
+  res.innerHTML = slice.map(c => `
+    <div class="contact-result-item">
+      <div class="contact-result-name">${escHTML(c.trading_name || c.name)}</div>
+      <div class="contact-result-sub">${escHTML(c.name)}${c.code ? ' · '+escHTML(c.code) : ''} · ${escHTML(c.currency)}</div>
     </div>`).join('');
+  res.querySelectorAll('.contact-result-item').forEach((el, i) => {
+    const c = slice[i];
+    el.addEventListener('click', () => selectInvContact(c.id, c.trading_name||c.name, c.name, c.payment_terms||30));
+  });
   res.classList.add('open');
 }
 
@@ -7697,10 +7707,14 @@ function searchQuoContact() {
   const matches = contacts.filter(c => (c.trading_name||c.name||'').toLowerCase().includes(q)).slice(0,8);
   if (!matches.length) { res.classList.remove('open'); return; }
   res.innerHTML = matches.map(c => `
-    <div class="contact-result-item" onclick="selectQuoContact('${c.id}','${(c.trading_name||c.name).replace(/'/g,"\\'")}')">
-      <div class="contact-result-name">${c.trading_name||c.name}</div>
-      <div class="contact-result-sub">${c.name !== c.trading_name ? c.name : ''}</div>
+    <div class="contact-result-item">
+      <div class="contact-result-name">${escHTML(c.trading_name||c.name)}</div>
+      <div class="contact-result-sub">${escHTML(c.name !== c.trading_name ? c.name : '')}</div>
     </div>`).join('');
+  res.querySelectorAll('.contact-result-item').forEach((el, i) => {
+    const c = matches[i];
+    el.addEventListener('click', () => selectQuoContact(c.id, c.trading_name||c.name));
+  });
   res.classList.add('open');
 }
 
@@ -7967,7 +7981,7 @@ async function refreshSLList() {
           </td>
         </tr>`).join('')}
       </tbody></table>`;
-  } catch(e) { wrap.innerHTML = `<div class="table-empty">Error: ${e.message}</div>`; }
+  } catch(e) { wrap.innerHTML = `<div class="table-empty">Error: ${escHTML(e.message)}</div>`; }
 }
 
 async function saveSalesLead() {
@@ -8069,7 +8083,7 @@ async function runSalesLeadReport() {
         </table>
       </div>`;
   } catch(e) {
-    wrap.innerHTML = `<div class="table-empty">Error: ${e.message}</div>`;
+    wrap.innerHTML = `<div class="table-empty">Error: ${escHTML(e.message)}</div>`;
   }
 }
 
@@ -8317,11 +8331,16 @@ function searchDNContact() {
   const pool = contacts.filter(c => (c.contact_type==='customer'||c.contact_type==='both') && c.is_active!==false &&
     (!q || (c.name||'').toLowerCase().includes(q) || (c.trading_name||'').toLowerCase().includes(q)));
   if (!pool.length) { res.classList.remove('open'); return; }
-  res.innerHTML = pool.slice(0,8).map(c => `
-    <div class="contact-result-item" onclick="selectDNContact('${c.id}','${(c.trading_name||c.name).replace(/'/g,"\\'")}')">
-      <div class="contact-result-name">${c.trading_name||c.name}</div>
-      <div class="contact-result-sub">${c.name}</div>
+  const slice = pool.slice(0, 8);
+  res.innerHTML = slice.map(c => `
+    <div class="contact-result-item">
+      <div class="contact-result-name">${escHTML(c.trading_name||c.name)}</div>
+      <div class="contact-result-sub">${escHTML(c.name)}</div>
     </div>`).join('');
+  res.querySelectorAll('.contact-result-item').forEach((el, i) => {
+    const c = slice[i];
+    el.addEventListener('click', () => selectDNContact(c.id, c.trading_name||c.name));
+  });
   res.classList.add('open');
 }
 
@@ -8884,7 +8903,7 @@ async function runAgedAR() {
         </div>
         ${ccyTables}
       </div>`;
-  } catch(e) { wrap.innerHTML = `<div class="table-empty">Error: ${e.message}</div>`; }
+  } catch(e) { wrap.innerHTML = `<div class="table-empty">Error: ${escHTML(e.message)}</div>`; }
 }
 
 async function runAgedAP() {
@@ -8988,7 +9007,7 @@ async function runAgedAP() {
         </div>
         ${ccyTables}
       </div>`;
-  } catch(e) { wrap.innerHTML = `<div class="table-empty">Error: ${e.message}</div>`; }
+  } catch(e) { wrap.innerHTML = `<div class="table-empty">Error: ${escHTML(e.message)}</div>`; }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -9510,7 +9529,7 @@ async function onGlobalSearch() {
           b => fmt(b.total, b.currency),
           b => `switchCompanyAndNav('${b._coId}','ap')`);
 
-    } catch(e) { res.innerHTML = `<div class="search-empty">Search error: ${e.message}</div>`; }
+    } catch(e) { res.innerHTML = `<div class="search-empty">Search error: ${escHTML(e.message)}</div>`; }
   }, 300);
 }
 
