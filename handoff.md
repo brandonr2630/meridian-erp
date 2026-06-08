@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-08 · Session 6*
+*Last updated: 2026-06-08 · Session 7*
 
 ---
 
@@ -15,6 +15,25 @@
 ---
 
 ## Sessions
+
+## Session 7 — Receipt History Modal Layout
+
+**Date:** 2026-06-08
+**Branch:** `fix/receipt-history-modal-layout`
+
+### What Changed
+
+| Change | Detail |
+|--------|--------|
+| Modal wider | `max-width` increased from `700px` to `min(880px, 95vw)` — all 8 columns now fit without horizontal scrolling |
+| Body padding removed horizontally | `modal-body` padding set to `16px 0` (top/bottom only) so table uses the full modal width |
+| Compact cell padding | `.data-table-compact` class added: `9px 10px` padding vs the default `11px 16px`; applied to the receipts table only |
+
+### Outstanding
+
+- CRM module (3 tables: contacts, activities, deals) — design drafted, not yet built
+
+---
 
 ## Session 6 — Receipt History Modal Fix
 
