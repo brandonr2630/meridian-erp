@@ -37,6 +37,7 @@ Added a full receipt issuance system for AR client payments — PDF generation, 
 ### Outstanding
 
 - Void propagation: when an AR payment is voided, `payment_receipts.status` should be set to `voided` (AR payment void not yet implemented — AP void is complete)
+- PDF metaRows escaping (see below)
 - CRM module (3 tables: contacts, activities, deals) — design drafted, not yet built
 
 ---
@@ -166,6 +167,38 @@ No known issues.
 ## Next Up
 
 - CRM module (3 tables: contacts, activities, deals) — design drafted, not yet built. See memory for details.
+
+---
+
+## Scoped Work — PDF metaRows HTML Escaping
+
+**Priority:** Low · **Effort:** ~14 line changes · **Risk:** Very low (purely defensive)
+
+### Background
+
+`buildPDFHeader` renders `metaRows` values raw into iframe HTML:
+```javascript
+${metaRows.map(([k,v]) => `<div ...>${k}</div><div ...>${v}</div>`).join('')}
+```
+An `escHTML()` helper exists (added in Session 4). It needs to be applied to user-entered fields at every call site.
+
+`buildPDFTotals` has the same issue with `incotermsPlace` and `notesText`.
+
+### Changes required (all in `index.html`)
+
+| Function | Fields to wrap with `escHTML()` |
+|----------|--------------------------------|
+| `openInvoicePDF` metaRows | `inv.client_ref` |
+| `openQuoPDF` metaRows | `quo.client_ref` · `lead.name` (Prepared By) |
+| `openDNPDF` metaRows | `dn.client_ref` · `dn.carrier` · `dn.driver` · `dn.vehicle_ref` · `dn.recipient_name` · `delAddr` |
+| `openCNPDF` metaRows | `cn.reason` |
+| `buildReceiptPDFHTML` metaRows | `receipt.reference` |
+| `buildPDFTotals` (inside function) | `incotermsPlace` · `notesText` |
+
+**Total:** 12 fields across 6 locations. No logic changes — purely wrapping existing values.
+
+### Not in scope
+- `buildPDFHeader` company/contact address fields (`co.name`, `contact.trading_name`, billing address parts) — these are admin-entered trusted data, lower risk, separate cleanup if desired.
 
 ---
 
