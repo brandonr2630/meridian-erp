@@ -4636,8 +4636,14 @@ async function saveVendorPayment() {
     // 5 — Allocation
     await sbPost('payment_allocations', { payment_id: payment.id, bill_id: billId, amount });
 
-    // 6 — Update bill
-    await sbPatch('bills', billId, { amount_paid: newAmountPaid, balance_due: newBalance, status: newStatus });
+    // 6 — Update bill — roll back payment + allocation if this fails
+    try {
+      await sbPatch('bills', billId, { amount_paid: newAmountPaid, balance_due: newBalance, status: newStatus });
+    } catch (patchErr) {
+      try { await sbDeleteWhere('payment_allocations', `payment_id=eq.${payment.id}`); } catch (_) {}
+      try { await sbDelete('payments', payment.id); } catch (_) {}
+      throw new Error(`Bill update failed; payment ${paymentNo} was rolled back. ${patchErr.message}`);
+    }
 
     showToast(`${paymentNo} recorded. Bill ${newStatus === 'paid' ? 'fully paid ✓' : 'partially paid'}.`, 'success');
     closeModal('modal-bill-payment');
@@ -5576,8 +5582,13 @@ async function savePayment() {
       journal_id: journalId, status: 'posted', balance_after: newBalance
     });
 
-    // Update invoice balance and status
-    await sbPatch('invoices', invoiceId, { balance_due: newBalance, status: newStatus });
+    // Update invoice balance and status — roll back receipt if this fails
+    try {
+      await sbPatch('invoices', invoiceId, { balance_due: newBalance, status: newStatus });
+    } catch (patchErr) {
+      try { await sbDelete('payment_receipts', receipt.id); } catch (_) {}
+      throw new Error(`Invoice update failed; receipt ${receiptNo} was rolled back. ${patchErr.message}`);
+    }
 
     closeModal('modal-payment');
     await loadAR();
