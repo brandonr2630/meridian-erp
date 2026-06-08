@@ -568,6 +568,17 @@ body {
   color: var(--text-3);
   font-size: 13px;
 }
+.table-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  font-size: 12px;
+  color: var(--text-3);
+  border-top: 1px solid var(--border);
+}
+.table-pager .pager-info { letter-spacing: .3px; }
+.table-pager .pager-btns { display: flex; gap: 6px; }
 
 /* ── TYPE BADGES ── */
 .badge {
@@ -3594,6 +3605,20 @@ function todayDate(){ return new Date().toISOString().slice(0, 10); }
 function getJWTSub(token) {
   try { return JSON.parse(atob(token.split('.')[1])).sub; } catch { return null; }
 }
+const PAGE_SIZE = 50;
+function renderPager(total, page, size, fnName) {
+  if (total <= size) return '';
+  const from = page * size + 1;
+  const to   = Math.min((page + 1) * size, total);
+  const last = Math.floor((total - 1) / size);
+  return `<div class="table-pager">
+    <span class="pager-info">Showing ${from}–${to} of ${total}</span>
+    <div class="pager-btns">
+      <button class="btn btn-ghost btn-sm" ${page === 0 ? 'disabled' : ''} onclick="${fnName}(${page - 1})">← Prev</button>
+      <button class="btn btn-ghost btn-sm" ${page >= last ? 'disabled' : ''} onclick="${fnName}(${page + 1})">Next →</button>
+    </div>
+  </div>`;
+}
 
 // ── SUPABASE API ─────────────────────────────────────────────────
 async function sb(path, opts = {}) {
@@ -4449,56 +4474,73 @@ async function loadAP() {
   document.getElementById('ap-table-wrap').innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading...</div>';
   try {
     bills = await sbGet('bills', `company_id=eq.${currentCompany.id}&order=bill_date.desc`);
-    const contactMap = {};
-    contacts.forEach(c => { contactMap[c.id] = c.trading_name || c.name; });
-
     const outstanding = bills.filter(b => !['paid','void'].includes(b.status));
-    const totalAP  = outstanding.reduce((s,b) => s + parseFloat(b.balance_due||0), 0);
-    const overdue  = bills.filter(b => b.status === 'overdue').reduce((s,b) => s + parseFloat(b.balance_due||0), 0);
+    const totalAP   = outstanding.reduce((s,b) => s + parseFloat(b.balance_due||0), 0);
+    const overdue   = bills.filter(b => b.status === 'overdue').reduce((s,b) => s + parseFloat(b.balance_due||0), 0);
     const paidMonth = bills.filter(b => b.status === 'paid').reduce((s,b) => s + parseFloat(b.total||0), 0);
-
     document.getElementById('ap-total').textContent   = fmt(totalAP, currentCompany.currency);
     document.getElementById('ap-overdue').textContent = fmt(overdue, currentCompany.currency);
     document.getElementById('ap-paid').textContent    = fmt(paidMonth, currentCompany.currency);
     document.getElementById('badge-ap').textContent   = outstanding.length;
-
-    if (!bills.length) {
-      document.getElementById('ap-table-wrap').innerHTML = '<div class="table-empty">No bills yet.</div>';
-      return;
-    }
-    document.getElementById('ap-table-wrap').innerHTML = `
-      <table class="data-table">
-        <thead><tr>
-          <th>Bill No.</th><th>Supplier</th><th>Date</th><th>Due Date</th>
-          <th>Currency</th><th class="right">Total</th><th class="right">Balance Due</th>
-          <th>Status</th><th class="right">Actions</th>
-        </tr></thead>
-        <tbody>${bills.map(b => {
-          const canPay    = ['approved','partial'].includes(b.status) && parseFloat(b.balance_due||0) > 0.005;
-          const hasPayments = parseFloat(b.amount_paid||0) > 0;
-          const canVoid   = b.status === 'approved' && !hasPayments;
-          return `
-          <tr>
-            <td class="mono bold">${b.bill_no || '<span style="color:var(--text-3);font-style:italic;font-size:11px;">Draft</span>'}</td>
-            <td>${contactMap[b.contact_id] || '—'}</td>
-            <td class="mono">${b.bill_date}</td>
-            <td class="mono">${b.due_date || '—'}</td>
-            <td class="mono">${b.currency}</td>
-            <td class="right mono">${fmt(b.total, b.currency)}</td>
-            <td class="right mono">${fmt(b.balance_due, b.currency)}</td>
-            <td><span class="badge badge-${b.status}">${b.status}</span></td>
-            <td class="right" style="white-space:nowrap;">
-              ${b.status === 'draft' ? `<button class="btn btn-outline btn-sm" onclick="approveBill('${b.id}')">Approve</button>` : ''}
-              ${b.status === 'draft' ? `<button class="btn btn-danger btn-sm" onclick="deleteDocument('bill','${b.id}','${b.bill_no||'this draft bill'}')">Delete</button>` : ''}
-              ${canPay  ? `<button class="btn btn-primary btn-sm" onclick="openPayBillModal('${b.id}')">Pay</button>` : ''}
-              ${hasPayments ? `<button class="btn btn-ghost btn-sm" onclick="openBillPaymentHistory('${b.id}')">History</button>` : ''}
-              ${canVoid ? `<button class="btn btn-ghost btn-sm" onclick="voidBill('${b.id}')">Void</button>` : ''}
-            </td>
-          </tr>`;
-        }).join('')}
-        </tbody>
-      </table>`;
+    apPage = 0;
+    renderAPTable(bills);
   } catch(e) { showToast('AP load error: ' + e.message, 'error'); }
+}
+function renderAPTable(list) {
+  _apFiltered = list;
+  const total = list.length;
+  const contactMap = Object.fromEntries(contacts.map(c => [c.id, c.trading_name || c.name]));
+  if (!total) {
+    document.getElementById('ap-table-wrap').innerHTML = '<div class="table-empty">No bills yet.</div>';
+    return;
+  }
+  const page = list.slice(apPage * PAGE_SIZE, (apPage + 1) * PAGE_SIZE);
+  document.getElementById('ap-table-wrap').innerHTML = `
+    <table class="data-table">
+      <thead><tr>
+        <th>Bill No.</th><th>Supplier</th><th>Date</th><th>Due Date</th>
+        <th>Currency</th><th class="right">Total</th><th class="right">Balance Due</th>
+        <th>Status</th><th class="right">Actions</th>
+      </tr></thead>
+      <tbody>${page.map(b => {
+        const canPay      = ['approved','partial'].includes(b.status) && parseFloat(b.balance_due||0) > 0.005;
+        const hasPayments = parseFloat(b.amount_paid||0) > 0;
+        const canVoid     = b.status === 'approved' && !hasPayments;
+        return `
+        <tr>
+          <td class="mono bold">${b.bill_no || '<span style="color:var(--text-3);font-style:italic;font-size:11px;">Draft</span>'}</td>
+          <td>${contactMap[b.contact_id] || '—'}</td>
+          <td class="mono">${b.bill_date}</td>
+          <td class="mono">${b.due_date || '—'}</td>
+          <td class="mono">${b.currency}</td>
+          <td class="right mono">${fmt(b.total, b.currency)}</td>
+          <td class="right mono">${fmt(b.balance_due, b.currency)}</td>
+          <td><span class="badge badge-${b.status}">${b.status}</span></td>
+          <td class="right" style="white-space:nowrap;">
+            ${b.status === 'draft' ? `<button class="btn btn-outline btn-sm" onclick="approveBill('${b.id}')">Approve</button>` : ''}
+            ${b.status === 'draft' ? `<button class="btn btn-danger btn-sm" onclick="deleteDocument('bill','${b.id}','${b.bill_no||'this draft bill'}')">Delete</button>` : ''}
+            ${canPay      ? `<button class="btn btn-primary btn-sm" onclick="openPayBillModal('${b.id}')">Pay</button>` : ''}
+            ${hasPayments ? `<button class="btn btn-ghost btn-sm" onclick="openBillPaymentHistory('${b.id}')">History</button>` : ''}
+            ${canVoid     ? `<button class="btn btn-ghost btn-sm" onclick="voidBill('${b.id}')">Void</button>` : ''}
+          </td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>
+    ${renderPager(total, apPage, PAGE_SIZE, 'setApPage')}`;
+}
+function setApPage(n) { apPage = n; renderAPTable(_apFiltered); }
+function filterAP() {
+  apPage = 0;
+  const q      = document.getElementById('ap-search').value.toLowerCase();
+  const status = document.getElementById('ap-status-filter').value;
+  const cmap   = Object.fromEntries(contacts.map(c => [c.id, (c.trading_name || c.name).toLowerCase()]));
+  const filtered = bills.filter(b => {
+    if (status && b.status !== status) return false;
+    if (q && !(b.bill_no||'').toLowerCase().includes(q) && !(cmap[b.contact_id]||'').includes(q)) return false;
+    return true;
+  });
+  renderAPTable(filtered);
 }
 
 async function approveBill(id) {
@@ -4785,26 +4827,30 @@ async function voidVendorPayment(paymentId, billId) {
 }
 
 // ── CLIENTS ──────────────────────────────────────────────────────
-let clients = [];
+let clients = [], _clientsFiltered = []; let clientsPage = 0;
 let editingClientId = null;
 
 async function loadClients() {
   document.getElementById('clients-table-wrap').innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading...</div>';
   try {
     clients = await sbGet('contacts', `company_id=eq.${currentCompany.id}&contact_type=in.(customer,both)&order=name`);
+    clientsPage = 0;
     renderClientsTable(clients);
   } catch(e) { showToast('Clients load error: ' + e.message, 'error'); }
 }
 
 function renderClientsTable(list) {
-  if (!list.length) {
+  _clientsFiltered = list;
+  const total = list.length;
+  if (!total) {
     document.getElementById('clients-table-wrap').innerHTML = '<div class="table-empty">No clients yet. <a href="#" onclick="openAddClient();return false;" style="color:var(--gold);">Add your first client →</a></div>';
     return;
   }
+  const page = list.slice(clientsPage * PAGE_SIZE, (clientsPage + 1) * PAGE_SIZE);
   document.getElementById('clients-table-wrap').innerHTML = `
     <table class="data-table"><thead><tr>
       <th>Code</th><th>Name</th><th>Industry</th><th>TRN</th><th>Contact Person</th><th>Phone</th><th>Currency</th><th>Credit Limit</th><th>Status</th><th class="right">Actions</th>
-    </tr></thead><tbody>${list.map(c => `
+    </tr></thead><tbody>${page.map(c => `
       <tr>
         <td class="mono">${c.code||'—'}</td>
         <td class="bold">${c.trading_name||c.name}</td>
@@ -4819,10 +4865,13 @@ function renderClientsTable(list) {
           <button class="btn btn-ghost btn-sm btn-icon" onclick="openEditClient('${c.id}')" title="Edit">✏️</button>
         </td>
       </tr>`).join('')}
-    </tbody></table>`;
+    </tbody></table>
+    ${renderPager(total, clientsPage, PAGE_SIZE, 'setClientsPage')}`;
 }
+function setClientsPage(n) { clientsPage = n; renderClientsTable(_clientsFiltered); }
 
 function filterClients() {
+  clientsPage = 0;
   const q        = document.getElementById('clients-search').value.toLowerCase();
   const industry = document.getElementById('clients-industry-filter').value;
   const status   = document.getElementById('clients-status-filter').value;
@@ -4938,26 +4987,30 @@ async function saveClient() {
 }
 
 // ── VENDORS ──────────────────────────────────────────────────────
-let vendors = [];
+let vendors = [], _vendorsFiltered = []; let vendorsPage = 0;
 let editingVendorId = null;
 
 async function loadVendors() {
   document.getElementById('vendors-table-wrap').innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading...</div>';
   try {
     vendors = await sbGet('contacts', `company_id=eq.${currentCompany.id}&contact_type=eq.supplier&order=name`);
+    vendorsPage = 0;
     renderVendorsTable(vendors);
   } catch(e) { showToast('Vendors load error: ' + e.message, 'error'); }
 }
 
 function renderVendorsTable(list) {
-  if (!list.length) {
+  _vendorsFiltered = list;
+  const total = list.length;
+  if (!total) {
     document.getElementById('vendors-table-wrap').innerHTML = '<div class="table-empty">No vendors yet. <a href="#" onclick="openAddVendor();return false;" style="color:var(--gold);">Add your first vendor →</a></div>';
     return;
   }
+  const page = list.slice(vendorsPage * PAGE_SIZE, (vendorsPage + 1) * PAGE_SIZE);
   document.getElementById('vendors-table-wrap').innerHTML = `
     <table class="data-table"><thead><tr>
       <th>Code</th><th>Name</th><th>Industry</th><th>TRN</th><th>Contact Person</th><th>Payment Method</th><th>Currency</th><th>Status</th><th class="right">Actions</th>
-    </tr></thead><tbody>${list.map(v => `
+    </tr></thead><tbody>${page.map(v => `
       <tr>
         <td class="mono">${v.code||'—'}</td>
         <td class="bold">${v.trading_name||v.name}</td>
@@ -4971,10 +5024,13 @@ function renderVendorsTable(list) {
           <button class="btn btn-ghost btn-sm btn-icon" onclick="openEditVendor('${v.id}')" title="Edit">✏️</button>
         </td>
       </tr>`).join('')}
-    </tbody></table>`;
+    </tbody></table>
+    ${renderPager(total, vendorsPage, PAGE_SIZE, 'setVendorsPage')}`;
 }
+function setVendorsPage(n) { vendorsPage = n; renderVendorsTable(_vendorsFiltered); }
 
 function filterVendors() {
+  vendorsPage = 0;
   const q        = document.getElementById('vendors-search').value.toLowerCase();
   const industry = document.getElementById('vendors-industry-filter').value;
   const status   = document.getElementById('vendors-status-filter').value;
@@ -5333,8 +5389,6 @@ async function saveInvoiceCounter() {
 }
 
 function openAddContact() { document.getElementById('modal-contact').classList.add('show'); }
-function filterAP() {}
-
 // ── THEME TOGGLE ─────────────────────────────────────────────────
 function toggleTheme() {
   const isLight = document.body.classList.toggle('light');
@@ -6796,10 +6850,10 @@ async function voidBill(id) {
 
 
 // ── AP STATE ──────────────────────────────────────────────────────
-let bills = [];
+let bills = [], _apFiltered = []; let apPage = 0;
 
 // ── INVOICE STATE ─────────────────────────────────────────────────
-let invoices      = [];
+let invoices = [], _arFiltered = []; let arPage = 0;
 let invLineCount  = 0;
 let editingInvoiceId = null;
 
@@ -7268,15 +7322,20 @@ async function loadAR() {
     document.getElementById('ar-collected').textContent = fmt(0, currentCompany.currency);
     document.getElementById('badge-ar').textContent    = outstanding.length;
 
+    arPage = 0;
     renderARTable(invoices, contactMap);
   } catch(e) { showToast('AR load error: ' + e.message, 'error'); }
 }
 
 function renderARTable(invs, contactMap) {
-  if (!invs.length) {
+  _arFiltered = invs;
+  const total = invs.length;
+  if (!total) {
     document.getElementById('ar-table-wrap').innerHTML = '<div class="table-empty">No invoices yet. <a href="#" onclick="openNewInvoice();return false;" style="color:var(--gold);">Create your first invoice →</a></div>';
     return;
   }
+  const cmap = contactMap || Object.fromEntries(contacts.map(c => [c.id, c.trading_name || c.name]));
+  const page = invs.slice(arPage * PAGE_SIZE, (arPage + 1) * PAGE_SIZE);
   document.getElementById('ar-table-wrap').innerHTML = `
     <table class="data-table">
       <thead><tr>
@@ -7284,10 +7343,10 @@ function renderARTable(invs, contactMap) {
         <th>Currency</th><th class="right">Total</th><th class="right">Balance Due</th>
         <th>Status</th><th class="right">Actions</th>
       </tr></thead>
-      <tbody>${invs.map(inv => `
+      <tbody>${page.map(inv => `
         <tr>
           <td class="mono bold">${inv.invoice_no || '<span style="color:var(--text-3);font-style:italic;font-size:11px;">Draft</span>'}</td>
-          <td>${contactMap?.[inv.contact_id] || inv.contact_id || '—'}</td>
+          <td>${cmap?.[inv.contact_id] || inv.contact_id || '—'}</td>
           <td class="mono">${inv.invoice_date}</td>
           <td class="mono">${inv.due_date || '—'}</td>
           <td class="mono">${inv.currency}</td>
@@ -7305,10 +7364,13 @@ function renderARTable(invs, contactMap) {
           </td>
         </tr>`).join('')}
       </tbody>
-    </table>`;
+    </table>
+    ${renderPager(total, arPage, PAGE_SIZE, 'setArPage')}`;
 }
+function setArPage(n) { arPage = n; renderARTable(_arFiltered); }
 
 function filterAR() {
+  arPage = 0;
   const q      = document.getElementById('ar-search').value.toLowerCase();
   const status = document.getElementById('ar-status-filter').value;
   const contactMap = {};
@@ -7376,7 +7438,7 @@ function printPDF(btn) {
 
 
 // ── QUOTATIONS ───────────────────────────────────────────────────
-let quotations = [];
+let quotations = [], _quoFiltered = []; let quoPage = 0;
 let salesLeads = [];
 
 async function loadQuotations() {
@@ -7411,34 +7473,32 @@ async function loadQuotations() {
     document.getElementById('quo-rate').textContent      = rate !== null ? rate + '%' : '—';
     document.getElementById('badge-quotations').textContent = open;
 
+    quoPage = 0;
     renderQuotationsTable(quotations, contactMap, leadMap);
   } catch(e) { showToast('Quotations load error: ' + e.message, 'error'); }
 }
 
 function renderQuotationsTable(quos, contactMap, leadMap) {
-  if (!quos.length) {
+  _quoFiltered = quos;
+  const total = quos.length;
+  if (!total) {
     document.getElementById('quo-table-wrap').innerHTML = '<div class="table-empty">No quotations yet. <a href="#" onclick="openNewQuotation();return false;" style="color:var(--gold);">Create your first quotation →</a></div>';
     return;
   }
-  if (!contactMap) {
-    contactMap = {};
-    contacts.forEach(c => { contactMap[c.id] = c.trading_name || c.name; });
-  }
-  if (!leadMap) {
-    leadMap = {};
-    salesLeads.forEach(l => { leadMap[l.id] = l.name; });
-  }
+  const cmap = contactMap || Object.fromEntries(contacts.map(c => [c.id, c.trading_name || c.name]));
+  const lmap = leadMap    || Object.fromEntries(salesLeads.map(l => [l.id, l.name]));
+  const page = quos.slice(quoPage * PAGE_SIZE, (quoPage + 1) * PAGE_SIZE);
   document.getElementById('quo-table-wrap').innerHTML = `
     <table class="data-table">
       <thead><tr>
         <th>Quote No.</th><th>Customer</th><th>Sales Lead</th><th>Date</th><th>Valid Until</th>
         <th>Currency</th><th class="right">Total</th><th>Status</th><th class="right">Actions</th>
       </tr></thead>
-      <tbody>${quos.map(q => `
+      <tbody>${page.map(q => `
         <tr>
           <td class="mono bold">${q.quote_no || '<span style="color:var(--text-3);font-style:italic;font-size:11px;">Draft</span>'}</td>
-          <td>${contactMap[q.contact_id] || '—'}</td>
-          <td>${leadMap[q.sales_lead_id] || '—'}</td>
+          <td>${cmap[q.contact_id] || '—'}</td>
+          <td>${lmap[q.sales_lead_id] || '—'}</td>
           <td class="mono">${q.quote_date}</td>
           <td class="mono">${q.valid_until || '—'}</td>
           <td class="mono">${q.currency}</td>
@@ -7453,10 +7513,13 @@ function renderQuotationsTable(quos, contactMap, leadMap) {
           </td>
         </tr>`).join('')}
       </tbody>
-    </table>`;
+    </table>
+    ${renderPager(total, quoPage, PAGE_SIZE, 'setQuoPage')}`;
 }
+function setQuoPage(n) { quoPage = n; renderQuotationsTable(_quoFiltered); }
 
 function filterQuotations() {
+  quoPage = 0;
   const q      = document.getElementById('quo-search').value.toLowerCase();
   const status = document.getElementById('quo-status-filter').value;
   const lead   = document.getElementById('quo-lead-filter').value;
