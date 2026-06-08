@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-08 · Session 5*
+*Last updated: 2026-06-08 · Session 6*
 
 ---
 
@@ -15,6 +15,23 @@
 ---
 
 ## Sessions
+
+## Session 6 — Receipt History Modal Fix
+
+**Date:** 2026-06-08
+**Branch:** `fix/receipt-history-modal-close`
+
+### What Changed
+
+| Change | Detail |
+|--------|--------|
+| Receipt history modal auto-close | 🖨 Print button in `modal-invoice-receipts` now calls `closeModal('modal-invoice-receipts')` before `openReceiptPDF()` — previously the history modal remained open and obscured the receipt preview |
+
+### Outstanding
+
+- CRM module (3 tables: contacts, activities, deals) — design drafted, not yet built
+
+---
 
 ## Session 5 — AR Void + PDF Escaping
 

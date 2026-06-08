@@ -5676,7 +5676,7 @@ async function openInvoiceReceiptHistory(invoiceId) {
               <td><span class="badge badge-${voided ? 'void' : 'paid'}">${voided ? 'voided' : 'posted'}</span></td>
               <td class="right">
                 ${!voided
-                  ? `<div style="display:flex;gap:4px;justify-content:flex-end;"><button class="btn btn-ghost btn-sm btn-icon" onclick="openReceiptPDF('${r.id}')" style="font-size:15px;padding:4px 7px;" title="Print Receipt">🖨</button>${canVoid() ? `<button class="btn btn-danger btn-sm" onclick="voidARReceipt('${r.id}','${invoiceId}')">Void</button>` : ''}</div>`
+                  ? `<div style="display:flex;gap:4px;justify-content:flex-end;"><button class="btn btn-ghost btn-sm btn-icon" onclick="closeModal('modal-invoice-receipts');openReceiptPDF('${r.id}')" style="font-size:15px;padding:4px 7px;" title="Print Receipt">🖨</button>${canVoid() ? `<button class="btn btn-danger btn-sm" onclick="voidARReceipt('${r.id}','${invoiceId}')">Void</button>` : ''}</div>`
                   : `<span style="font-size:10px;color:var(--text-3);">Voided</span>`}
               </td>
             </tr>`;
