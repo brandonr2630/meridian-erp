@@ -1086,6 +1086,98 @@ body {
     page-break-after: auto;
   }
 }
+
+/* ── RESPONSIVE ───────────────────────────────────────────────── */
+
+/* Hamburger button — hidden on desktop */
+.hamburger-btn {
+  display: none;
+  background: transparent;
+  border: none;
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 18px;
+  padding: 5px 7px;
+  border-radius: var(--radius);
+  line-height: 1;
+  flex-shrink: 0;
+  transition: color .15s, background .15s;
+  align-items: center;
+  justify-content: center;
+}
+.hamburger-btn:hover { background: var(--bg-3); color: var(--text); }
+
+/* Sidebar drawer backdrop */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 998;
+  backdrop-filter: blur(2px);
+}
+.sidebar-overlay.show { display: block; }
+
+/* ── TABLET (≤ 900px) ── */
+@media (max-width: 900px) {
+  .hamburger-btn { display: flex; }
+  .fy-badge { display: none; }
+  .global-search-shortcut { display: none; }
+  .global-search-wrap { max-width: 240px; }
+
+  .sidebar {
+    position: fixed;
+    left: -220px;
+    top: 52px;
+    bottom: 0;
+    z-index: 999;
+    transition: left .2s ease;
+  }
+  .sidebar.open { left: 0; box-shadow: 4px 0 20px rgba(0,0,0,.4); }
+
+  .stat-grid { grid-template-columns: repeat(2, 1fr) !important; }
+  .grid-3 { grid-template-columns: 1fr 1fr; }
+  .span-3 { grid-column: span 2; }
+
+  .modal-lg, .modal-xl { max-width: min(800px, calc(100vw - 32px)); }
+
+  .page-header { padding: 16px 20px 0; }
+  .page-body   { padding: 16px 20px; }
+}
+
+/* ── MOBILE (≤ 600px) ── */
+@media (max-width: 600px) {
+  .topbar { padding: 0 12px; gap: 8px; }
+  .topbar-logo { font-size: 14px; }
+  .topbar-divider { display: none; }
+  .company-btn { min-width: unset; padding: 5px 8px; }
+  .company-btn-name { display: none; }
+  .global-search-wrap { max-width: 160px; flex: 1; margin: 0 6px; }
+  #user-name { display: none; }
+
+  .stat-grid { grid-template-columns: repeat(2, 1fr) !important; }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .span-2, .span-3 { grid-column: span 1; }
+
+  .modal-overlay { align-items: flex-end; padding: 0; }
+  .modal, .modal-lg, .modal-xl {
+    max-width: 100%;
+    width: 100%;
+    max-height: 92vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+
+  .welcome-bar { flex-direction: column; align-items: flex-start; gap: 10px; }
+
+  .page-header { padding: 12px 14px 0; flex-direction: column; align-items: flex-start; gap: 8px; }
+  .page-actions { margin-top: 0; }
+  .page-body   { padding: 12px 14px; }
+  .page-title  { font-size: 18px; }
+
+  .table-wrap { overflow-x: auto; }
+
+  .toast { left: 12px; right: 12px; bottom: 12px; max-width: none; min-width: 0; }
+}
 </style>
 </head>
 <body>
@@ -1119,6 +1211,7 @@ body {
 
 <!-- ── TOPBAR ── -->
 <div class="topbar">
+  <button class="hamburger-btn" onclick="toggleSidebar()" aria-label="Toggle menu">☰</button>
   <div class="topbar-logo">
     <div class="topbar-logo-mark">M</div>
     Meridian
@@ -1166,6 +1259,7 @@ body {
 
 <!-- ── APP BODY ── -->
 <div class="app-body">
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
 
   <!-- SIDEBAR -->
   <nav class="sidebar">
@@ -3795,7 +3889,17 @@ function navigate(view) {
   document.getElementById('view-' + view)?.classList.add('active');
   document.getElementById('nav-' + view)?.classList.add('active');
   currentView = view;
+  if (window.innerWidth <= 900) closeSidebar();
   loadViewData(view);
+}
+
+function toggleSidebar() {
+  document.querySelector('.sidebar').classList.toggle('open');
+  document.getElementById('sidebar-overlay').classList.toggle('show');
+}
+function closeSidebar() {
+  document.querySelector('.sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('show');
 }
 
 async function loadViewData(view) {
