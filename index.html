@@ -1574,15 +1574,20 @@ body {
         <div><div class="page-title">Aged Receivables</div><div class="page-subtitle">Outstanding invoice aging analysis</div></div>
         <div class="page-actions">
           <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:11px;color:var(--text-3);">As at</label>
-            <input type="date" id="aged-ar-date" class="filter-select mono" style="width:140px;">
+            <label style="font-size:11px;color:var(--text-3);">From</label>
+            <input type="date" id="aged-ar-from" class="filter-select mono" style="width:140px;">
+            <label style="font-size:11px;color:var(--text-3);">To</label>
+            <input type="date" id="aged-ar-to" class="filter-select mono" style="width:140px;">
           </div>
+          <select id="aged-ar-contact" class="filter-select" style="min-width:160px;max-width:220px;">
+            <option value="">All Clients</option>
+          </select>
           <button class="btn btn-ghost btn-sm" onclick="previewReport('aged-ar','Aged Receivables')">👁 Preview</button>
           <button class="btn btn-outline btn-sm" onclick="openDownloadMenu('aged-ar',event)">⬇ Download ▾</button>
           <button class="btn btn-primary btn-sm" onclick="runAgedAR()">▶ Run Report</button>
         </div>
       </div>
-      <div class="page-body"><div id="aged-ar-wrap"><div class="table-empty" style="margin-top:40px;">Select a date and click Run Report.</div></div></div>
+      <div class="page-body"><div id="aged-ar-wrap"><div class="table-empty" style="margin-top:40px;">Select a date range and click Run Report.</div></div></div>
     </div>
 
     <!-- ── AGED PAYABLES ── -->
@@ -1591,15 +1596,20 @@ body {
         <div><div class="page-title">Aged Payables</div><div class="page-subtitle">Outstanding bill aging analysis</div></div>
         <div class="page-actions">
           <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:11px;color:var(--text-3);">As at</label>
-            <input type="date" id="aged-ap-date" class="filter-select mono" style="width:140px;">
+            <label style="font-size:11px;color:var(--text-3);">From</label>
+            <input type="date" id="aged-ap-from" class="filter-select mono" style="width:140px;">
+            <label style="font-size:11px;color:var(--text-3);">To</label>
+            <input type="date" id="aged-ap-to" class="filter-select mono" style="width:140px;">
           </div>
+          <select id="aged-ap-contact" class="filter-select" style="min-width:160px;max-width:220px;">
+            <option value="">All Vendors</option>
+          </select>
           <button class="btn btn-ghost btn-sm" onclick="previewReport('aged-ap','Aged Payables')">👁 Preview</button>
           <button class="btn btn-outline btn-sm" onclick="openDownloadMenu('aged-ap',event)">⬇ Download ▾</button>
           <button class="btn btn-primary btn-sm" onclick="runAgedAP()">▶ Run Report</button>
         </div>
       </div>
-      <div class="page-body"><div id="aged-ap-wrap"><div class="table-empty" style="margin-top:40px;">Select a date and click Run Report.</div></div></div>
+      <div class="page-body"><div id="aged-ap-wrap"><div class="table-empty" style="margin-top:40px;">Select a date range and click Run Report.</div></div></div>
     </div>
 
     <!-- ── SALES LEAD REPORTS ── -->
@@ -3801,8 +3811,8 @@ async function loadViewData(view) {
     case 'pl':        initReportDates(); break;
     case 'bs':        initReportDates(); break;
     case 'tb':        initReportDates(); break;
-    case 'aged-ar':   if (document.getElementById('aged-ar-date')) document.getElementById('aged-ar-date').value = document.getElementById('aged-ar-date').value || todayDate(); break;
-    case 'aged-ap':   if (document.getElementById('aged-ap-date')) document.getElementById('aged-ap-date').value = document.getElementById('aged-ap-date').value || todayDate(); break;
+    case 'aged-ar':   initAgedFilters('ar', ['customer','both']); break;
+    case 'aged-ap':   initAgedFilters('ap', ['supplier','both']); break;
     case 'quotations':     await loadQuotations(); break;
     case 'delivery-notes': await loadDeliveryNotes(); break;
     case 'sales-leads': await loadSalesLeadsPage(); break;
@@ -6149,7 +6159,27 @@ function initReportDates() {
   const from = `${y}-01-01`, to = now.toISOString().slice(0,10);
   ['pl-date-from','tb-date-from'].forEach(id => { const el = document.getElementById(id); if (el && !el.value) el.value = from; });
   ['pl-date-to','tb-date-to'].forEach(id => { const el = document.getElementById(id); if (el && !el.value) el.value = to; });
-  ['bs-date','aged-ar-date','aged-ap-date'].forEach(id => { const el = document.getElementById(id); if (el && !el.value) el.value = to; });
+  ['bs-date','aged-ar-to','aged-ap-to'].forEach(id => { const el = document.getElementById(id); if (el && !el.value) el.value = to; });
+}
+
+function initAgedFilters(type, contactTypes) {
+  const now = new Date(), y = now.getFullYear();
+  const fromEl = document.getElementById(`aged-${type}-from`);
+  const toEl   = document.getElementById(`aged-${type}-to`);
+  const selEl  = document.getElementById(`aged-${type}-contact`);
+  if (fromEl && !fromEl.value) fromEl.value = `${y}-01-01`;
+  if (toEl   && !toEl.value)   toEl.value   = now.toISOString().slice(0,10);
+  if (selEl  && selEl.options.length <= 1) {
+    contacts
+      .filter(c => contactTypes.includes(c.contact_type) && c.is_active !== false)
+      .sort((a,b) => (a.trading_name||a.name).localeCompare(b.trading_name||b.name))
+      .forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.trading_name || c.name;
+        selEl.appendChild(opt);
+      });
+  }
 }
 
 function buildReportHTML(type, title) {
@@ -8633,15 +8663,18 @@ async function voidCreditNote(id) {
 // AGED RECEIVABLES
 // ═══════════════════════════════════════════════════════════════
 async function runAgedAR() {
-  const asAt = document.getElementById('aged-ar-date').value;
-  if (!asAt) { showToast('Select a date.', 'warn'); return; }
+  const from  = document.getElementById('aged-ar-from').value;
+  const asAt  = document.getElementById('aged-ar-to').value;
+  const contactId = document.getElementById('aged-ar-contact').value;
+  if (!asAt) { showToast('Select a To date.', 'warn'); return; }
   const wrap = document.getElementById('aged-ar-wrap');
   wrap.innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Generating report…</div>';
   try {
     const asAtDate = new Date(asAt);
-    // Get all non-void invoices that existed as at the date
-    const allInvs = await sbGet('invoices',
-      `company_id=eq.${currentCompany.id}&status=not.in.(void)&invoice_date=lte.${asAt}`);
+    let qs = `company_id=eq.${currentCompany.id}&status=not.in.(void)&invoice_date=lte.${asAt}`;
+    if (from)      qs += `&invoice_date=gte.${from}`;
+    if (contactId) qs += `&contact_id=eq.${contactId}`;
+    const allInvs = await sbGet('invoices', qs);
     const base = currentCompany.base_currency || currentCompany.currency;
 
     const cMap = {}; contacts.forEach(c => { cMap[c.id] = c.trading_name || c.name; });
@@ -8703,7 +8736,7 @@ async function runAgedAR() {
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
           <div>
             <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;">${currentCompany.name}</div>
-            <div style="font-size:12px;color:var(--text-3);">Aged Receivables · As at ${formatDateDisplay(asAt)} · Amounts in ${base}</div>
+            <div style="font-size:12px;color:var(--text-3);">Aged Receivables · ${from ? formatDateDisplay(from)+' → ' : 'As at '}${formatDateDisplay(asAt)}${contactId ? ' · '+(cMap[contactId]||'') : ''} · Amounts in ${base}</div>
           </div>
           <div class="stat-grid" style="grid-template-columns:repeat(5,1fr);gap:8px;">
             <div class="stat-card" style="padding:10px 12px;"><div class="stat-label" style="font-size:9px;">Current</div><div class="stat-value" style="font-size:14px;">${fmt(totals.current,base)}</div></div>
@@ -8736,14 +8769,18 @@ async function runAgedAR() {
 }
 
 async function runAgedAP() {
-  const asAt = document.getElementById('aged-ap-date').value;
-  if (!asAt) { showToast('Select a date.', 'warn'); return; }
+  const from  = document.getElementById('aged-ap-from').value;
+  const asAt  = document.getElementById('aged-ap-to').value;
+  const contactId = document.getElementById('aged-ap-contact').value;
+  if (!asAt) { showToast('Select a To date.', 'warn'); return; }
   const wrap = document.getElementById('aged-ap-wrap');
   wrap.innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Generating report…</div>';
   try {
     const asAtDate = new Date(asAt);
-    const allBills = await sbGet('bills',
-      `company_id=eq.${currentCompany.id}&status=not.in.(void,draft)&bill_date=lte.${asAt}`);
+    let qs = `company_id=eq.${currentCompany.id}&status=not.in.(void,draft)&bill_date=lte.${asAt}`;
+    if (from)      qs += `&bill_date=gte.${from}`;
+    if (contactId) qs += `&contact_id=eq.${contactId}`;
+    const allBills = await sbGet('bills', qs);
     const base = currentCompany.base_currency || currentCompany.currency;
     const cMap = {}; contacts.forEach(c => { cMap[c.id] = c.trading_name || c.name; });
 
@@ -8803,7 +8840,7 @@ async function runAgedAP() {
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
           <div>
             <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;">${currentCompany.name}</div>
-            <div style="font-size:12px;color:var(--text-3);">Aged Payables · As at ${formatDateDisplay(asAt)} · Amounts in ${base}</div>
+            <div style="font-size:12px;color:var(--text-3);">Aged Payables · ${from ? formatDateDisplay(from)+' → ' : 'As at '}${formatDateDisplay(asAt)}${contactId ? ' · '+(cMap[contactId]||'') : ''} · Amounts in ${base}</div>
           </div>
           <div class="stat-grid" style="grid-template-columns:repeat(5,1fr);gap:8px;">
             <div class="stat-card" style="padding:10px 12px;"><div class="stat-label" style="font-size:9px;">Current</div><div class="stat-value" style="font-size:14px;">${fmt(totals.current,base)}</div></div>
