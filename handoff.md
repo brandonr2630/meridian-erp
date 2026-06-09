@@ -19,7 +19,7 @@
 ## Session 11 — Backlog Items 7 & 13–17
 
 **Date:** 2026-06-09
-**Branch:** `fix/backlog-7-13-14-15-16-17` → PR TBD
+**Branch:** `fix/backlog-7-13-14-15-16-17` → [PR #30](https://github.com/brandonr2630/meridian-erp/pull/30)
 
 ### What Changed
 
@@ -318,7 +318,7 @@ No known issues.
 
 ## To Do — Code Review Backlog
 
-All 17 items from the June 2026 code review are resolved (PRs #22–#25, #27–#30).
+All 17 items from the June 2026 code review are resolved (PRs #22–#25, #27–#30). No remaining backlog.
 
 ## References
 
