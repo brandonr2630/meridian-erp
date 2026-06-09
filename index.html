@@ -6070,7 +6070,9 @@ async function saveBankAccount() {
   const name     = document.getElementById('ba-account-name').value.trim();
   const bank     = document.getElementById('ba-bank-name').value.trim();
   const currency = document.getElementById('ba-currency').value;
+  const glAccountId = document.getElementById('ba-gl-account').value;
   if (!name || !bank) { showToast('Account name and bank name are required.', 'warn'); return; }
+  if (!glAccountId)   { showToast('Please select a GL account.', 'warn'); return; }
   const btn = document.getElementById('save-bank-account-btn');
   btn.disabled = true; btn.textContent = 'Saving…';
   const opening = parseFloat(document.getElementById('ba-opening-balance').value) || 0;
@@ -6080,7 +6082,7 @@ async function saveBankAccount() {
     bank_name:       bank,
     account_number:  document.getElementById('ba-account-number').value.trim() || null,
     currency,
-    account_id:      document.getElementById('ba-gl-account').value || null,
+    account_id:      glAccountId,
     opening_balance: opening,
     is_active:       document.getElementById('ba-is-active').checked
   };
