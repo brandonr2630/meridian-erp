@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-08 · Session 8*
+*Last updated: 2026-06-09 · Session 9*
 
 ---
 
@@ -15,6 +15,31 @@
 ---
 
 ## Sessions
+
+## Session 9 — Z-index CSS Constants
+
+**Date:** 2026-06-09
+**Branch:** `fix/z-index-constants` → [PR #28](https://github.com/brandonr2630/meridian-erp/pull/28)
+
+### What Changed
+
+| Change | Detail |
+|--------|--------|
+| `--z-topbar: 100` | `.topbar` |
+| `--z-dropdown: 200` | `.company-dropdown`, `.split-btn-menu`, `#report-dl-menu`, `.global-search-results`, `.contact-search-results` (corrected from 9999) |
+| `--z-sidebar-overlay: 290` | `.sidebar-overlay` (mobile backdrop) |
+| `--z-sidebar: 300` | `.sidebar` (mobile panel, media query) |
+| `--z-modal: 600` | `.modal-overlay` |
+| `--z-toast: 700` | `.toast` |
+| `--z-login: 800` | `.login-overlay` |
+
+All 11 hardcoded `z-index` values replaced. `.contact-search-results` was incorrectly set to `9999` (above modals); corrected to `var(--z-dropdown)`.
+
+### Outstanding
+
+- CRM module (3 tables: contacts, activities, deals) — design drafted, not yet built
+
+---
 
 ## Session 8 — Table Pagination
 
@@ -249,11 +274,10 @@ No known issues.
 
 ## To Do — Code Review Backlog
 
-Items 1–5 from the June 2026 code review are resolved (PRs #22–#25, #27). Items 6–17 remain:
+Items 1–6 from the June 2026 code review are resolved (PRs #22–#25, #27–#28). Items 7–17 remain:
 
 | # | Priority | Area | Task |
 |---|----------|------|------|
-| 6 | High | Maintainability | Z-index constants — define `--z-dropdown: 100; --z-modal: 600; --z-overlay: 700; --z-toast: 1000` in CSS vars and replace all magic numbers |
 | 7 | High | Accessibility | Add `aria-label` to all icon-only buttons (topbar `🔔`, `🌙`, `⚙️` and table action icons) |
 | 8 | Medium | Correctness | Date string comparisons — replace `i.due_date < today` with `new Date(i.due_date) < new Date(today)` to handle ISO timestamp suffixes |
 | 9 | Medium | Correctness | Null-coalesce all foreign-key dereferences — deleted contacts/accounts produce silent `undefined` crashes (e.g. `contactMap[inv.contact_id].trading_name`) |
