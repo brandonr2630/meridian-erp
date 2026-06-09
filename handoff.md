@@ -16,6 +16,28 @@
 
 ## Sessions
 
+## Session 12 — Multi-company fixes & RLS hardening
+
+**Date:** 2026-06-09
+**Branches:** `fix/ar-receipts-overdue-status` → [PR #31](https://github.com/brandonr2630/meridian-erp/pull/31) · `fix/ar-payment-bank-account-filter` → [PR #32](https://github.com/brandonr2630/meridian-erp/pull/32) · `fix/bank-account-save-null-account-id` → [PR #33](https://github.com/brandonr2630/meridian-erp/pull/33) · `fix/bank-account-gl-optional` → [PR #34](https://github.com/brandonr2630/meridian-erp/pull/34) · `fix/bank-account-gl-soft-validation` → [PR #35](https://github.com/brandonr2630/meridian-erp/pull/35)
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| Receipts button on overdue invoices | Added `'overdue'` to status check in `renderARTable` line 7426 | Invoices marked overdue by pg_cron after a partial payment had lost their Receipts button |
+| AR payment modal bank account filter | `openReceivePayment` now shows all accounts: matching currency first, others in an "Other currencies" optgroup | Terran Resources invoices showed "No matching bank accounts" due to currency mismatch |
+| Bank account save NULL constraint | `saveBankAccount()` now sends `account_id: null` (was missing key); `account_id` column made nullable via migration | `null value in column "account_id"` error when no GL account selected |
+| GL account soft-require | GL account required when asset accounts exist; optional (with hint) when CoA not set up; amber "No GL" badge on unlinked accounts in Settings table | Best-practice guard: ensures journal entries are always created for properly configured accounts |
+| Chart of Accounts seeded | 47 standard accounts (1000–5300) created for TRL (TTD) and TRLLC (USD) via Supabase migration, mirroring QQL structure | Terran entities had no CoA — GL dropdowns were empty |
+| Full RLS hardening | All 28 tables: 45 open `qual: true` policies replaced with 31 scoped policies; `my_company_ids()` and `is_super_admin()` SECURITY DEFINER helpers added | Supabase advisor flagged 3 tables with RLS disabled and others with open policies |
+
+### Outstanding
+
+- CRM module (3 tables: contacts, activities, deals) — design drafted, not yet built
+
+---
+
 ## Session 11 — Backlog Items 7 & 13–17
 
 **Date:** 2026-06-09
