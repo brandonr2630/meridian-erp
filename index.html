@@ -2495,7 +2495,7 @@ body {
             <option value="GYD">GYD — Guyana Dollar</option>
           </select>
         </div>
-        <div class="field"><label class="field-label">Linked GL Account <span style="color:var(--text-3);font-weight:400;">(optional)</span></label>
+        <div class="field"><label class="field-label">Linked GL Account <span id="ba-gl-hint" style="font-weight:400;">(optional)</span></label>
           <select id="ba-gl-account"><option value="">— None —</option></select>
         </div>
         <div class="field"><label class="field-label">Opening Balance</label>
@@ -6012,7 +6012,7 @@ async function loadSettingsBankAccounts() {
       <thead><tr><th>Account Name</th><th>Bank</th><th>Currency</th><th>Account No.</th><th class="right">Current Balance</th><th>Status</th><th class="right">Actions</th></tr></thead>
       <tbody>${bankAccounts.map(b => `
         <tr>
-          <td style="font-weight:500;">${b.account_name}</td>
+          <td style="font-weight:500;">${b.account_name}${!b.account_id ? ' <span class="badge" style="background:rgba(180,83,9,.15);color:#d97706;font-size:10px;vertical-align:middle;margin-left:6px;" title="No GL account linked — journal entries will not be created for this account">No GL</span>' : ''}</td>
           <td>${b.bank_name}</td>
           <td class="mono">${b.currency}</td>
           <td class="mono">${b.account_number ? '••••' + b.account_number.slice(-4) : '—'}</td>
@@ -6039,9 +6039,14 @@ function openAddBankAccount() {
   document.getElementById('ba-is-active').checked        = true;
   const sel = document.getElementById('ba-gl-account');
   sel.innerHTML = '<option value="">— None —</option>';
-  accounts.filter(a => a.account_type === 'asset').forEach(a => {
-    sel.innerHTML += `<option value="${a.id}">${a.code} — ${a.name}</option>`;
-  });
+  const assetAccts = accounts.filter(a => a.account_type === 'asset');
+  assetAccts.forEach(a => { sel.innerHTML += `<option value="${a.id}">${a.code} — ${a.name}</option>`; });
+  const hint = document.getElementById('ba-gl-hint');
+  if (assetAccts.length) {
+    hint.textContent = '(required)'; hint.style.color = 'var(--danger)';
+  } else {
+    hint.textContent = '(optional — no GL accounts set up yet)'; hint.style.color = 'var(--text-3)';
+  }
   document.getElementById('modal-bank-account').classList.add('show');
 }
 
@@ -6060,9 +6065,14 @@ function openEditBankAccount(id) {
   document.getElementById('ba-is-active').checked     = b.is_active;
   const sel = document.getElementById('ba-gl-account');
   sel.innerHTML = '<option value="">— None —</option>';
-  accounts.filter(a => a.account_type === 'asset').forEach(a => {
-    sel.innerHTML += `<option value="${a.id}" ${a.id === b.account_id ? 'selected' : ''}>${a.code} — ${a.name}</option>`;
-  });
+  const assetAccts = accounts.filter(a => a.account_type === 'asset');
+  assetAccts.forEach(a => { sel.innerHTML += `<option value="${a.id}" ${a.id === b.account_id ? 'selected' : ''}>${a.code} — ${a.name}</option>`; });
+  const hint = document.getElementById('ba-gl-hint');
+  if (assetAccts.length) {
+    hint.textContent = '(required)'; hint.style.color = 'var(--danger)';
+  } else {
+    hint.textContent = '(optional — no GL accounts set up yet)'; hint.style.color = 'var(--text-3)';
+  }
   document.getElementById('modal-bank-account').classList.add('show');
 }
 
@@ -6072,6 +6082,9 @@ async function saveBankAccount() {
   const currency = document.getElementById('ba-currency').value;
   const glAccountId = document.getElementById('ba-gl-account').value || null;
   if (!name || !bank) { showToast('Account name and bank name are required.', 'warn'); return; }
+  if (!glAccountId && accounts.filter(a => a.account_type === 'asset').length) {
+    showToast('Please select a GL account — required when a Chart of Accounts is set up.', 'warn'); return;
+  }
   const btn = document.getElementById('save-bank-account-btn');
   btn.disabled = true; btn.textContent = 'Saving…';
   const opening = parseFloat(document.getElementById('ba-opening-balance').value) || 0;
