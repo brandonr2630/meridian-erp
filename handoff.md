@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-09 · Session 9*
+*Last updated: 2026-06-09 · Session 10*
 
 ---
 
@@ -15,6 +15,28 @@
 ---
 
 ## Sessions
+
+## Session 10 — Backlog Items 8–12
+
+**Date:** 2026-06-09
+**Branch:** `fix/backlog-8-9-10-11-12` → [PR #29](https://github.com/brandonr2630/meridian-erp/pull/29)
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| 8 | Date comparisons | `.slice(0,10)` on `due_date` / `valid_until` in `loadDashboard` — handles ISO timestamp suffixes, prevents overdue/due-soon miscounts |
+| 9 | Null FK guards | `|| {}` added to `contacts.find()` in bill payment and history flows for consistency with PDF function pattern |
+| 10 | Promise.all fetches | `contacts` + `bankAccounts` now fetched in parallel in `initApp()` and `switchCompany()` — saves one sequential round-trip per load/switch |
+| 11 | Lazy logos | `loading="lazy"` on company logo `<img>` in the switcher dropdown and ERP companies table |
+| 12 | PDF page size | New **Page Size** field (Letter / A4) in company modal, saved to `companies.pdf_page_size`. `coPageSize()` and `coPageDims()` helpers drive `@page` CSS and page container dimensions in all three PDF renderers |
+
+### Outstanding
+
+- Item 7 (High): `aria-label` on icon-only buttons
+- Items 13–17 (Medium): modal widths, contact search factory, Supabase filter constants, loading states, logo MIME validation
+
+---
 
 ## Session 9 — Z-index CSS Constants
 
@@ -274,16 +296,11 @@ No known issues.
 
 ## To Do — Code Review Backlog
 
-Items 1–6 from the June 2026 code review are resolved (PRs #22–#25, #27–#28). Items 7–17 remain:
+Items 1–12 from the June 2026 code review are resolved (PRs #22–#25, #27–#29). Items 7 and 13–17 remain:
 
 | # | Priority | Area | Task |
 |---|----------|------|------|
 | 7 | High | Accessibility | Add `aria-label` to all icon-only buttons (topbar `🔔`, `🌙`, `⚙️` and table action icons) |
-| 8 | Medium | Correctness | Date string comparisons — replace `i.due_date < today` with `new Date(i.due_date) < new Date(today)` to handle ISO timestamp suffixes |
-| 9 | Medium | Correctness | Null-coalesce all foreign-key dereferences — deleted contacts/accounts produce silent `undefined` crashes (e.g. `contactMap[inv.contact_id].trading_name`) |
-| 10 | Medium | Performance | Collapse N+1 fetches in dashboard load — companies → contacts, bank accounts, exchange rates should be `Promise.all()` where not already |
-| 11 | Medium | Performance | Add `loading="lazy"` to company logo `<img>` tags — currently all logos are fetched on app load |
-| 12 | Medium | Design | Change `@page { size: letter portrait }` to A4 (or make it a company setting) — US Letter clips output for Caribbean/UK users |
 | 13 | Medium | Design | Standardise modal max-width — apply `min(560px, 95vw)` (or appropriate size) to all modals; Session 7 already uses the right pattern |
 | 14 | Medium | Maintainability | Refactor `searchInvContact` / `searchBillVendor` / `searchQuoContact` / `searchDNContact` into a single `createContactSearch(inputId, resultsId, filter)` factory (~120 lines removed) |
 | 15 | Medium | Maintainability | Extract repeated Supabase filter strings (`'is_active=eq.true&order=code'` etc.) as named constants — currently hardcoded inline 50+ times |
