@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-09 · Session 10*
+*Last updated: 2026-06-09 · Session 11*
 
 ---
 
@@ -15,6 +15,28 @@
 ---
 
 ## Sessions
+
+## Session 11 — Backlog Items 7 & 13–17
+
+**Date:** 2026-06-09
+**Branch:** `fix/backlog-7-13-14-15-16-17` → PR TBD
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| 7 | Accessibility | `aria-label` added to all icon-only buttons: 3 topbar (🔔 🌙 ⚙️) + 14 table action buttons (Edit, Delete, Preview, Print, Remove line) |
+| 13 | Modal widths | `.modal` → `min(560px,95vw)`, `.modal-lg` → `min(800px,95vw)`, `.modal-xl` → `min(820px,95vw)`; 4 inline `max-width` overrides updated to use `min()`; redundant tablet media query rule removed |
+| 14 | Contact search factory | `createContactSearch({ inputId, resultsId, typeFilter, showOnEmpty, queryFn, subtitleFn, onSelect })` replaces 4 separate search functions (`searchBillVendor`, `searchInvContact`, `searchQuoContact`, `searchDNContact`) — ~80 lines removed |
+| 15 | Supabase filter constants | `Q` object with 6 query builders (`contacts`, `bankAccounts`, `salesLeads`, `clients`, `vendors`, `companies`) replaces hardcoded filter strings at ~20 call sites |
+| 16 | In-view loading state | All 5 load functions (`loadAR`, `loadAP`, `loadClients`, `loadVendors`, `loadQuotations`) now dim the existing table (opacity 0.5, pointer-events none) when refreshing in-view; show spinner only on first load. `try/finally` ensures cleanup |
+| 17 | Logo MIME validation | `previewCompanyLogo` now rejects non-image files (`image/jpeg`, `image/png`, `image/webp`) before the size check |
+
+### Outstanding
+
+- CRM module (3 tables: contacts, activities, deals) — design drafted, not yet built
+
+---
 
 ## Session 10 — Backlog Items 8–12
 
@@ -296,16 +318,7 @@ No known issues.
 
 ## To Do — Code Review Backlog
 
-Items 1–12 from the June 2026 code review are resolved (PRs #22–#25, #27–#29). Items 7 and 13–17 remain:
-
-| # | Priority | Area | Task |
-|---|----------|------|------|
-| 7 | High | Accessibility | Add `aria-label` to all icon-only buttons (topbar `🔔`, `🌙`, `⚙️` and table action icons) |
-| 13 | Medium | Design | Standardise modal max-width — apply `min(560px, 95vw)` (or appropriate size) to all modals; Session 7 already uses the right pattern |
-| 14 | Medium | Maintainability | Refactor `searchInvContact` / `searchBillVendor` / `searchQuoContact` / `searchDNContact` into a single `createContactSearch(inputId, resultsId, filter)` factory (~120 lines removed) |
-| 15 | Medium | Maintainability | Extract repeated Supabase filter strings (`'is_active=eq.true&order=code'` etc.) as named constants — currently hardcoded inline 50+ times |
-| 16 | Medium | UX | Add in-flight loading state during in-view data refreshes — e.g. `table.style.opacity = '0.5'` while fetch is pending |
-| 17 | Medium | UX | Validate MIME type on logo file upload — size is checked but not type; add `['image/jpeg','image/png','image/webp'].includes(file.type)` guard |
+All 17 items from the June 2026 code review are resolved (PRs #22–#25, #27–#30).
 
 ## References
 

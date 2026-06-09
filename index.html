@@ -626,13 +626,13 @@ body {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   width: 100%;
-  max-width: 560px;
+  max-width: min(560px, 95vw);
   max-height: 90vh;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
 }
-.modal-lg { max-width: 800px; }
+.modal-lg { max-width: min(800px, 95vw); }
 .modal-header {
   padding: 20px 24px 16px;
   border-bottom: 1px solid var(--border);
@@ -970,7 +970,7 @@ body {
 .contact-result-sub { font-size:10px; color:var(--text-3); margin-top:2px; }
 
 /* ── PDF PREVIEW MODAL ── */
-.modal-xl { max-width:820px; }
+.modal-xl { max-width: min(820px, 95vw); }
 .pdf-preview-wrap {
   background:#fff; color:#1a1a1a;
   font-family:'DM Sans',sans-serif;
@@ -1148,8 +1148,6 @@ body {
   .grid-3 { grid-template-columns: 1fr 1fr; }
   .span-3 { grid-column: span 2; }
 
-  .modal-lg, .modal-xl { max-width: min(800px, calc(100vw - 32px)); }
-
   .page-header { padding: 16px 20px 0; }
   .page-body   { padding: 16px 20px; }
 }
@@ -1254,9 +1252,9 @@ body {
   </div>
 
   <div class="topbar-right">
-    <button class="topbar-icon-btn" title="Notifications" id="notif-btn" onclick="toggleNotifications()">🔔<span class="notif-badge" id="notif-badge" style="display:none;"></span></button>
-    <button class="topbar-icon-btn" title="Toggle theme" onclick="toggleTheme()" id="theme-toggle-btn">🌙</button>
-    <button class="topbar-icon-btn" title="Settings" onclick="navigate('settings')">⚙️</button>
+    <button class="topbar-icon-btn" title="Notifications" aria-label="Notifications" id="notif-btn" onclick="toggleNotifications()">🔔<span class="notif-badge" id="notif-badge" style="display:none;"></span></button>
+    <button class="topbar-icon-btn" title="Toggle theme" aria-label="Toggle theme" onclick="toggleTheme()" id="theme-toggle-btn">🌙</button>
+    <button class="topbar-icon-btn" title="Settings" aria-label="Settings" onclick="navigate('settings')">⚙️</button>
     <div class="topbar-divider"></div>
     <div class="topbar-user">
       <div class="user-avatar" id="user-avatar" title="Account">?</div>
@@ -2259,7 +2257,7 @@ body {
 
 <!-- ── REPORT PREVIEW MODAL ── -->
 <div class="modal-overlay" id="modal-report-preview" onclick="if(event.target===this)closeModal('modal-report-preview')">
-  <div class="modal modal-xl" style="max-width:960px;width:95vw;">
+  <div class="modal modal-xl" style="max-width:min(960px,95vw);">
     <div class="modal-header">
       <div class="modal-title" id="report-preview-title">Report Preview</div>
       <div style="display:flex;gap:8px;">
@@ -2965,7 +2963,7 @@ body {
 
 <!-- ── PDF PREVIEW MODAL ── -->
 <div class="modal-overlay" id="modal-pdf-preview" onclick="if(event.target===this)closeModal('modal-pdf-preview')">
-  <div class="modal modal-xl" style="max-width:900px;width:95vw;">
+  <div class="modal modal-xl" style="max-width:min(900px,95vw);">
     <div class="modal-header">
       <div class="modal-title">Invoice Preview</div>
       <div style="display:flex;gap:8px;">
@@ -3137,7 +3135,7 @@ body {
 
 <!-- ── QUOTATION PDF PREVIEW MODAL ── -->
 <div class="modal-overlay" id="modal-quo-pdf" onclick="if(event.target===this)closeModal('modal-quo-pdf')">
-  <div class="modal modal-xl" style="max-width:860px;">
+  <div class="modal modal-xl" style="max-width:min(860px,95vw);">
     <div class="modal-header">
       <div class="modal-title">Quotation Preview</div>
       <div style="display:flex;gap:8px;">
@@ -3491,7 +3489,7 @@ body {
 
 <!-- ── RECEIPT PDF MODAL ── -->
 <div class="modal-overlay" id="modal-receipt-pdf" onclick="if(event.target===this)closeModal('modal-receipt-pdf')">
-  <div class="modal modal-xl" style="max-width:900px;width:95vw;">
+  <div class="modal modal-xl" style="max-width:min(900px,95vw);">
     <div class="modal-header">
       <div>
         <div class="modal-title">Payment Receipt</div>
@@ -3572,6 +3570,16 @@ body {
 
 const SUPABASE_URL = 'https://fcagxvjxfqqkmuposmcb.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZjYWd4dmp4ZnFxa211cG9zbWNiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxMDYyODgsImV4cCI6MjA4OTY4MjI4OH0.O4BCJAmuRuphhLCRYbwvPjQtbfSvjQ9HUxoeXyNGqL0';
+
+// ── QUERY BUILDERS ───────────────────────────────────────────────
+const Q = {
+  contacts:     () => `company_id=eq.${currentCompany.id}&order=name`,
+  bankAccounts: () => `company_id=eq.${currentCompany.id}&is_active=eq.true&order=account_name`,
+  salesLeads:   () => `company_id=eq.${currentCompany.id}&is_active=eq.true&order=name`,
+  clients:      () => `company_id=eq.${currentCompany.id}&contact_type=in.(customer,both)&order=name`,
+  vendors:      () => `company_id=eq.${currentCompany.id}&contact_type=eq.supplier&order=name`,
+  companies:    'is_active=eq.true&order=code',
+};
 
 // ── STATE ────────────────────────────────────────────────────────
 let currentUser      = null;
@@ -3772,8 +3780,8 @@ async function initApp() {
   // Load companies based on role
   await loadCompanies();
   [contacts, bankAccounts] = await Promise.all([
-    sbGet('contacts',     `company_id=eq.${currentCompany.id}&order=name`).catch(() => []),
-    sbGet('bank_accounts',`company_id=eq.${currentCompany.id}&is_active=eq.true&order=account_name`).catch(() => []),
+    sbGet('contacts', Q.contacts()).catch(() => []),
+    sbGet('bank_accounts', Q.bankAccounts()).catch(() => []),
   ]);
   await checkAndRefreshRates();
 
@@ -3818,11 +3826,11 @@ async function loadCompanies() {
   try {
     // Super admin sees all companies; others see only their assigned company
     if (isSuperAdmin()) {
-      companies = await sbGet('companies', 'is_active=eq.true&order=code');
+      companies = await sbGet('companies', Q.companies);
     } else if (currentUser?.company_id) {
       companies = await sbGet('companies', `id=eq.${currentUser.company_id}&is_active=eq.true`);
     } else {
-      companies = await sbGet('companies', 'is_active=eq.true&order=code');
+      companies = await sbGet('companies', Q.companies);
     }
     const savedCo = localStorage.getItem('erp_company');
     if (savedCo) {
@@ -3890,8 +3898,8 @@ async function switchCompany(id) {
   updateCompanyContext();
   accounts = []; contacts = []; journalEntries = []; bankAccounts = [];
   [contacts, bankAccounts] = await Promise.all([
-    sbGet('contacts',     `company_id=eq.${currentCompany.id}&order=name`).catch(() => []),
-    sbGet('bank_accounts',`company_id=eq.${currentCompany.id}&is_active=eq.true&order=account_name`).catch(() => []),
+    sbGet('contacts', Q.contacts()).catch(() => []),
+    sbGet('bank_accounts', Q.bankAccounts()).catch(() => []),
   ]);
   await loadViewData(currentView);
   showToast('Switched to ' + (currentCompany.trading_name || currentCompany.name), 'info');
@@ -4143,8 +4151,8 @@ function renderCoA(accs) {
           <td style="text-transform:capitalize;">${acc.normal_balance || '—'}</td>
           <td><span class="badge ${acc.is_active ? 'badge-posted' : 'badge-void'}">${acc.is_active ? 'Active' : 'Inactive'}</span></td>
           <td style="text-align:right;">
-            <button class="btn btn-ghost btn-sm btn-icon" onclick="event.stopPropagation();openEditAccount('${acc.id}')" title="Edit">✏️</button>
-            <button class="btn btn-ghost btn-sm btn-icon" onclick="event.stopPropagation();deleteAccount('${acc.id}')" title="Delete">🗑</button>
+            <button class="btn btn-ghost btn-sm btn-icon" onclick="event.stopPropagation();openEditAccount('${acc.id}')" title="Edit" aria-label="Edit account">✏️</button>
+            <button class="btn btn-ghost btn-sm btn-icon" onclick="event.stopPropagation();deleteAccount('${acc.id}')" title="Delete" aria-label="Delete account">🗑</button>
           </td>
         </tr>`;
       });
@@ -4470,7 +4478,12 @@ async function postJournal(id) {
 
 // ── AP ───────────────────────────────────────────────────────────
 async function loadAP() {
-  document.getElementById('ap-table-wrap').innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading...</div>';
+  const apWrap = document.getElementById('ap-table-wrap');
+  if (apWrap.querySelector('table')) {
+    apWrap.style.opacity = '0.5'; apWrap.style.pointerEvents = 'none';
+  } else {
+    apWrap.innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading...</div>';
+  }
   try {
     bills = await sbGet('bills', `company_id=eq.${currentCompany.id}&order=bill_date.desc`);
     const contactMap = {};
@@ -4523,6 +4536,7 @@ async function loadAP() {
         </tbody>
       </table>`;
   } catch(e) { showToast('AP load error: ' + e.message, 'error'); }
+  finally { apWrap.style.opacity = ''; apWrap.style.pointerEvents = ''; }
 }
 
 async function approveBill(id) {
@@ -4672,7 +4686,7 @@ async function saveVendorPayment() {
     showToast(`${paymentNo} recorded. Bill ${newStatus === 'paid' ? 'fully paid ✓' : 'partially paid'}.`, 'success');
     closeModal('modal-bill-payment');
     await loadAP();
-    try { bankAccounts = await sbGet('bank_accounts', `company_id=eq.${currentCompany.id}&is_active=eq.true&order=account_name`); } catch(e) {}
+    try { bankAccounts = await sbGet('bank_accounts', Q.bankAccounts()); } catch(e) {}
   } catch(e) {
     showToast('Error recording payment: ' + e.message, 'error');
   } finally {
@@ -4802,7 +4816,7 @@ async function voidVendorPayment(paymentId, billId) {
     showToast(`Payment ${payment.payment_no} voided and reversed.`, 'success');
     closeModal('modal-bill-pay-history');
     await loadAP();
-    try { bankAccounts = await sbGet('bank_accounts', `company_id=eq.${currentCompany.id}&is_active=eq.true&order=account_name`); } catch(e) {}
+    try { bankAccounts = await sbGet('bank_accounts', Q.bankAccounts()); } catch(e) {}
   } catch(e) {
     showToast('Error voiding payment: ' + e.message, 'error');
   }
@@ -4813,11 +4827,17 @@ let clients = [];
 let editingClientId = null;
 
 async function loadClients() {
-  document.getElementById('clients-table-wrap').innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading...</div>';
+  const clWrap = document.getElementById('clients-table-wrap');
+  if (clWrap.querySelector('table')) {
+    clWrap.style.opacity = '0.5'; clWrap.style.pointerEvents = 'none';
+  } else {
+    clWrap.innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading...</div>';
+  }
   try {
-    clients = await sbGet('contacts', `company_id=eq.${currentCompany.id}&contact_type=in.(customer,both)&order=name`);
+    clients = await sbGet('contacts', Q.clients());
     renderClientsTable(clients);
   } catch(e) { showToast('Clients load error: ' + e.message, 'error'); }
+  finally { clWrap.style.opacity = ''; clWrap.style.pointerEvents = ''; }
 }
 
 function renderClientsTable(list) {
@@ -4840,7 +4860,7 @@ function renderClientsTable(list) {
         <td class="mono">${c.credit_limit ? fmt(c.credit_limit, c.currency) : '—'}</td>
         <td><span class="badge ${c.is_active!==false?'badge-posted':'badge-void'}">${c.is_active!==false?'Active':'Inactive'}</span></td>
         <td class="right">
-          <button class="btn btn-ghost btn-sm btn-icon" onclick="openEditClient('${c.id}')" title="Edit">✏️</button>
+          <button class="btn btn-ghost btn-sm btn-icon" onclick="openEditClient('${c.id}')" title="Edit" aria-label="Edit client">✏️</button>
         </td>
       </tr>`).join('')}
     </tbody></table>`;
@@ -4955,7 +4975,7 @@ async function saveClient() {
     if (editingClientId) { await sbPatch('contacts', editingClientId, payload); showToast('Client updated.', 'success'); }
     else { await sbPost('contacts', payload); showToast('Client saved.', 'success'); }
     closeModal('modal-client');
-    contacts = await sbGet('contacts', `company_id=eq.${currentCompany.id}&order=name`);
+    contacts = await sbGet('contacts', Q.contacts());
     await loadClients();
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
   finally { btn.disabled = false; btn.textContent = editingClientId ? 'Update Client' : 'Save Client'; }
@@ -4966,11 +4986,17 @@ let vendors = [];
 let editingVendorId = null;
 
 async function loadVendors() {
-  document.getElementById('vendors-table-wrap').innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading...</div>';
+  const vnWrap = document.getElementById('vendors-table-wrap');
+  if (vnWrap.querySelector('table')) {
+    vnWrap.style.opacity = '0.5'; vnWrap.style.pointerEvents = 'none';
+  } else {
+    vnWrap.innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading...</div>';
+  }
   try {
-    vendors = await sbGet('contacts', `company_id=eq.${currentCompany.id}&contact_type=eq.supplier&order=name`);
+    vendors = await sbGet('contacts', Q.vendors());
     renderVendorsTable(vendors);
   } catch(e) { showToast('Vendors load error: ' + e.message, 'error'); }
+  finally { vnWrap.style.opacity = ''; vnWrap.style.pointerEvents = ''; }
 }
 
 function renderVendorsTable(list) {
@@ -4992,7 +5018,7 @@ function renderVendorsTable(list) {
         <td class="mono">${v.currency}</td>
         <td><span class="badge ${v.is_active!==false?'badge-posted':'badge-void'}">${v.is_active!==false?'Active':'Inactive'}</span></td>
         <td class="right">
-          <button class="btn btn-ghost btn-sm btn-icon" onclick="openEditVendor('${v.id}')" title="Edit">✏️</button>
+          <button class="btn btn-ghost btn-sm btn-icon" onclick="openEditVendor('${v.id}')" title="Edit" aria-label="Edit vendor">✏️</button>
         </td>
       </tr>`).join('')}
     </tbody></table>`;
@@ -5108,7 +5134,7 @@ async function saveVendor() {
     if (editingVendorId) { await sbPatch('contacts', editingVendorId, payload); showToast('Vendor updated.', 'success'); }
     else { await sbPost('contacts', payload); showToast('Vendor saved.', 'success'); }
     closeModal('modal-vendor');
-    contacts = await sbGet('contacts', `company_id=eq.${currentCompany.id}&order=name`);
+    contacts = await sbGet('contacts', Q.contacts());
     await loadVendors();
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
   finally { btn.disabled = false; btn.textContent = editingVendorId ? 'Update Vendor' : 'Save Vendor'; }
@@ -5136,7 +5162,7 @@ async function loadErpCompanies() {
           <td class="mono">${c.vat_reg||'—'}</td>
           <td>${c.email||'—'}</td>
           <td class="right">
-            <button class="btn btn-ghost btn-sm btn-icon" onclick="openEditErpCompany('${c.id}')" title="Edit">✏️</button>
+            <button class="btn btn-ghost btn-sm btn-icon" onclick="openEditErpCompany('${c.id}')" title="Edit" aria-label="Edit company">✏️</button>
           </td>
         </tr>`).join('')}
       </tbody></table>`;
@@ -5146,6 +5172,11 @@ async function loadErpCompanies() {
 function previewCompanyLogo(input) {
   const file = input.files[0];
   if (!file) return;
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    showToast('Logo must be a JPEG, PNG, or WebP image.', 'warn');
+    input.value = '';
+    return;
+  }
   if (file.size > 2 * 1024 * 1024) { showToast('Logo must be under 2MB.', 'warn'); return; }
   pendingLogoFile = file;
   const reader = new FileReader();
@@ -5280,7 +5311,7 @@ async function saveErpCompany() {
       await sbPost('companies', { ...payload, is_active: true });
       showToast('Company added.', 'success');
     }
-    companies = await sbGet('companies', 'is_active=eq.true&order=code');
+    companies = await sbGet('companies', Q.companies);
     // Refresh currentCompany reference so logo appears immediately
     if (editingErpCompanyId && currentCompany?.id === editingErpCompanyId) {
       currentCompany = companies.find(c => c.id === editingErpCompanyId) || currentCompany;
@@ -5620,7 +5651,7 @@ async function savePayment() {
     closeModal('modal-payment');
     await loadAR();
     await loadDashboard();
-    try { bankAccounts = await sbGet('bank_accounts', `company_id=eq.${currentCompany.id}&is_active=eq.true&order=account_name`); } catch(e) {}
+    try { bankAccounts = await sbGet('bank_accounts', Q.bankAccounts()); } catch(e) {}
 
     // Open payment confirmation modal
     _lastReceiptId = receipt.id;
@@ -5831,7 +5862,7 @@ async function openInvoiceReceiptHistory(invoiceId) {
               <td><span class="badge badge-${voided ? 'void' : 'paid'}">${voided ? 'voided' : 'posted'}</span></td>
               <td class="right">
                 ${!voided
-                  ? `<div style="display:flex;gap:4px;justify-content:flex-end;"><button class="btn btn-ghost btn-sm btn-icon" onclick="closeModal('modal-invoice-receipts');openReceiptPDF('${r.id}')" style="font-size:15px;padding:4px 7px;" title="Print Receipt">🖨</button>${canVoid() ? `<button class="btn btn-danger btn-sm" onclick="voidARReceipt('${r.id}','${invoiceId}')">Void</button>` : ''}</div>`
+                  ? `<div style="display:flex;gap:4px;justify-content:flex-end;"><button class="btn btn-ghost btn-sm btn-icon" onclick="closeModal('modal-invoice-receipts');openReceiptPDF('${r.id}')" style="font-size:15px;padding:4px 7px;" title="Print Receipt" aria-label="Print Receipt">🖨</button>${canVoid() ? `<button class="btn btn-danger btn-sm" onclick="voidARReceipt('${r.id}','${invoiceId}')">Void</button>` : ''}</div>`
                   : `<span style="font-size:10px;color:var(--text-3);">Voided</span>`}
               </td>
             </tr>`;
@@ -5897,7 +5928,7 @@ async function voidARReceipt(receiptId, invoiceId) {
     closeModal('modal-invoice-receipts');
     await loadAR();
     await loadDashboard();
-    try { bankAccounts = await sbGet('bank_accounts', `company_id=eq.${currentCompany.id}&is_active=eq.true&order=account_name`); } catch(e) {}
+    try { bankAccounts = await sbGet('bank_accounts', Q.bankAccounts()); } catch(e) {}
   } catch(e) {
     showToast('Error voiding receipt: ' + e.message, 'error');
   }
@@ -5927,7 +5958,7 @@ async function loadSettingsBankAccounts() {
           <td class="right mono">${fmt(b.current_balance, b.currency)}</td>
           <td><span class="badge ${b.is_active ? 'badge-posted' : 'badge-void'}">${b.is_active ? 'Active' : 'Inactive'}</span></td>
           <td class="right">
-            <button class="btn btn-ghost btn-sm btn-icon" onclick="openEditBankAccount('${b.id}')" title="Edit">✏️</button>
+            <button class="btn btn-ghost btn-sm btn-icon" onclick="openEditBankAccount('${b.id}')" title="Edit" aria-label="Edit bank account">✏️</button>
           </td>
         </tr>`).join('')}
       </tbody></table>`;
@@ -6002,7 +6033,7 @@ async function saveBankAccount() {
       showToast('Bank account added.', 'success');
     }
     closeModal('modal-bank-account');
-    bankAccounts = await sbGet('bank_accounts', `company_id=eq.${currentCompany.id}&is_active=eq.true&order=account_name`);
+    bankAccounts = await sbGet('bank_accounts', Q.bankAccounts());
     await loadSettingsBankAccounts();
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
   finally { btn.disabled = false; btn.textContent = editingBankAccountId ? 'Update Account' : 'Save Account'; }
@@ -6014,7 +6045,7 @@ let currentBankAccountId = null;
 
 async function loadBank() {
   document.getElementById('bank-subtitle').textContent = `${currentCompany.trading_name || currentCompany.name} · ${currentCompany.currency}`;
-  bankAccounts = await sbGet('bank_accounts', `company_id=eq.${currentCompany.id}&is_active=eq.true&order=account_name`).catch(() => []);
+  bankAccounts = await sbGet('bank_accounts', Q.bankAccounts()).catch(() => []);
 
   // Summary cards
   const summary = document.getElementById('bank-accounts-summary');
@@ -6214,24 +6245,37 @@ function recalcBillTotals() {
   document.getElementById('bill-grand-total').textContent = fmtNum(round2(subtotal + taxAmt));
 }
 
-function searchBillVendor() {
-  const q = document.getElementById('bill-vendor-search').value.toLowerCase().trim();
-  const res = document.getElementById('bill-vendor-results');
-  const pool = contacts.filter(c => (c.contact_type === 'supplier' || c.contact_type === 'both') && c.is_active !== false &&
-    (!q || (c.name||'').toLowerCase().includes(q) || (c.trading_name||'').toLowerCase().includes(q)));
-  if (!pool.length) { res.classList.remove('open'); return; }
-  const slice = pool.slice(0, 8);
-  res.innerHTML = slice.map(c => `
-    <div class="contact-result-item">
-      <div class="contact-result-name">${escHTML(c.trading_name||c.name)}</div>
-      <div class="contact-result-sub">${escHTML(c.name)}</div>
-    </div>`).join('');
-  res.querySelectorAll('.contact-result-item').forEach((el, i) => {
-    const c = slice[i];
-    el.addEventListener('click', () => selectBillVendor(c.id, c.trading_name||c.name, c.name));
-  });
-  res.classList.add('open');
+function createContactSearch({ inputId, resultsId, typeFilter, showOnEmpty = true, queryFn, subtitleFn, onSelect }) {
+  return function() {
+    const q   = document.getElementById(inputId).value.toLowerCase().trim();
+    const res = document.getElementById(resultsId);
+    if (!q && !showOnEmpty) { res.classList.remove('open'); return; }
+    const pool = contacts.filter(c => {
+      if (typeFilter && !typeFilter(c)) return false;
+      if (!q) return true;
+      return (queryFn ? queryFn(c) : [c.name, c.trading_name]).some(f => (f||'').toLowerCase().includes(q));
+    });
+    if (!pool.length) { res.classList.remove('open'); return; }
+    const slice = pool.slice(0, 8);
+    res.innerHTML = slice.map(c => `
+      <div class="contact-result-item">
+        <div class="contact-result-name">${escHTML(c.trading_name || c.name)}</div>
+        <div class="contact-result-sub">${subtitleFn(c)}</div>
+      </div>`).join('');
+    res.querySelectorAll('.contact-result-item').forEach((el, i) => {
+      el.addEventListener('click', () => onSelect(slice[i]));
+    });
+    res.classList.add('open');
+  };
 }
+
+const searchBillVendor = createContactSearch({
+  inputId:    'bill-vendor-search',
+  resultsId:  'bill-vendor-results',
+  typeFilter: c => (c.contact_type === 'supplier' || c.contact_type === 'both') && c.is_active !== false,
+  subtitleFn: c => escHTML(c.name),
+  onSelect:   c => selectBillVendor(c.id, c.trading_name || c.name, c.name),
+});
 
 function selectBillVendor(id, displayName, legalName) {
   document.getElementById('bill-vendor-id').value     = id;
@@ -6914,7 +6958,7 @@ async function openEditInvoice(id) {
         <td><input type="number" class="mono" placeholder="0.00" value="${l.unit_price||0}" min="0" step="0.01" oninput="recalcLine('${lid}')"></td>
         <td><div class="inv-line-amount" id="${lid}-amt">${fmtNum(amt)}</div></td>
         <td style="text-align:center;">
-          <button class="btn btn-ghost btn-icon btn-sm" onclick="removeInvLine('${lid}')" style="color:var(--text-3);" title="Remove">✕</button>
+          <button class="btn btn-ghost btn-icon btn-sm" onclick="removeInvLine('${lid}')" style="color:var(--text-3);" title="Remove" aria-label="Remove line">✕</button>
         </td>`;
       document.getElementById('inv-lines-body').appendChild(tr);
     });
@@ -6929,27 +6973,14 @@ async function openEditInvoice(id) {
 }
 
 
-function searchInvContact() {
-  const q   = document.getElementById('inv-contact-search').value.toLowerCase().trim();
-  const res = document.getElementById('inv-contact-results');
-  const pool = contacts.filter(c =>
-    (c.contact_type === 'customer' || c.contact_type === 'both') &&
-    c.is_active !== false &&
-    (!q || c.name.toLowerCase().includes(q) || (c.trading_name||'').toLowerCase().includes(q) || (c.code||'').toLowerCase().includes(q))
-  );
-  if (!pool.length) { res.classList.remove('open'); return; }
-  const slice = pool.slice(0, 8);
-  res.innerHTML = slice.map(c => `
-    <div class="contact-result-item">
-      <div class="contact-result-name">${escHTML(c.trading_name || c.name)}</div>
-      <div class="contact-result-sub">${escHTML(c.name)}${c.code ? ' · '+escHTML(c.code) : ''} · ${escHTML(c.currency)}</div>
-    </div>`).join('');
-  res.querySelectorAll('.contact-result-item').forEach((el, i) => {
-    const c = slice[i];
-    el.addEventListener('click', () => selectInvContact(c.id, c.trading_name||c.name, c.name, c.payment_terms||30));
-  });
-  res.classList.add('open');
-}
+const searchInvContact = createContactSearch({
+  inputId:    'inv-contact-search',
+  resultsId:  'inv-contact-results',
+  typeFilter: c => (c.contact_type === 'customer' || c.contact_type === 'both') && c.is_active !== false,
+  queryFn:    c => [c.name, c.trading_name, c.code],
+  subtitleFn: c => `${escHTML(c.name)}${c.code ? ' · '+escHTML(c.code) : ''} · ${escHTML(c.currency)}`,
+  onSelect:   c => selectInvContact(c.id, c.trading_name || c.name, c.name, c.payment_terms || 30),
+});
 
 function selectInvContact(id, displayName, legalName, terms) {
   document.getElementById('inv-contact-id').value     = id;
@@ -6996,7 +7027,7 @@ function addInvLine() {
     <td><input type="number" class="mono" placeholder="0.00" value="" min="0" step="0.01" oninput="recalcLine('${lid}')"></td>
     <td><div class="inv-line-amount" id="${lid}-amt">0.00</div></td>
     <td style="text-align:center;">
-      <button class="btn btn-ghost btn-icon btn-sm" onclick="removeInvLine('${lid}')" style="color:var(--text-3);" title="Remove">✕</button>
+      <button class="btn btn-ghost btn-icon btn-sm" onclick="removeInvLine('${lid}')" style="color:var(--text-3);" title="Remove" aria-label="Remove line">✕</button>
     </td>`;
   document.getElementById('inv-lines-body').appendChild(tr);
 }
@@ -7279,7 +7310,12 @@ async function autoPostInvoiceJournal(inv, subtotal, taxAmt, total, currency, in
 
 // ── LOAD AR (enhanced with contact names) ─────────────────────────
 async function loadAR() {
-  document.getElementById('ar-table-wrap').innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading...</div>';
+  const arWrap = document.getElementById('ar-table-wrap');
+  if (arWrap.querySelector('table')) {
+    arWrap.style.opacity = '0.5'; arWrap.style.pointerEvents = 'none';
+  } else {
+    arWrap.innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading...</div>';
+  }
   try {
     invoices = await sbGet('invoices', `company_id=eq.${currentCompany.id}&order=invoice_date.desc,invoice_no.desc`);
     // Build a quick contact name map
@@ -7297,6 +7333,7 @@ async function loadAR() {
 
     renderARTable(invoices, contactMap);
   } catch(e) { showToast('AR load error: ' + e.message, 'error'); }
+  finally { arWrap.style.opacity = ''; arWrap.style.pointerEvents = ''; }
 }
 
 function renderARTable(invs, contactMap) {
@@ -7322,8 +7359,8 @@ function renderARTable(invs, contactMap) {
           <td class="right mono">${fmt(inv.balance_due, inv.currency)}</td>
           <td><span class="badge badge-${inv.status}">${inv.status}</span></td>
           <td class="right" style="white-space:nowrap;">
-            <button class="btn btn-ghost btn-sm btn-icon" onclick="openInvoicePDF('${inv.id}')" title="Preview / Print" style="font-size:16px;padding:4px 8px;">🖨</button>
-            ${inv.status === 'draft' ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="openEditInvoice('${inv.id}')" title="Edit">✏️</button>` : ''}
+            <button class="btn btn-ghost btn-sm btn-icon" onclick="openInvoicePDF('${inv.id}')" title="Preview / Print" aria-label="Preview / Print" style="font-size:16px;padding:4px 8px;">🖨</button>
+            ${inv.status === 'draft' ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="openEditInvoice('${inv.id}')" title="Edit" aria-label="Edit invoice">✏️</button>` : ''}
             ${inv.status === 'draft' ? `<button class="btn btn-outline btn-sm" onclick="postInvoice('${inv.id}')">Post</button>` : ''}
             ${inv.status === 'draft' ? `<button class="btn btn-danger btn-sm" onclick="deleteDocument('invoice','${inv.id}','${inv.invoice_no||'this draft invoice'}')">Delete</button>` : ''}
             ${['posted','partial','overdue'].includes(inv.status) ? `<button class="btn btn-primary btn-sm" onclick="openReceivePayment('${inv.id}')">$ Pay</button>` : ''}
@@ -7407,11 +7444,16 @@ let quotations = [];
 let salesLeads = [];
 
 async function loadQuotations() {
-  document.getElementById('quo-table-wrap').innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading...</div>';
+  const quoWrap = document.getElementById('quo-table-wrap');
+  if (quoWrap.querySelector('table')) {
+    quoWrap.style.opacity = '0.5'; quoWrap.style.pointerEvents = 'none';
+  } else {
+    quoWrap.innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading...</div>';
+  }
   try {
     [quotations, salesLeads] = await Promise.all([
       sbGet('quotations', `company_id=eq.${currentCompany.id}&order=quote_date.desc,quote_no.desc`),
-      sbGet('sales_leads', `company_id=eq.${currentCompany.id}&is_active=eq.true&order=name`)
+      sbGet('sales_leads', Q.salesLeads())
     ]);
 
     // Populate lead filter dropdown
@@ -7440,6 +7482,7 @@ async function loadQuotations() {
 
     renderQuotationsTable(quotations, contactMap, leadMap);
   } catch(e) { showToast('Quotations load error: ' + e.message, 'error'); }
+  finally { quoWrap.style.opacity = ''; quoWrap.style.pointerEvents = ''; }
 }
 
 function renderQuotationsTable(quos, contactMap, leadMap) {
@@ -7472,7 +7515,7 @@ function renderQuotationsTable(quos, contactMap, leadMap) {
           <td class="right mono">${fmt(q.total, q.currency)}</td>
           <td><span class="badge badge-${q.status}">${q.status}</span></td>
           <td class="right" style="white-space:nowrap;">
-            <button class="btn btn-ghost btn-sm btn-icon" onclick="openQuoPDF('${q.id}')" title="Preview PDF" style="font-size:15px;padding:4px 7px;">🖨</button>
+            <button class="btn btn-ghost btn-sm btn-icon" onclick="openQuoPDF('${q.id}')" title="Preview PDF" aria-label="Preview PDF" style="font-size:15px;padding:4px 7px;">🖨</button>
             <button class="btn btn-ghost btn-sm" onclick="openQuoStatusModal('${q.id}')">Status</button>
             ${q.status === 'draft' ? `<button class="btn btn-outline btn-sm" onclick="openEditQuotation('${q.id}')">Edit</button>` : ''}
             ${q.status !== 'converted' && q.status !== 'draft' ? `<button class="btn btn-outline btn-sm" onclick="convertQuoToInvoice('${q.id}')">→ Invoice</button>` : ''}
@@ -7503,7 +7546,7 @@ function filterQuotations() {
 async function openNewQuotation() {
   // Load leads into select
   try {
-    salesLeads = await sbGet('sales_leads', `company_id=eq.${currentCompany.id}&is_active=eq.true&order=name`);
+    salesLeads = await sbGet('sales_leads', Q.salesLeads());
   } catch(e) {}
   const leadSel = document.getElementById('quo-sales-lead-id');
   leadSel.innerHTML = '<option value="">— Select Sales Lead —</option>';
@@ -7591,7 +7634,7 @@ async function openEditQuotation(id) {
   if (!quo) return;
 
   // Load leads
-  try { salesLeads = await sbGet('sales_leads', `company_id=eq.${currentCompany.id}&is_active=eq.true&order=name`); } catch(e) {}
+  try { salesLeads = await sbGet('sales_leads', Q.salesLeads()); } catch(e) {}
   const leadSel = document.getElementById('quo-sales-lead-id');
   leadSel.innerHTML = '<option value="">— Select Sales Lead —</option>';
   salesLeads.forEach(l => { leadSel.innerHTML += `<option value="${l.id}">${l.name}</option>`; });
@@ -7649,7 +7692,7 @@ async function openQuoFromTemplate(id) {
   if (!quo) return;
 
   // Load leads
-  try { salesLeads = await sbGet('sales_leads', `company_id=eq.${currentCompany.id}&is_active=eq.true&order=name`); } catch(e) {}
+  try { salesLeads = await sbGet('sales_leads', Q.salesLeads()); } catch(e) {}
   const leadSel = document.getElementById('quo-sales-lead-id');
   leadSel.innerHTML = '<option value="">— Select Sales Lead —</option>';
   salesLeads.forEach(l => { leadSel.innerHTML += `<option value="${l.id}">${l.name}</option>`; });
@@ -7738,23 +7781,14 @@ function recalcQuoTotals() {
   document.getElementById('quo-grand-total').textContent = fmtNum(total);
 }
 
-function searchQuoContact() {
-  const q = document.getElementById('quo-contact-search').value.toLowerCase();
-  const res = document.getElementById('quo-contact-results');
-  if (!q) { res.classList.remove('open'); return; }
-  const matches = contacts.filter(c => (c.trading_name||c.name||'').toLowerCase().includes(q)).slice(0,8);
-  if (!matches.length) { res.classList.remove('open'); return; }
-  res.innerHTML = matches.map(c => `
-    <div class="contact-result-item">
-      <div class="contact-result-name">${escHTML(c.trading_name||c.name)}</div>
-      <div class="contact-result-sub">${escHTML(c.name !== c.trading_name ? c.name : '')}</div>
-    </div>`).join('');
-  res.querySelectorAll('.contact-result-item').forEach((el, i) => {
-    const c = matches[i];
-    el.addEventListener('click', () => selectQuoContact(c.id, c.trading_name||c.name));
-  });
-  res.classList.add('open');
-}
+const searchQuoContact = createContactSearch({
+  inputId:     'quo-contact-search',
+  resultsId:   'quo-contact-results',
+  showOnEmpty: false,
+  queryFn:     c => [c.trading_name || c.name],
+  subtitleFn:  c => escHTML(c.name !== c.trading_name ? c.name : ''),
+  onSelect:    c => selectQuoContact(c.id, c.trading_name || c.name),
+});
 
 function selectQuoContact(id, name) {
   document.getElementById('quo-contact-id').value = id;
@@ -8046,7 +8080,7 @@ async function toggleSLActive(id, active) {
 // ── SALES LEAD REPORTS ───────────────────────────────────────────
 async function loadSalesLeadsPage() {
   try {
-    salesLeads = await sbGet('sales_leads', `company_id=eq.${currentCompany.id}&is_active=eq.true&order=name`);
+    salesLeads = await sbGet('sales_leads', Q.salesLeads());
     const sel = document.getElementById('slr-lead-filter');
     sel.innerHTML = '<option value="">All Sales Leads</option>';
     salesLeads.forEach(l => { sel.innerHTML += `<option value="${l.id}">${l.name}</option>`; });
@@ -8304,7 +8338,7 @@ function renderDNTable(dns, contactMap) {
           <td>${d.recipient_name || '—'}</td>
           <td><span class="badge badge-${d.status}">${d.status}</span></td>
           <td class="right" style="white-space:nowrap;">
-            ${d.dn_no ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="openDNPDF('${d.id}')" title="Preview" style="font-size:15px;padding:4px 7px;">🖨</button>` : ''}
+            ${d.dn_no ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="openDNPDF('${d.id}')" title="Preview" aria-label="Preview delivery note" style="font-size:15px;padding:4px 7px;">🖨</button>` : ''}
             <button class="btn btn-ghost btn-sm" onclick="openDNStatusModal('${d.id}')">Status</button>
             ${d.status === 'delivered' ? `<button class="btn btn-outline btn-sm" onclick="convertDNToInvoice('${d.id}')">→ Invoice</button>` : ''}
             ${d.status === 'draft' ? `<button class="btn btn-danger btn-sm" onclick="deleteDocument('delivery_note','${d.id}','${d.dn_no||'this draft delivery note'}')">Delete</button>` : ''}
@@ -8363,24 +8397,13 @@ function addDNLine() {
   tbody.appendChild(tr);
 }
 
-function searchDNContact() {
-  const q = document.getElementById('dn-contact-search').value.toLowerCase();
-  const res = document.getElementById('dn-contact-results');
-  const pool = contacts.filter(c => (c.contact_type==='customer'||c.contact_type==='both') && c.is_active!==false &&
-    (!q || (c.name||'').toLowerCase().includes(q) || (c.trading_name||'').toLowerCase().includes(q)));
-  if (!pool.length) { res.classList.remove('open'); return; }
-  const slice = pool.slice(0, 8);
-  res.innerHTML = slice.map(c => `
-    <div class="contact-result-item">
-      <div class="contact-result-name">${escHTML(c.trading_name||c.name)}</div>
-      <div class="contact-result-sub">${escHTML(c.name)}</div>
-    </div>`).join('');
-  res.querySelectorAll('.contact-result-item').forEach((el, i) => {
-    const c = slice[i];
-    el.addEventListener('click', () => selectDNContact(c.id, c.trading_name||c.name));
-  });
-  res.classList.add('open');
-}
+const searchDNContact = createContactSearch({
+  inputId:    'dn-contact-search',
+  resultsId:  'dn-contact-results',
+  typeFilter: c => (c.contact_type === 'customer' || c.contact_type === 'both') && c.is_active !== false,
+  subtitleFn: c => escHTML(c.name),
+  onSelect:   c => selectDNContact(c.id, c.trading_name || c.name),
+});
 
 function selectDNContact(id, name) {
   document.getElementById('dn-contact-id').value = id;
@@ -8590,7 +8613,7 @@ function renderCNTable(cns, contactMap) {
           <td class="right mono">${fmt(cn.total, cn.currency)}</td>
           <td><span class="badge badge-${cn.status}">${cn.status}</span></td>
           <td class="right" style="white-space:nowrap;">
-            ${cn.cn_no ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="openCNPDF('${cn.id}')" title="Preview" style="font-size:15px;padding:4px 7px;">🖨</button>` : ''}
+            ${cn.cn_no ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="openCNPDF('${cn.id}')" title="Preview" aria-label="Preview credit note" style="font-size:15px;padding:4px 7px;">🖨</button>` : ''}
             ${cn.status === 'draft' ? `<button class="btn btn-primary btn-sm" onclick="postCreditNote('${cn.id}')">Post</button>` : ''}
             ${cn.status === 'draft' ? `<button class="btn btn-danger btn-sm" onclick="deleteDocument('credit_note','${cn.id}','${cn.cn_no||'this draft credit note'}')">Delete</button>` : ''}
             ${cn.status === 'posted' ? `<button class="btn btn-ghost btn-sm" onclick="voidCreditNote('${cn.id}')">Void</button>` : ''}
