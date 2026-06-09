@@ -7423,7 +7423,7 @@ function renderARTable(invs, contactMap) {
             ${inv.status === 'draft' ? `<button class="btn btn-outline btn-sm" onclick="postInvoice('${inv.id}')">Post</button>` : ''}
             ${inv.status === 'draft' ? `<button class="btn btn-danger btn-sm" onclick="deleteDocument('invoice','${inv.id}','${inv.invoice_no||'this draft invoice'}')">Delete</button>` : ''}
             ${['posted','partial','overdue'].includes(inv.status) ? `<button class="btn btn-primary btn-sm" onclick="openReceivePayment('${inv.id}')">$ Pay</button>` : ''}
-            ${['partial','paid'].includes(inv.status) ? `<button class="btn btn-ghost btn-sm" onclick="openInvoiceReceiptHistory('${inv.id}')">Receipts</button>` : ''}
+            ${['partial','paid','overdue'].includes(inv.status) ? `<button class="btn btn-ghost btn-sm" onclick="openInvoiceReceiptHistory('${inv.id}')">Receipts</button>` : ''}
             ${inv.status === 'posted' ? `<button class="btn btn-ghost btn-sm" onclick="voidInvoice('${inv.id}')">Void</button>` : ''}
           </td>
         </tr>`).join('')}
