@@ -3477,8 +3477,19 @@ body {
 
       <!-- Bank Details -->
       <div style="font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:10px;">Bank Details <span style="font-weight:400;text-transform:none;letter-spacing:0;">(shown on invoices)</span></div>
-      <div class="field" style="margin-bottom:4px;">
+      <div class="field" style="margin-bottom:14px;">
         <textarea id="erp-co-bank" rows="3" placeholder="e.g. Republic Bank, Eastern Main Road, Sangre Grande&#10;ACC: 4908 0022 5001"></textarea>
+      </div>
+
+      <!-- PDF Settings -->
+      <div style="font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:10px;">PDF Settings</div>
+      <div class="form-grid grid-2">
+        <div class="field"><label class="field-label">Page Size</label>
+          <select id="erp-co-pdf-size">
+            <option value="letter">Letter (8.5 × 11 in) — US</option>
+            <option value="A4">A4 (210 × 297 mm) — International</option>
+          </select>
+        </div>
       </div>
 
     </div>
@@ -3785,8 +3796,10 @@ async function initApp() {
 
   // Load companies based on role
   await loadCompanies();
-  try { contacts     = await sbGet('contacts',     `company_id=eq.${currentCompany.id}&order=name`); } catch(e) {}
-  try { bankAccounts = await sbGet('bank_accounts',`company_id=eq.${currentCompany.id}&is_active=eq.true&order=account_name`); } catch(e) {}
+  [contacts, bankAccounts] = await Promise.all([
+    sbGet('contacts',     `company_id=eq.${currentCompany.id}&order=name`).catch(() => []),
+    sbGet('bank_accounts',`company_id=eq.${currentCompany.id}&is_active=eq.true&order=account_name`).catch(() => []),
+  ]);
   await checkAndRefreshRates();
 
   // Apply nav visibility based on role
@@ -3872,7 +3885,7 @@ function renderCompanySwitcher() {
     const col = colors[c.code] || '#888';
     const isActive = c.id === currentCompany.id;
     const iconHtml = c.logo_url
-      ? `<img src="${c.logo_url}" style="width:28px;height:28px;object-fit:contain;border-radius:6px;flex-shrink:0;">`
+      ? `<img src="${c.logo_url}" loading="lazy" style="width:28px;height:28px;object-fit:contain;border-radius:6px;flex-shrink:0;">`
       : `<div class="company-item-icon" style="background:${col}22;color:${col};">${c.code}</div>`;
     return `<div class="company-dropdown-item ${isActive?'active':''}" onclick="switchCompany('${c.id}')">
       ${iconHtml}
@@ -3901,8 +3914,10 @@ async function switchCompany(id) {
   renderCompanySwitcher();
   updateCompanyContext();
   accounts = []; contacts = []; journalEntries = []; bankAccounts = [];
-  try { contacts     = await sbGet('contacts',     `company_id=eq.${currentCompany.id}&order=name`); } catch(e) {}
-  try { bankAccounts = await sbGet('bank_accounts',`company_id=eq.${currentCompany.id}&is_active=eq.true&order=account_name`); } catch(e) {}
+  [contacts, bankAccounts] = await Promise.all([
+    sbGet('contacts',     `company_id=eq.${currentCompany.id}&order=name`).catch(() => []),
+    sbGet('bank_accounts',`company_id=eq.${currentCompany.id}&is_active=eq.true&order=account_name`).catch(() => []),
+  ]);
   await loadViewData(currentView);
   showToast('Switched to ' + (currentCompany.trading_name || currentCompany.name), 'info');
 }
@@ -3988,10 +4003,10 @@ async function loadDashboard() {
     const quoDrafts   = quos.filter(q => q.status === 'draft');
 
     // ── Zone 1: Attention Required ─────────────────────────────────
-    const overdue    = invs.filter(i => i.status === 'overdue' || (i.due_date && i.due_date < today && i.status === 'posted'));
-    const due7       = invs.filter(i => i.due_date && i.due_date >= today && i.due_date <= in7str);
-    const expiring   = quos.filter(q => q.valid_until && q.valid_until >= today && q.valid_until <= in7str && q.status === 'sent');
-    const billsDue7  = bills.filter(b => b.due_date && b.due_date >= today && b.due_date <= in7str);
+    const overdue    = invs.filter(i => i.status === 'overdue' || (i.due_date && i.due_date.slice(0,10) < today && i.status === 'posted'));
+    const due7       = invs.filter(i => i.due_date && i.due_date.slice(0,10) >= today && i.due_date.slice(0,10) <= in7str);
+    const expiring   = quos.filter(q => q.valid_until && q.valid_until.slice(0,10) >= today && q.valid_until.slice(0,10) <= in7str && q.status === 'sent');
+    const billsDue7  = bills.filter(b => b.due_date && b.due_date.slice(0,10) >= today && b.due_date.slice(0,10) <= in7str);
     const totalDrafts = dnDrafts.length + cnDrafts.length + billDrafts.length + quoDrafts.length + invs.filter(i=>i.status==='draft').length;
 
     const overdueVal = overdue.reduce((s,i) => s + convertToBase(i.balance_due, i.currency||base).amount, 0);
@@ -4579,7 +4594,7 @@ async function approveBill(id) {
 function openPayBillModal(billId) {
   const bill = bills.find(b => b.id === billId);
   if (!bill) return;
-  const contact = contacts.find(c => c.id === bill.contact_id);
+  const contact = contacts.find(c => c.id === bill.contact_id) || {};
 
   document.getElementById('bill-pay-bill-id').value = billId;
   document.getElementById('bill-pay-subtitle').textContent =
@@ -4710,7 +4725,7 @@ async function saveVendorPayment() {
 async function openBillPaymentHistory(billId) {
   const bill = bills.find(b => b.id === billId);
   if (!bill) return;
-  const contact = contacts.find(c => c.id === bill.contact_id);
+  const contact = contacts.find(c => c.id === bill.contact_id) || {};
   document.getElementById('bill-history-subtitle').textContent =
     `${bill.bill_no || 'Draft'} — ${contact?.trading_name || contact?.name || '—'} · Total: ${fmt(bill.total, bill.currency)}`;
 
@@ -5168,7 +5183,7 @@ async function loadErpCompanies() {
         <th>Logo</th><th>Code</th><th>Name</th><th>Trading Name</th><th>Currency</th><th>TIN</th><th>VAT Reg</th><th>Email</th><th class="right">Actions</th>
       </tr></thead><tbody>${cos.map(c => `
         <tr>
-          <td>${c.logo_url ? `<img src="${c.logo_url}" style="height:32px;width:32px;object-fit:contain;border-radius:4px;">` : `<div style="width:32px;height:32px;background:var(--gold-bg);border:1px solid var(--gold-border);border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:10px;color:var(--gold);">${c.code?.slice(0,2)||'?'}</div>`}</td>
+          <td>${c.logo_url ? `<img src="${c.logo_url}" loading="lazy" style="height:32px;width:32px;object-fit:contain;border-radius:4px;">` : `<div style="width:32px;height:32px;background:var(--gold-bg);border:1px solid var(--gold-border);border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:10px;color:var(--gold);">${c.code?.slice(0,2)||'?'}</div>`}</td>
           <td class="mono bold">${c.code}</td>
           <td>${c.name}</td>
           <td>${c.trading_name||'—'}</td>
@@ -5207,6 +5222,7 @@ function openAddCompany() {
    'erp-co-phone','erp-co-email','erp-co-line1','erp-co-line2','erp-co-line3',
    'erp-co-country','erp-co-postal','erp-co-bank'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('erp-co-currency').value = 'TTD';
+  document.getElementById('erp-co-pdf-size').value  = 'letter';
   document.getElementById('erp-co-logo-preview').innerHTML = '?';
   document.getElementById('erp-co-logo-status').textContent = '';
   document.getElementById('erp-co-logo-file').value = '';
@@ -5237,6 +5253,7 @@ async function openEditErpCompany(id) {
     document.getElementById('erp-co-country').value  = c.address_country || '';
     document.getElementById('erp-co-postal').value   = c.address_postal || '';
     document.getElementById('erp-co-bank').value     = c.bank_details || '';
+    document.getElementById('erp-co-pdf-size').value  = c.pdf_page_size || 'letter';
     document.getElementById('erp-co-logo-status').textContent = '';
     document.getElementById('erp-co-logo-file').value = '';
     const preview = document.getElementById('erp-co-logo-preview');
@@ -5300,6 +5317,7 @@ async function saveErpCompany() {
       address_country:document.getElementById('erp-co-country').value || null,
       address_postal: document.getElementById('erp-co-postal').value || null,
       bank_details:   document.getElementById('erp-co-bank').value || null,
+      pdf_page_size:  document.getElementById('erp-co-pdf-size').value || 'letter',
       // legacy address for compatibility
       address: [
         document.getElementById('erp-co-line1').value,
@@ -5795,7 +5813,7 @@ function buildReceiptPDFHTML(receipt, invoice, contact, bankAcc) {
   :root { color-scheme: light; }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   body { background: #666; padding: 20px; font-family: 'DM Sans', sans-serif; color-scheme: light; }
-  @page { size: letter portrait; margin: 0; }
+  @page { size: ${coPageSize()} portrait; margin: 0; }
   @media print {
     body { background: none; padding: 0; }
     div[style*="border:2px solid"] { box-shadow: none !important; border: none !important; margin: 0 !important; }
@@ -6385,7 +6403,7 @@ function buildReportHTML(type, title) {
   :root { color-scheme:light; }
   * { box-sizing:border-box; margin:0; padding:0; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
   body { background:#f0f0f0; padding:24px; font-family:'DM Sans',sans-serif; font-size:12px; color:#1a1a1a; color-scheme:light; }
-  .page { background:#fff; width:8.5in; min-height:11in; margin:0 auto; padding:0.6in; box-shadow:0 0 0 6px #ddd; }
+  .page { background:#fff; width:${co.pdf_page_size==='A4'?'8.27in':'8.5in'}; min-height:${co.pdf_page_size==='A4'?'11.69in':'11in'}; margin:0 auto; padding:0.6in; box-shadow:0 0 0 6px #ddd; }
   .report-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; padding-bottom:16px; border-bottom:2px solid #1a1a1a; }
   .report-header-left .co-name { font-family:'Syne',sans-serif; font-size:16px; font-weight:700; color:#1a1a1a; }
   .report-header-left .co-detail { font-size:9px; color:#888; margin-top:2px; line-height:1.5; }
@@ -6405,7 +6423,7 @@ function buildReportHTML(type, title) {
   .stat-value { font-family:'DM Mono',monospace; font-size:13px; font-weight:600; color:#1a1a1a; }
   .report-footer { margin-top:32px; padding-top:10px; border-top:1px solid #e0e0e0; display:flex; justify-content:space-between; align-items:center; font-size:8px; color:#bbb; }
   .report-page-num { display:none; }
-  @page { size:letter portrait; margin:0; }
+  @page { size:${co.pdf_page_size||'letter'} portrait; margin:0; }
   @media print {
     body { background:none; padding:0; }
     .page { box-shadow:none; min-height:auto; padding-bottom:0.65in; }
@@ -9129,6 +9147,13 @@ function calcContRows(totalsH) {
 const PDF_FIRST_ROWS = calcFirstRows(220);
 const PDF_CONT_ROWS  = calcContRows(220);
 
+function coPageSize() { return currentCompany.pdf_page_size || 'letter'; }
+function coPageDims() {
+  return currentCompany.pdf_page_size === 'A4'
+    ? { w: '8.27in', h: '11.69in' }
+    : { w: '8.5in',  h: '11in' };
+}
+
 function buildPDFHeader(co, docTitle, docNo, balanceLabel, balanceValue, contact, metaRows) {
   const logoHtml = co.logo_url
     ? `<img src="${co.logo_url}" style="height:56px;max-width:160px;object-fit:contain;margin-bottom:8px;display:block;">`
@@ -9263,6 +9288,7 @@ function splitLinesIntoPages(lines, firstPageRows, contPageRows) {
 
 function renderMultiPagePDF(containerId, pages, headerHTML, showPricing, currency, subtotal, taxRate, taxAmt, total, incoterms, incotermsPlace, notes, bankDetails, coName, docNo) {
   if (!pages || pages.length === 0) pages = [[]];   // always render at least one page
+  const dims = coPageDims();
   const totalPages = pages.length;
   const allLines   = pages.flat().filter(l => !l._empty);
 
@@ -9310,7 +9336,7 @@ function renderMultiPagePDF(containerId, pages, headerHTML, showPricing, currenc
 
     const marginBottom = isLast ? '0' : '24px';
     pagesHTML += `
-      <div style="position:relative;width:8.5in;min-height:11in;box-sizing:border-box;background:#fff;font-family:'DM Sans',sans-serif;font-size:14px;padding:0.5in;margin:0 auto ${marginBottom};border:2px solid #1a1a1a;box-shadow:0 0 0 6px #f0f0f0,0 0 0 7px #ddd;page-break-after:${isLast?'auto':'always'};">
+      <div style="position:relative;width:${dims.w};min-height:${dims.h};box-sizing:border-box;background:#fff;font-family:'DM Sans',sans-serif;font-size:14px;padding:0.5in;margin:0 auto ${marginBottom};border:2px solid #1a1a1a;box-shadow:0 0 0 6px #f0f0f0,0 0 0 7px #ddd;page-break-after:${isLast?'auto':'always'};">
         <div style="padding-bottom:${PDF_FOOTER_H+8}px;">${pageContent}</div>
         ${buildPDFFooter(coName, docNo, pageNum, totalPages)}
       </div>`;
@@ -9329,7 +9355,7 @@ function renderMultiPagePDF(containerId, pages, headerHTML, showPricing, currenc
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
   body { background: #666; padding: 20px; font-family: 'DM Sans', sans-serif; color-scheme: light; }
   .pdf-hdr td { background: #1a1a1a !important; color: #fff !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-  @page { size: letter portrait; margin: 0; }
+  @page { size: ${coPageSize()} portrait; margin: 0; }
   @media print {
     body { background: none; padding: 0; }
     div[style*="border:2px solid"] { box-shadow: none !important; border: none !important; margin: 0 !important; page-break-after: always; }
