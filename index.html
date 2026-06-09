@@ -5593,12 +5593,19 @@ function openReceivePayment(invoiceId) {
   document.getElementById('payment-balance-due').textContent = fmt(inv.balance_due, inv.currency);
   updatePaymentBalance();
 
-  // Populate bank accounts filtered by matching currency
+  // Populate bank accounts — prefer matching currency first, then show all
   const bankSel = document.getElementById('payment-bank-account');
-  const matching = bankAccounts.filter(b => b.currency === inv.currency && b.is_active);
-  bankSel.innerHTML = matching.length
-    ? matching.map(b => `<option value="${b.id}">${b.account_name} — ${b.bank_name}</option>`).join('')
-    : '<option value="">No matching bank accounts — add one in Settings</option>';
+  const matching = bankAccounts.filter(b => b.currency === inv.currency);
+  const rest     = bankAccounts.filter(b => b.currency !== inv.currency);
+  if (!bankAccounts.length) {
+    bankSel.innerHTML = '<option value="">No bank accounts — add one in Settings</option>';
+  } else {
+    bankSel.innerHTML =
+      matching.map(b => `<option value="${b.id}">${b.account_name} — ${b.bank_name} (${b.currency})</option>`).join('') +
+      (rest.length && matching.length ? `<optgroup label="Other currencies">` : '') +
+      rest.map(b => `<option value="${b.id}">${b.account_name} — ${b.bank_name} (${b.currency})</option>`).join('') +
+      (rest.length && matching.length ? `</optgroup>` : '');
+  }
 
   document.getElementById('modal-payment').classList.add('show');
 }
