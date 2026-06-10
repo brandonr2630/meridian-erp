@@ -4668,7 +4668,7 @@ function renderAPTable(list) {
   document.getElementById('ap-table-wrap').innerHTML = `
     <table class="data-table">
       <thead><tr>
-        <th>Bill No.</th>${thAP('supplier','Supplier')}${thAP('bill_date','Date')}${thAP('due_date','Due Date')}
+        <th>Bill No.</th><th>Invoice No.</th>${thAP('supplier','Supplier')}${thAP('bill_date','Date')}${thAP('due_date','Due Date')}
         <th>Currency</th><th class="right">Total</th><th class="right">Balance Due</th>
         <th>Status</th><th class="right">Actions</th>
       </tr></thead>
@@ -4679,6 +4679,7 @@ function renderAPTable(list) {
         return `
         <tr>
           <td class="mono bold">${b.bill_no || '<span style="color:var(--text-3);font-style:italic;font-size:11px;">Draft</span>'}</td>
+          <td class="mono">${b.vendor_ref || '—'}</td>
           <td>${contactMap[b.contact_id] || '—'}</td>
           <td class="mono">${b.bill_date}</td>
           <td class="mono">${b.due_date || '—'}</td>
