@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-09 · Session 11*
+*Last updated: 2026-06-10 · Session 12*
 
 ---
 
@@ -336,7 +336,31 @@ No known issues.
 
 ## Next Up
 
-- CRM module (3 tables: contacts, activities, deals) — design drafted, not yet built. See memory for details.
+### CRM module — designed, not yet built
+
+Architecture designed 2026-05-23. Parked for consideration before building.
+
+#### 3 new Supabase tables
+
+| Table | Purpose |
+|-------|---------|
+| `crm_opportunities` | Pipeline deals — stages: prospect → qualified → proposal → negotiation → won → lost. `type` field: `standard` \| `development`. Linked to `contacts`; optional `quotation_id` once converted. |
+| `crm_activities` | Timeline log (call / email / meeting / note). Hangs off an opportunity or a contact directly. |
+| `crm_tasks` | Assignable follow-ups with due dates. Hangs off an opportunity or contact. |
+
+#### 3 views under a new top-level "CRM" nav section
+
+1. **Pipeline** — deal list/board with stage filter; opportunity detail panel with inline activities + tasks; "Convert to Quote" on won deals
+2. **Activities** — company-wide feed, filterable by type / date / user
+3. **Tasks** — to-do list, filterable by assignee / due date / completion
+
+#### Integration
+
+Won opportunity → Convert to Quotation → pre-fills contact, currency, value → writes `quotation_id` back to opportunity; stage locks to `won`.
+
+#### Dev inquiry handling
+
+`type: development` on an opportunity covers this — no separate table needed. The `description` field captures evolving scope; activities log discovery conversations. Reaches `proposal` stage before a quote is raised.
 
 ## To Do — Code Review Backlog
 

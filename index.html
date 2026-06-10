@@ -6701,9 +6701,11 @@ async function runPL() {
   wrap.innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Generating P&L…</div>';
   try {
     const coId = currentCompany.id;
+    const jeIds = await getPostedJEIds(coId, from, to);
+    if (!jeIds) { wrap.innerHTML = '<div class="table-empty">No posted journal entries found for this period.</div>'; return; }
     const [revLines, expLines] = await Promise.all([
-      sbGet('journal_lines', `journal_id=in.(${await getPostedJEIds(coId, from, to)})&account_id=in.(${await getAccountIdsByType(coId,'revenue')})`),
-      sbGet('journal_lines', `journal_id=in.(${await getPostedJEIds(coId, from, to)})&account_id=in.(${await getAccountIdsByType(coId,'expense')})`)
+      sbGet('journal_lines', `journal_id=in.(${jeIds})&account_id=in.(${await getAccountIdsByType(coId,'revenue')})`),
+      sbGet('journal_lines', `journal_id=in.(${jeIds})&account_id=in.(${await getAccountIdsByType(coId,'expense')})`)
     ]);
 
     const accMap = {}; accounts.forEach(a => { accMap[a.id] = a; });
