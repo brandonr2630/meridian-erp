@@ -7586,6 +7586,9 @@ function renderARTable(invs, contactMap) {
       if (arSortCol === 'customer') {
         av = (cmap[a.contact_id] || '').toLowerCase();
         bv = (cmap[b.contact_id] || '').toLowerCase();
+      } else if (arSortCol === 'invoice_no') {
+        av = (a.invoice_no || '').toLowerCase();
+        bv = (b.invoice_no || '').toLowerCase();
       } else {
         av = (arSortCol === 'invoice_date' ? a.invoice_date : a.due_date) || '';
         bv = (arSortCol === 'invoice_date' ? b.invoice_date : b.due_date) || '';
@@ -7604,7 +7607,7 @@ function renderARTable(invs, contactMap) {
   document.getElementById('ar-table-wrap').innerHTML = `
     <table class="data-table">
       <thead><tr>
-        <th>Invoice No.</th>${thAR('customer','Customer')}${thAR('invoice_date','Date')}${thAR('due_date','Due Date')}
+        ${thAR('invoice_no','Invoice No.')}${thAR('customer','Customer')}${thAR('invoice_date','Date')}${thAR('due_date','Due Date')}
         <th>Currency</th><th class="right">Total</th><th class="right">Balance Due</th>
         <th>Status</th><th class="right">Actions</th>
       </tr></thead>
