@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-10 · Session 15*
+*Last updated: 2026-06-10 · Session 16*
 
 ---
 
@@ -12,6 +12,25 @@
 | GitHub repo | `brandonr2630/meridian-erp` |
 | Deploy | Push to `master` via PR → GitHub Actions → GreenGeeks cPanel auto-deploys |
 | Deploy workflow | `.github/workflows/deploy.yml` → cPanel Fileman API (`chi203.greengeeks.net`) |
+
+---
+
+## Session 16 — Typography preferences
+
+**Date:** 2026-06-10
+**Branches / PRs:** [PR #46](https://github.com/brandonr2630/meridian-erp/pull/46) · [PR #47](https://github.com/brandonr2630/meridian-erp/pull/47)
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| Typography section in Settings | Three range sliders — UI Text (12–18 px), Headings (16–28 px), Table Numbers (11–17 px) — let each user adjust font sizes independently | Prefs stored in `localStorage` under `erp_font_prefs`; applied via CSS custom properties `--fs-ui`, `--fs-heading`, `--fs-mono`; Reset to defaults button; sliders sync when Settings view opens |
+| Early font apply | Font prefs applied in an IIFE before first paint, same pattern as the existing theme toggle | Prevents flash of default sizes on reload |
+| CSS vars wired to key rules | `body`, `.btn`, `.page-title`, `.modal-title`, `.data-table td`, `.data-table td.mono`, `.field input/select/textarea`, `.filter-select` all consume the new vars | PR #47 extended coverage after UI Text slider appeared unresponsive — most elements had explicit `13px` overrides blocking body inheritance |
+
+### Outstanding
+
+- CRM module — see **Next Up** below
 
 ---
 
