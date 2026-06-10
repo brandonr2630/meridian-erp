@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-10 · Session 14*
+*Last updated: 2026-06-10 · Session 15*
 
 ---
 
@@ -12,6 +12,26 @@
 | GitHub repo | `brandonr2630/meridian-erp` |
 | Deploy | Push to `master` via PR → GitHub Actions → GreenGeeks cPanel auto-deploys |
 | Deploy workflow | `.github/workflows/deploy.yml` → cPanel Fileman API (`chi203.greengeeks.net`) |
+
+---
+
+## Session 15 — AR / AP table sorting & date range filter
+
+**Date:** 2026-06-10
+**Branches / PRs:** [PR #41](https://github.com/brandonr2630/meridian-erp/pull/41) · [PR #42](https://github.com/brandonr2630/meridian-erp/pull/42) · [PR #43](https://github.com/brandonr2630/meridian-erp/pull/43) · [PR #44](https://github.com/brandonr2630/meridian-erp/pull/44)
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| AR sortable columns | Invoice No., Customer, Date, Due Date headers are clickable asc/desc sort toggles | `arSortCol` / `arSortDir` state vars; `sortAR(col)` toggles direction; sort applied to filtered list before page slice |
+| AP sortable columns | Bill No., Supplier, Date, Due Date headers are clickable asc/desc sort toggles | `apSortCol` / `apSortDir` state vars; `sortAP(col)` toggles direction; same pattern as AR |
+| AP Invoice No. column | Vendor's own invoice reference (`vendor_ref`) shown between Bill No. and Supplier | Field already captured in the bill form; was not displayed in the table |
+| AR / AP date range filter | From / To date pickers added to both table toolbars | `ar-date-from`, `ar-date-to` filter by `invoice_date`; `ap-date-from`, `ap-date-to` filter by `bill_date`; either bound optional; works alongside search and status filters |
+
+### Outstanding
+
+- CRM module — see **Next Up** below
 
 ---
 
