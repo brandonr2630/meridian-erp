@@ -4643,11 +4643,32 @@ function renderAPTable(list) {
     document.getElementById('ap-table-wrap').innerHTML = '<div class="table-empty">No bills yet.</div>';
     return;
   }
-  const page = list.slice(apPage * PAGE_SIZE, (apPage + 1) * PAGE_SIZE);
+  let sorted = [...list];
+  if (apSortCol) {
+    sorted.sort((a, b) => {
+      let av, bv;
+      if (apSortCol === 'supplier') {
+        av = (contactMap[a.contact_id] || '').toLowerCase();
+        bv = (contactMap[b.contact_id] || '').toLowerCase();
+      } else {
+        av = (apSortCol === 'bill_date' ? a.bill_date : a.due_date) || '';
+        bv = (apSortCol === 'bill_date' ? b.bill_date : b.due_date) || '';
+      }
+      if (av < bv) return apSortDir === 'asc' ? -1 : 1;
+      if (av > bv) return apSortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
+  const thAP = (col, label, cls = '') => {
+    const active = apSortCol === col;
+    const arrow = active ? (apSortDir === 'asc' ? ' ↑' : ' ↓') : ' ⇅';
+    return `<th class="${cls}" onclick="sortAP('${col}')" style="cursor:pointer;user-select:none;white-space:nowrap">${label}<span style="opacity:${active ? 1 : 0.35};font-size:11px">${arrow}</span></th>`;
+  };
+  const page = sorted.slice(apPage * PAGE_SIZE, (apPage + 1) * PAGE_SIZE);
   document.getElementById('ap-table-wrap').innerHTML = `
     <table class="data-table">
       <thead><tr>
-        <th>Bill No.</th><th>Supplier</th><th>Date</th><th>Due Date</th>
+        <th>Bill No.</th>${thAP('supplier','Supplier')}${thAP('bill_date','Date')}${thAP('due_date','Due Date')}
         <th>Currency</th><th class="right">Total</th><th class="right">Balance Due</th>
         <th>Status</th><th class="right">Actions</th>
       </tr></thead>
@@ -4679,6 +4700,12 @@ function renderAPTable(list) {
     ${renderPager(total, apPage, PAGE_SIZE, 'setApPage')}`;
 }
 function setApPage(n) { apPage = n; renderAPTable(_apFiltered); }
+function sortAP(col) {
+  if (apSortCol === col) { apSortDir = apSortDir === 'asc' ? 'desc' : 'asc'; }
+  else { apSortCol = col; apSortDir = 'asc'; }
+  apPage = 0;
+  renderAPTable(_apFiltered);
+}
 function filterAP() {
   apPage = 0;
   const q      = document.getElementById('ap-search').value.toLowerCase();
@@ -7056,9 +7083,11 @@ async function voidBill(id) {
 
 // ── AP STATE ──────────────────────────────────────────────────────
 let bills = [], _apFiltered = []; let apPage = 0;
+let apSortCol = null, apSortDir = 'asc';
 
 // ── INVOICE STATE ─────────────────────────────────────────────────
 let invoices = [], _arFiltered = []; let arPage = 0;
+let arSortCol = null, arSortDir = 'asc';
 let invLineCount  = 0;
 let editingInvoiceId = null;
 
@@ -7533,11 +7562,32 @@ function renderARTable(invs, contactMap) {
     return;
   }
   const cmap = contactMap || Object.fromEntries(contacts.map(c => [c.id, c.trading_name || c.name]));
-  const page = invs.slice(arPage * PAGE_SIZE, (arPage + 1) * PAGE_SIZE);
+  let sorted = [...invs];
+  if (arSortCol) {
+    sorted.sort((a, b) => {
+      let av, bv;
+      if (arSortCol === 'customer') {
+        av = (cmap[a.contact_id] || '').toLowerCase();
+        bv = (cmap[b.contact_id] || '').toLowerCase();
+      } else {
+        av = (arSortCol === 'invoice_date' ? a.invoice_date : a.due_date) || '';
+        bv = (arSortCol === 'invoice_date' ? b.invoice_date : b.due_date) || '';
+      }
+      if (av < bv) return arSortDir === 'asc' ? -1 : 1;
+      if (av > bv) return arSortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
+  const thAR = (col, label, cls = '') => {
+    const active = arSortCol === col;
+    const arrow = active ? (arSortDir === 'asc' ? ' ↑' : ' ↓') : ' ⇅';
+    return `<th class="${cls}" onclick="sortAR('${col}')" style="cursor:pointer;user-select:none;white-space:nowrap">${label}<span style="opacity:${active ? 1 : 0.35};font-size:11px">${arrow}</span></th>`;
+  };
+  const page = sorted.slice(arPage * PAGE_SIZE, (arPage + 1) * PAGE_SIZE);
   document.getElementById('ar-table-wrap').innerHTML = `
     <table class="data-table">
       <thead><tr>
-        <th>Invoice No.</th><th>Customer</th><th>Date</th><th>Due Date</th>
+        <th>Invoice No.</th>${thAR('customer','Customer')}${thAR('invoice_date','Date')}${thAR('due_date','Due Date')}
         <th>Currency</th><th class="right">Total</th><th class="right">Balance Due</th>
         <th>Status</th><th class="right">Actions</th>
       </tr></thead>
@@ -7566,6 +7616,12 @@ function renderARTable(invs, contactMap) {
     ${renderPager(total, arPage, PAGE_SIZE, 'setArPage')}`;
 }
 function setArPage(n) { arPage = n; renderARTable(_arFiltered); }
+function sortAR(col) {
+  if (arSortCol === col) { arSortDir = arSortDir === 'asc' ? 'desc' : 'asc'; }
+  else { arSortCol = col; arSortDir = 'asc'; }
+  arPage = 0;
+  renderARTable(_arFiltered);
+}
 
 function filterAR() {
   arPage = 0;
