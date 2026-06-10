@@ -334,6 +334,43 @@ body {
   padding: 12px;
   border-top: 1px solid var(--border);
 }
+.sidebar-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  padding: 0 6px;
+  margin-bottom: 4px;
+  border-radius: var(--radius);
+}
+.sidebar-section-header:hover { background: var(--bg-3); }
+.sidebar-section-header:hover .sidebar-section-label { color: var(--text-2); }
+.sidebar-section-header .sidebar-section-label { padding: 0; margin-bottom: 0; }
+.nav-toggle { font-size: 13px; font-weight: 700; color: var(--text-3); line-height: 1; }
+.nav-section-body.collapsed { display: none; }
+.nav-sub-section { margin-top: 2px; }
+.nav-sub-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  padding: 5px 10px;
+  border-radius: var(--radius);
+  margin-bottom: 1px;
+}
+.nav-sub-header:hover { background: var(--bg-3); }
+.nav-sub-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.nav-sub-toggle { font-size: 13px; font-weight: 700; color: var(--text-3); line-height: 1; }
+.nav-sub-body.collapsed { display: none; }
+.nav-item.sub-item { padding-left: 22px; }
 
 /* ── MAIN CONTENT ── */
 .main {
@@ -1281,81 +1318,101 @@ body {
 
   <!-- SIDEBAR -->
   <nav class="sidebar">
-    <div class="sidebar-section">
+    <div class="sidebar-section" data-section="overview">
       <div class="sidebar-section-label">Overview</div>
       <div class="nav-item active" onclick="navigate('dashboard')" id="nav-dashboard">
         <span class="nav-item-icon">📊</span> Dashboard
       </div>
     </div>
-    <div class="sidebar-section">
-      <div class="sidebar-section-label">Finance</div>
-      <div class="nav-item" onclick="navigate('coa')" id="nav-coa">
-        <span class="nav-item-icon">📋</span> Chart of Accounts
+    <div class="sidebar-section" data-section="finance">
+      <div class="sidebar-section-header" onclick="toggleNavSection('finance')">
+        <div class="sidebar-section-label">Finance</div>
+        <span class="nav-toggle" id="toggle-finance">&#8722;</span>
       </div>
-      <div class="nav-item" onclick="navigate('journal')" id="nav-journal">
-        <span class="nav-item-icon">📓</span> Journal Entries
-      </div>
-      <div class="nav-item" onclick="navigate('ar')" id="nav-ar">
-        <span class="nav-item-icon">📤</span> Accounts Receivable
-        <span class="nav-badge" id="badge-ar">0</span>
-      </div>
-      <div class="nav-item" onclick="navigate('credit-notes')" id="nav-credit-notes">
-        <span class="nav-item-icon">↩️</span> Credit Notes
-        <span class="nav-badge" id="badge-credit-notes">0</span>
-      </div>
-      <div class="nav-item" onclick="navigate('ap')" id="nav-ap">
-        <span class="nav-item-icon">📥</span> Accounts Payable
-        <span class="nav-badge" id="badge-ap">0</span>
-      </div>
-      <div class="nav-item" onclick="navigate('bank')" id="nav-bank">
-        <span class="nav-item-icon">🏦</span> Bank & Cash
-      </div>
-    </div>
-    <div class="sidebar-section">
-      <div class="sidebar-section-label">Sales & Marketing</div>
-      <div class="nav-item" onclick="navigate('quotations')" id="nav-quotations">
-        <span class="nav-item-icon">📝</span> Quotations
-        <span class="nav-badge" id="badge-quotations">0</span>
-      </div>
-      <div class="nav-item" onclick="navigate('delivery-notes')" id="nav-delivery-notes">
-        <span class="nav-item-icon">🚚</span> Delivery Notes
-        <span class="nav-badge" id="badge-delivery-notes">0</span>
-      </div>
-      <div class="nav-item" onclick="navigate('sales-leads')" id="nav-sales-leads">
-        <span class="nav-item-icon">👥</span> Sales Lead Reports
-      </div>
-    </div>
-    <div class="sidebar-section">
-      <div class="sidebar-section-label">Reports</div>
-      <div class="nav-item" onclick="navigate('aged-ar')" id="nav-aged-ar">
-        <span class="nav-item-icon">⏱️</span> Aged Receivables
-      </div>
-      <div class="nav-item" onclick="navigate('aged-ap')" id="nav-aged-ap">
-        <span class="nav-item-icon">⏳</span> Aged Payables
-      </div>
-      <div class="nav-item" onclick="navigate('pl')" id="nav-pl">
-        <span class="nav-item-icon">📈</span> Profit & Loss
-      </div>
-      <div class="nav-item" onclick="navigate('bs')" id="nav-bs">
-        <span class="nav-item-icon">⚖️</span> Balance Sheet
-      </div>
-      <div class="nav-item" onclick="navigate('tb')" id="nav-tb">
-        <span class="nav-item-icon">🗂️</span> Trial Balance
+      <div class="nav-section-body" id="section-body-finance">
+        <div class="nav-item" onclick="navigate('coa')" id="nav-coa">
+          <span class="nav-item-icon">📋</span> Chart of Accounts
+        </div>
+        <div class="nav-item" onclick="navigate('journal')" id="nav-journal">
+          <span class="nav-item-icon">📓</span> Journal Entries
+        </div>
+        <div class="nav-item" onclick="navigate('ar')" id="nav-ar">
+          <span class="nav-item-icon">📤</span> Accounts Receivable
+          <span class="nav-badge" id="badge-ar">0</span>
+        </div>
+        <div class="nav-item" onclick="navigate('credit-notes')" id="nav-credit-notes">
+          <span class="nav-item-icon">↩️</span> Credit Notes
+          <span class="nav-badge" id="badge-credit-notes">0</span>
+        </div>
+        <div class="nav-item" onclick="navigate('ap')" id="nav-ap">
+          <span class="nav-item-icon">📥</span> Accounts Payable
+          <span class="nav-badge" id="badge-ap">0</span>
+        </div>
+        <div class="nav-item" onclick="navigate('bank')" id="nav-bank">
+          <span class="nav-item-icon">🏦</span> Bank & Cash
+        </div>
+        <div class="nav-sub-section" id="sub-section-finance-reports">
+          <div class="nav-sub-header" onclick="toggleNavSubSection('finance-reports')">
+            <span class="nav-sub-label">Reports</span>
+            <span class="nav-sub-toggle" id="toggle-finance-reports">&#8722;</span>
+          </div>
+          <div class="nav-sub-body" id="sub-body-finance-reports">
+            <div class="nav-item sub-item" onclick="navigate('aged-ar')" id="nav-aged-ar">
+              <span class="nav-item-icon">⏱️</span> Aged Receivables
+            </div>
+            <div class="nav-item sub-item" onclick="navigate('aged-ap')" id="nav-aged-ap">
+              <span class="nav-item-icon">⏳</span> Aged Payables
+            </div>
+            <div class="nav-item sub-item" onclick="navigate('pl')" id="nav-pl">
+              <span class="nav-item-icon">📈</span> Profit & Loss
+            </div>
+            <div class="nav-item sub-item" onclick="navigate('bs')" id="nav-bs">
+              <span class="nav-item-icon">⚖️</span> Balance Sheet
+            </div>
+            <div class="nav-item sub-item" onclick="navigate('tb')" id="nav-tb">
+              <span class="nav-item-icon">🗂️</span> Trial Balance
+            </div>
+          </div>
+        </div>
       </div>
     </div>
-    <div class="sidebar-section">
-      <div class="sidebar-section-label">Setup</div>
-      <div class="nav-item" onclick="navigate('clients')" id="nav-clients">
-        <span class="nav-item-icon">👤</span> Clients
+    <div class="sidebar-section" data-section="sales">
+      <div class="sidebar-section-header" onclick="toggleNavSection('sales')">
+        <div class="sidebar-section-label">Sales & Marketing</div>
+        <span class="nav-toggle" id="toggle-sales">&#8722;</span>
       </div>
-      <div class="nav-item" onclick="navigate('vendors')" id="nav-vendors">
-        <span class="nav-item-icon">🏭</span> Vendors
+      <div class="nav-section-body" id="section-body-sales">
+        <div class="nav-item" onclick="navigate('quotations')" id="nav-quotations">
+          <span class="nav-item-icon">📝</span> Quotations
+          <span class="nav-badge" id="badge-quotations">0</span>
+        </div>
+        <div class="nav-item" onclick="navigate('delivery-notes')" id="nav-delivery-notes">
+          <span class="nav-item-icon">🚚</span> Delivery Notes
+          <span class="nav-badge" id="badge-delivery-notes">0</span>
+        </div>
+        <div class="nav-item" onclick="navigate('sales-leads')" id="nav-sales-leads">
+          <span class="nav-item-icon">👥</span> Sales Lead Reports
+        </div>
       </div>
-      <div class="nav-item" onclick="navigate('erp-companies')" id="nav-erp-companies">
-        <span class="nav-item-icon">🏢</span> ERP Companies
+    </div>
+    <div class="sidebar-section" data-section="setup">
+      <div class="sidebar-section-header" onclick="toggleNavSection('setup')">
+        <div class="sidebar-section-label">Setup</div>
+        <span class="nav-toggle" id="toggle-setup">&#8722;</span>
       </div>
-      <div class="nav-item" onclick="navigate('settings')" id="nav-settings">
-        <span class="nav-item-icon">⚙️</span> Settings
+      <div class="nav-section-body" id="section-body-setup">
+        <div class="nav-item" onclick="navigate('clients')" id="nav-clients">
+          <span class="nav-item-icon">👤</span> Clients
+        </div>
+        <div class="nav-item" onclick="navigate('vendors')" id="nav-vendors">
+          <span class="nav-item-icon">🏭</span> Vendors
+        </div>
+        <div class="nav-item" onclick="navigate('erp-companies')" id="nav-erp-companies">
+          <span class="nav-item-icon">🏢</span> ERP Companies
+        </div>
+        <div class="nav-item" onclick="navigate('settings')" id="nav-settings">
+          <span class="nav-item-icon">⚙️</span> Settings
+        </div>
       </div>
     </div>
     <div class="sidebar-footer">
@@ -3812,38 +3869,36 @@ async function initApp() {
 
   // Apply nav visibility based on role
   applyRoleNav();
+  restoreNavState();
 
   navigate('dashboard');
 }
 
 function applyRoleNav() {
   const role = currentUser?.role;
-
-  // Modules hidden from Sales users
   const financeOnly  = ['nav-coa','nav-journal','nav-ap','nav-bank','nav-pl','nav-bs','nav-tb','nav-aged-ap','nav-erp-companies','nav-settings'];
   const adminOnly    = ['nav-vendors'];
   const salesVisible = ['nav-dashboard','nav-quotations','nav-delivery-notes','nav-ar','nav-aged-ar','nav-clients','nav-sales-leads'];
 
   if (role === 'sales') {
-    // Hide everything not in salesVisible
     document.querySelectorAll('.nav-item[id^="nav-"]').forEach(el => {
-      const visible = salesVisible.some(v => el.id === v);
-      el.style.display = visible ? '' : 'none';
-    });
-    document.querySelectorAll('.sidebar-section-label').forEach((el, i) => {
-      // Hide Finance and Settings section labels
-      if (el.textContent.trim() === 'Finance' || el.textContent.trim() === 'Settings') {
-        el.style.display = 'none';
-      }
+      el.style.display = salesVisible.includes(el.id) ? '' : 'none';
     });
   } else if (role === 'user') {
-    // Hide finance modules
     financeOnly.forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
     });
   }
   // admin and super_admin see everything
+
+  // Hide Finance > Reports sub-section header if all its items are hidden
+  const subSec = document.getElementById('sub-section-finance-reports');
+  if (subSec) {
+    const anyVisible = Array.from(subSec.querySelectorAll('.nav-item'))
+                           .some(el => el.style.display !== 'none');
+    subSec.style.display = anyVisible ? '' : 'none';
+  }
 }
 
 // ── COMPANIES ────────────────────────────────────────────────────
@@ -3940,6 +3995,61 @@ function updateCompanyContext() {
   if (document.getElementById('ar-subtitle'))       document.getElementById('ar-subtitle').textContent       = label;
 }
 
+// ── NAV COLLAPSE ─────────────────────────────────────────────────
+const VIEW_SECTIONS = {
+  coa: ['finance'], journal: ['finance'], ar: ['finance'],
+  'credit-notes': ['finance'], ap: ['finance'], bank: ['finance'],
+  'aged-ar':  ['finance', 'finance-reports'],
+  'aged-ap':  ['finance', 'finance-reports'],
+  pl:         ['finance', 'finance-reports'],
+  bs:         ['finance', 'finance-reports'],
+  tb:         ['finance', 'finance-reports'],
+  quotations: ['sales'], 'delivery-notes': ['sales'], 'sales-leads': ['sales'],
+  clients: ['setup'], vendors: ['setup'], 'erp-companies': ['setup'], settings: ['setup']
+};
+
+function getNavState() {
+  try { return JSON.parse(localStorage.getItem('erp_nav_state')) || {}; }
+  catch { return {}; }
+}
+function saveNavState(key, collapsed) {
+  const s = getNavState(); s[key] = collapsed;
+  localStorage.setItem('erp_nav_state', JSON.stringify(s));
+}
+function _applyCollapse(id, collapsed) {
+  const body   = document.getElementById('section-body-' + id)
+              || document.getElementById('sub-body-'     + id);
+  const toggle = document.getElementById('toggle-' + id);
+  if (body)   body.classList.toggle('collapsed', collapsed);
+  if (toggle) toggle.textContent = collapsed ? '+' : '−';
+}
+function toggleNavSection(id) {
+  const body = document.getElementById('section-body-' + id);
+  if (!body) return;
+  const nowCollapsed = !body.classList.contains('collapsed');
+  _applyCollapse(id, nowCollapsed);
+  saveNavState(id, nowCollapsed);
+}
+function toggleNavSubSection(id) {
+  const body = document.getElementById('sub-body-' + id);
+  if (!body) return;
+  const nowCollapsed = !body.classList.contains('collapsed');
+  _applyCollapse(id, nowCollapsed);
+  saveNavState(id, nowCollapsed);
+}
+function expandSection(id) {
+  const body = document.getElementById('section-body-' + id)
+            || document.getElementById('sub-body-'     + id);
+  if (body && body.classList.contains('collapsed')) {
+    _applyCollapse(id, false);
+    saveNavState(id, false);
+  }
+}
+function restoreNavState() {
+  const state = getNavState();
+  Object.keys(state).forEach(id => { if (state[id]) _applyCollapse(id, true); });
+}
+
 // ── NAVIGATION ───────────────────────────────────────────────────
 function navigate(view) {
   document.querySelectorAll('.page-view').forEach(v => v.classList.remove('active'));
@@ -3947,6 +4057,7 @@ function navigate(view) {
   document.getElementById('view-' + view)?.classList.add('active');
   document.getElementById('nav-' + view)?.classList.add('active');
   currentView = view;
+  (VIEW_SECTIONS[view] || []).forEach(expandSection);
   if (window.innerWidth <= 900) closeSidebar();
   loadViewData(view);
 }

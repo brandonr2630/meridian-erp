@@ -11,10 +11,9 @@
 | Live URL | `https://erp.terranresources.com` |
 | GitHub repo | `brandonr2630/meridian-erp` |
 | Deploy | Push to `master` via PR → GitHub Actions → GreenGeeks cPanel auto-deploys |
+| Deploy workflow | `.github/workflows/deploy.yml` → cPanel Fileman API (`chi203.greengeeks.net`) |
 
 ---
-
-## Sessions
 
 ## Session 13 — P&L bug fix & handoff cleanup
 
@@ -381,13 +380,3 @@ Won opportunity → Convert to Quotation → pre-fills contact, currency, value 
 
 `type: development` on an opportunity covers this — no separate table needed. The `description` field captures evolving scope; activities log discovery conversations. Reaches `proposal` stage before a quote is raised.
 
-## To Do — Code Review Backlog
-
-All 17 items from the June 2026 code review are resolved (PRs #22–#25, #27–#30). No remaining backlog.
-
-## References
-
-- **Repository:** https://github.com/brandonr2630/meridian-erp
-- **Live Site:** https://erp.terranresources.com
-- **Deploy workflow:** `.github/workflows/deploy.yml`
-- **Deployment:** cPanel Fileman API → GreenGeeks (`chi203.greengeeks.net`)
