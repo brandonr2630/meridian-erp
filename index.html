@@ -4650,6 +4650,9 @@ function renderAPTable(list) {
       if (apSortCol === 'supplier') {
         av = (contactMap[a.contact_id] || '').toLowerCase();
         bv = (contactMap[b.contact_id] || '').toLowerCase();
+      } else if (apSortCol === 'bill_no') {
+        av = (a.bill_no || '').toLowerCase();
+        bv = (b.bill_no || '').toLowerCase();
       } else {
         av = (apSortCol === 'bill_date' ? a.bill_date : a.due_date) || '';
         bv = (apSortCol === 'bill_date' ? b.bill_date : b.due_date) || '';
@@ -4668,7 +4671,7 @@ function renderAPTable(list) {
   document.getElementById('ap-table-wrap').innerHTML = `
     <table class="data-table">
       <thead><tr>
-        <th>Bill No.</th><th>Invoice No.</th>${thAP('supplier','Supplier')}${thAP('bill_date','Date')}${thAP('due_date','Due Date')}
+        ${thAP('bill_no','Bill No.')}<th>Invoice No.</th>${thAP('supplier','Supplier')}${thAP('bill_date','Date')}${thAP('due_date','Due Date')}
         <th>Currency</th><th class="right">Total</th><th class="right">Balance Due</th>
         <th>Status</th><th class="right">Actions</th>
       </tr></thead>
