@@ -674,7 +674,19 @@ body {
 .badge-sent       { background: var(--blue-bg);  color: var(--blue);  border: 1px solid rgba(91,155,213,.2); }
 .badge-converted { background: var(--green-bg); color: var(--green); border: 1px solid rgba(76,175,125,.2); }
 .badge-declined  { background: var(--red-bg);   color: var(--red);   border: 1px solid rgba(224,92,92,.2); }
-.badge-expired   { background: var(--bg-4);     color: var(--text-3); border: 1px solid var(--border); }
+.badge-expired      { background: var(--bg-4);     color: var(--text-3);  border: 1px solid var(--border); }
+.badge-prospect     { background: var(--bg-4);     color: var(--text-3);  border: 1px solid var(--border); }
+.badge-qualified    { background: var(--blue-bg);  color: var(--blue);    border: 1px solid rgba(91,155,213,.2); }
+.badge-proposal     { background: var(--gold-bg);  color: var(--gold);    border: 1px solid var(--gold-border); }
+.badge-negotiation  { background: var(--amber-bg); color: var(--amber);   border: 1px solid rgba(232,160,32,.2); }
+.badge-won          { background: var(--green-bg); color: var(--green);   border: 1px solid rgba(76,175,125,.2); }
+.badge-lost         { background: var(--red-bg);   color: var(--red);     border: 1px solid rgba(224,92,92,.2); }
+.badge-standard     { background: var(--bg-4);     color: var(--text-3);  border: 1px solid var(--border); }
+.badge-development  { background: var(--gold-bg);  color: var(--gold);    border: 1px solid var(--gold-border); }
+.badge-call         { background: var(--blue-bg);  color: var(--blue);    border: 1px solid rgba(91,155,213,.2); }
+.badge-email        { background: var(--green-bg); color: var(--green);   border: 1px solid rgba(76,175,125,.2); }
+.badge-meeting      { background: var(--amber-bg); color: var(--amber);   border: 1px solid rgba(232,160,32,.2); }
+.badge-note         { background: var(--bg-4);     color: var(--text-3);  border: 1px solid var(--border); }
 
 /* ── MODAL ── */
 .modal-overlay {
@@ -1403,10 +1415,27 @@ body {
     </div>
     <div class="sidebar-section" data-section="sales">
       <div class="sidebar-section-header" onclick="toggleNavSection('sales')">
-        <div class="sidebar-section-label">Sales & Marketing</div>
+        <div class="sidebar-section-label">Sales</div>
         <span class="nav-toggle" id="toggle-sales">&#8722;</span>
       </div>
       <div class="nav-section-body" id="section-body-sales">
+        <div class="nav-sub-section" id="sub-section-sales-crm">
+          <div class="nav-sub-header" onclick="toggleNavSubSection('sales-crm')">
+            <span class="nav-sub-label">CRM</span>
+            <span class="nav-sub-toggle" id="toggle-sales-crm">&#8722;</span>
+          </div>
+          <div class="nav-sub-body" id="sub-body-sales-crm">
+            <div class="nav-item sub-item" onclick="navigate('pipeline')" id="nav-pipeline">
+              <span class="nav-item-icon">🎯</span> Pipeline
+            </div>
+            <div class="nav-item sub-item" onclick="navigate('crm-activities')" id="nav-crm-activities">
+              <span class="nav-item-icon">📅</span> Activities
+            </div>
+            <div class="nav-item sub-item" onclick="navigate('crm-tasks')" id="nav-crm-tasks">
+              <span class="nav-item-icon">✅</span> Tasks
+            </div>
+          </div>
+        </div>
         <div class="nav-item" onclick="navigate('sales-leads')" id="nav-sales-leads">
           <span class="nav-item-icon">👥</span> Sales Leads
         </div>
@@ -1810,6 +1839,121 @@ body {
         </div>
       </div>
       <div class="page-body"><div id="aged-ap-wrap"><div class="table-empty" style="margin-top:40px;">Select a date range and click Run Report.</div></div></div>
+    </div>
+
+    <!-- ── CRM PIPELINE ── -->
+    <div class="page-view" id="view-pipeline">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Pipeline</div>
+          <div class="page-subtitle">Sales opportunities &amp; deal tracking</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-primary btn-sm" onclick="openNewOpportunity()">+ New Opportunity</button>
+        </div>
+      </div>
+      <div class="page-body">
+        <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);">
+          <div class="stat-card accent"><div class="stat-label">Open Deals</div><div class="stat-value" id="opp-stat-open">—</div></div>
+          <div class="stat-card"><div class="stat-label">Open Value</div><div class="stat-value" id="opp-stat-value" style="font-size:18px;">—</div></div>
+          <div class="stat-card positive"><div class="stat-label">Won This Month</div><div class="stat-value" id="opp-stat-won">—</div></div>
+          <div class="stat-card"><div class="stat-label">Win Rate</div><div class="stat-value" id="opp-stat-rate">—</div></div>
+        </div>
+        <div class="table-wrap">
+          <div class="table-toolbar">
+            <span class="table-title">Opportunities</span>
+            <div class="search-box"><span class="search-icon">🔍</span><input type="text" placeholder="Search..." id="opp-search" oninput="filterPipeline()"></div>
+            <select class="filter-select" id="opp-stage-filter" onchange="filterPipeline()">
+              <option value="">All Stages</option>
+              <option value="prospect">Prospect</option>
+              <option value="qualified">Qualified</option>
+              <option value="proposal">Proposal</option>
+              <option value="negotiation">Negotiation</option>
+              <option value="won">Won</option>
+              <option value="lost">Lost</option>
+            </select>
+            <select class="filter-select" id="opp-type-filter" onchange="filterPipeline()">
+              <option value="">All Types</option>
+              <option value="standard">Standard</option>
+              <option value="development">Development</option>
+            </select>
+            <select class="filter-select" id="opp-owner-filter" onchange="filterPipeline()">
+              <option value="">All Owners</option>
+            </select>
+          </div>
+          <div id="opp-table-wrap"><div class="page-loading"><div class="loading-spinner"></div> Loading...</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CRM ACTIVITIES ── -->
+    <div class="page-view" id="view-crm-activities">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Activities</div>
+          <div class="page-subtitle">Calls, emails, meetings &amp; notes</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-primary btn-sm" onclick="openNewActivity(null)">+ Log Activity</button>
+        </div>
+      </div>
+      <div class="page-body">
+        <div class="table-wrap">
+          <div class="table-toolbar">
+            <span class="table-title">Activity Log</span>
+            <div class="search-box"><span class="search-icon">🔍</span><input type="text" placeholder="Search..." id="act-search" oninput="filterActivities()"></div>
+            <select class="filter-select" id="act-type-filter" onchange="filterActivities()">
+              <option value="">All Types</option>
+              <option value="call">Call</option>
+              <option value="email">Email</option>
+              <option value="meeting">Meeting</option>
+              <option value="note">Note</option>
+            </select>
+            <span style="font-size:12px;color:var(--text-3);white-space:nowrap">From</span>
+            <input type="date" class="filter-select" id="act-date-from" onchange="filterActivities()" style="width:140px">
+            <span style="font-size:12px;color:var(--text-3)">–</span>
+            <input type="date" class="filter-select" id="act-date-to" onchange="filterActivities()" style="width:140px">
+          </div>
+          <div id="act-table-wrap"><div class="page-loading"><div class="loading-spinner"></div> Loading...</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CRM TASKS ── -->
+    <div class="page-view" id="view-crm-tasks">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Tasks</div>
+          <div class="page-subtitle">Follow-ups &amp; to-dos</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-primary btn-sm" onclick="openNewTask(null)">+ New Task</button>
+        </div>
+      </div>
+      <div class="page-body">
+        <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);">
+          <div class="stat-card negative"><div class="stat-label">Overdue</div><div class="stat-value" id="task-stat-overdue">—</div></div>
+          <div class="stat-card accent"><div class="stat-label">Due Today</div><div class="stat-value" id="task-stat-today">—</div></div>
+          <div class="stat-card"><div class="stat-label">Due This Week</div><div class="stat-value" id="task-stat-week">—</div></div>
+          <div class="stat-card positive"><div class="stat-label">Completed</div><div class="stat-value" id="task-stat-done">—</div></div>
+        </div>
+        <div class="table-wrap">
+          <div class="table-toolbar">
+            <span class="table-title">Tasks</span>
+            <div class="search-box"><span class="search-icon">🔍</span><input type="text" placeholder="Search..." id="task-search" oninput="filterTasks()"></div>
+            <select class="filter-select" id="task-status-filter" onchange="filterTasks()">
+              <option value="">All</option>
+              <option value="open">Open</option>
+              <option value="overdue">Overdue</option>
+              <option value="completed">Completed</option>
+            </select>
+            <select class="filter-select" id="task-assignee-filter" onchange="filterTasks()">
+              <option value="">All Assignees</option>
+            </select>
+          </div>
+          <div id="task-table-wrap"><div class="page-loading"><div class="loading-spinner"></div> Loading...</div></div>
+        </div>
+      </div>
     </div>
 
     <!-- ── SALES LEAD REPORTS ── -->
@@ -3731,6 +3875,152 @@ body {
   </div>
 </div>
 
+<div class="modal-overlay" id="modal-opportunity" onclick="if(event.target===this)closeModal('modal-opportunity')">
+  <div class="modal" style="max-width:min(640px,95vw);">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-opp-title">New Opportunity</div>
+      <button class="modal-close" onclick="closeModal('modal-opportunity')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid grid-2">
+        <div class="field" style="grid-column:span 2;">
+          <label class="field-label">Name *</label>
+          <input type="text" id="opp-name" placeholder="e.g. Website Redesign — Acme Corp">
+        </div>
+        <div class="field" style="grid-column:span 2;">
+          <label class="field-label">Contact</label>
+          <select id="opp-contact"></select>
+        </div>
+        <div class="field">
+          <label class="field-label">Stage</label>
+          <select id="opp-stage">
+            <option value="prospect">Prospect</option>
+            <option value="qualified">Qualified</option>
+            <option value="proposal">Proposal</option>
+            <option value="negotiation">Negotiation</option>
+            <option value="won">Won</option>
+            <option value="lost">Lost</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label">Type</label>
+          <select id="opp-type">
+            <option value="standard">Standard</option>
+            <option value="development">Development</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label">Value</label>
+          <input type="number" id="opp-value" placeholder="0.00" min="0" step="0.01">
+        </div>
+        <div class="field">
+          <label class="field-label">Currency</label>
+          <select id="opp-currency">
+            <option value="TTD">TTD</option>
+            <option value="USD">USD</option>
+            <option value="GYD">GYD</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label">Expected Close</label>
+          <input type="date" id="opp-close-date">
+        </div>
+        <div class="field">
+          <label class="field-label">Owner</label>
+          <select id="opp-owner"><option value="">— Unassigned —</option></select>
+        </div>
+        <div class="field" style="grid-column:span 2;">
+          <label class="field-label">Description</label>
+          <textarea id="opp-description" rows="3" placeholder="Scope, background, notes..."></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-opportunity')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveOpportunity()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-crm-activity" onclick="if(event.target===this)closeModal('modal-crm-activity')">
+  <div class="modal" style="max-width:min(560px,95vw);">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-act-title">Log Activity</div>
+      <button class="modal-close" onclick="closeModal('modal-crm-activity')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid grid-2">
+        <div class="field">
+          <label class="field-label">Type</label>
+          <select id="act-type">
+            <option value="call">Call</option>
+            <option value="email">Email</option>
+            <option value="meeting">Meeting</option>
+            <option value="note">Note</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label">Date</label>
+          <input type="date" id="act-date">
+        </div>
+        <div class="field" style="grid-column:span 2;">
+          <label class="field-label">Subject *</label>
+          <input type="text" id="act-subject" placeholder="e.g. Follow-up call with client">
+        </div>
+        <div class="field" style="grid-column:span 2;">
+          <label class="field-label">Opportunity</label>
+          <select id="act-opportunity"><option value="">— None —</option></select>
+        </div>
+        <div class="field" style="grid-column:span 2;">
+          <label class="field-label">Notes</label>
+          <textarea id="act-notes" rows="4" placeholder="What was discussed..."></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-crm-activity')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveActivity()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-crm-task" onclick="if(event.target===this)closeModal('modal-crm-task')">
+  <div class="modal" style="max-width:min(560px,95vw);">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-task-title">New Task</div>
+      <button class="modal-close" onclick="closeModal('modal-crm-task')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid grid-2">
+        <div class="field" style="grid-column:span 2;">
+          <label class="field-label">Title *</label>
+          <input type="text" id="task-title" placeholder="e.g. Send proposal to client">
+        </div>
+        <div class="field">
+          <label class="field-label">Due Date</label>
+          <input type="date" id="task-due-date">
+        </div>
+        <div class="field">
+          <label class="field-label">Assignee</label>
+          <select id="task-assignee"><option value="">— Unassigned —</option></select>
+        </div>
+        <div class="field" style="grid-column:span 2;">
+          <label class="field-label">Opportunity</label>
+          <select id="task-opportunity"><option value="">— None —</option></select>
+        </div>
+        <div class="field" style="grid-column:span 2;">
+          <label class="field-label">Description</label>
+          <textarea id="task-description" rows="3" placeholder="Optional details..."></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-crm-task')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveTask()">Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════════════════════
 //  TERRAN GROUP ERP — Finance Module
@@ -3746,7 +4036,10 @@ const Q = {
   salesLeads:   () => `company_id=eq.${currentCompany.id}&is_active=eq.true&order=name`,
   clients:      () => `company_id=eq.${currentCompany.id}&contact_type=in.(customer,both)&order=name`,
   vendors:      () => `company_id=eq.${currentCompany.id}&contact_type=eq.supplier&order=name`,
-  companies:    'is_active=eq.true&order=code',
+  companies:     'is_active=eq.true&order=code',
+  crmOpps:       () => `company_id=eq.${currentCompany.id}&order=created_at.desc`,
+  crmActivities: () => `company_id=eq.${currentCompany.id}&order=activity_date.desc,created_at.desc`,
+  crmTasks:      () => `company_id=eq.${currentCompany.id}&order=due_date.asc,created_at.desc`,
 };
 
 // ── STATE ────────────────────────────────────────────────────────
@@ -3830,7 +4123,7 @@ async function sb(path, opts = {}) {
 }
 async function sbGet(table, params = '')        { return sb(`${table}?${params}`); }
 async function sbPost(table, body)              { return sb(table, { method: 'POST', body }); }
-const NO_UPDATED_AT = new Set(['sequence_counters']);
+const NO_UPDATED_AT = new Set(['sequence_counters','crm_activities','crm_tasks']);
 async function sbPatch(table, id, body)         { const ts = NO_UPDATED_AT.has(table) ? {} : { updated_at: nowISO() }; return sb(`${table}?id=eq.${id}`, { method: 'PATCH', body: { ...body, ...ts } }); }
 async function sbPatchWhere(table, where, body) { const ts = NO_UPDATED_AT.has(table) ? {} : { updated_at: nowISO() }; return sb(`${table}?${where}`, { method: 'PATCH', prefer: 'return=minimal', body: { ...body, ...ts } }); }
 async function sbDelete(table, id)              { return sb(`${table}?id=eq.${id}`, { method: 'DELETE', prefer: 'return=minimal' }); }
@@ -3979,7 +4272,7 @@ function applyRoleNav() {
   const role = currentUser?.role;
   const financeOnly  = ['nav-coa','nav-journal','nav-ap','nav-bank','nav-pl','nav-bs','nav-tb','nav-aged-ap','nav-erp-companies','nav-settings'];
   const adminOnly    = ['nav-vendors'];
-  const salesVisible = ['nav-dashboard','nav-quotations','nav-delivery-notes','nav-ar','nav-aged-ar','nav-clients','nav-sales-leads'];
+  const salesVisible = ['nav-dashboard','nav-quotations','nav-delivery-notes','nav-ar','nav-aged-ar','nav-clients','nav-sales-leads','nav-pipeline','nav-crm-activities','nav-crm-tasks'];
 
   if (role === 'sales') {
     document.querySelectorAll('.nav-item[id^="nav-"]').forEach(el => {
@@ -4107,6 +4400,7 @@ const VIEW_SECTIONS = {
   tb:         ['finance', 'finance-reports'],
   cf:         ['finance', 'finance-reports'],
   quotations: ['sales'], 'delivery-notes': ['sales'], 'sales-leads': ['sales'],
+  pipeline: ['sales','sales-crm'], 'crm-activities': ['sales','sales-crm'], 'crm-tasks': ['sales','sales-crm'],
   clients: ['setup'], vendors: ['setup'], 'erp-companies': ['setup'], settings: ['setup']
 };
 
@@ -4191,7 +4485,10 @@ async function loadViewData(view) {
     case 'aged-ap':   initAgedFilters('ap', ['supplier','both']); break;
     case 'quotations':     await loadQuotations(); break;
     case 'delivery-notes': await loadDeliveryNotes(); break;
-    case 'sales-leads': await loadSalesLeadsPage(); break;
+    case 'sales-leads':    await loadSalesLeadsPage(); break;
+    case 'pipeline':       await loadPipeline(); break;
+    case 'crm-activities': await loadCRMActivities(); break;
+    case 'crm-tasks':      await loadCRMTasks(); break;
     case 'clients':   await loadClients(); break;
     case 'vendors':   await loadVendors(); break;
     case 'erp-companies': await loadErpCompanies(); break;
@@ -8016,6 +8313,11 @@ function printPDF(btn) {
 // ── QUOTATIONS ───────────────────────────────────────────────────
 let quotations = [], _quoFiltered = []; let quoPage = 0;
 let salesLeads = [];
+let crmOpps = [], _oppFiltered = [], oppPage = 0;
+let crmActivities = [], _actFiltered = [], actPage = 0;
+let crmTasks = [], _taskFiltered = [], taskPage = 0;
+let erpUsers = [];
+let _editOppId = null, _editActId = null, _editTaskId = null;
 
 async function loadQuotations() {
   const quoWrap = document.getElementById('quo-table-wrap');
@@ -10282,6 +10584,431 @@ function showToast(msg, type='success') {
   t.className = `toast show ${type}`;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), 4000);
+}
+
+// ── CRM PIPELINE ─────────────────────────────────────────────────
+async function loadPipeline() {
+  document.getElementById('opp-table-wrap').innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading...</div>';
+  try {
+    [crmOpps, erpUsers] = await Promise.all([
+      sbGet('crm_opportunities', Q.crmOpps()),
+      sbGet('erp_users', 'is_active=eq.true&order=full_name').catch(() => [])
+    ]);
+    const ownerSel = document.getElementById('opp-owner-filter');
+    if (ownerSel) ownerSel.innerHTML = '<option value="">All Owners</option>' +
+      erpUsers.map(u => `<option value="${u.id}">${escHTML(u.full_name)}</option>`).join('');
+    renderPipelineStats();
+    filterPipeline();
+  } catch(e) {
+    document.getElementById('opp-table-wrap').innerHTML = '<div class="table-empty">Error loading pipeline.</div>';
+  }
+}
+
+function renderPipelineStats() {
+  const currency = currentCompany.base_currency || currentCompany.currency;
+  const open     = crmOpps.filter(o => !['won','lost'].includes(o.stage));
+  const openVal  = open.filter(o => o.currency === currency).reduce((s,o) => s + parseFloat(o.value||0), 0);
+  const monthStr = new Date().toISOString().slice(0,7);
+  const wonMonth = crmOpps.filter(o => o.stage === 'won' && (o.updated_at||'').slice(0,7) === monthStr).length;
+  const closed   = crmOpps.filter(o => ['won','lost'].includes(o.stage));
+  const won      = crmOpps.filter(o => o.stage === 'won');
+  const rate     = closed.length > 0 ? Math.round((won.length / closed.length) * 100) : null;
+  document.getElementById('opp-stat-open').textContent  = open.length;
+  document.getElementById('opp-stat-value').textContent = fmt(openVal, currency);
+  document.getElementById('opp-stat-won').textContent   = wonMonth;
+  document.getElementById('opp-stat-rate').textContent  = rate !== null ? rate + '%' : '—';
+}
+
+function filterPipeline() {
+  const q     = (document.getElementById('opp-search')?.value || '').toLowerCase();
+  const stage = document.getElementById('opp-stage-filter')?.value || '';
+  const type  = document.getElementById('opp-type-filter')?.value  || '';
+  const owner = document.getElementById('opp-owner-filter')?.value || '';
+  const contactMap = {}; contacts.forEach(c => { contactMap[c.id] = c.trading_name || c.name; });
+  _oppFiltered = crmOpps.filter(o => {
+    if (stage && o.stage !== stage) return false;
+    if (type  && o.type  !== type)  return false;
+    if (owner && o.owner_id !== owner) return false;
+    if (q && ![(o.name||''), (contactMap[o.contact_id]||'')].join(' ').toLowerCase().includes(q)) return false;
+    return true;
+  });
+  oppPage = 0;
+  renderPipelineTable();
+}
+
+function renderPipelineTable() {
+  const wrap = document.getElementById('opp-table-wrap');
+  if (!wrap) return;
+  const contactMap = {}; contacts.forEach(c => { contactMap[c.id] = c.trading_name || c.name; });
+  const ownerMap   = {}; erpUsers.forEach(u => { ownerMap[u.id] = u.full_name; });
+  if (!_oppFiltered.length) { wrap.innerHTML = '<div class="table-empty">No opportunities found.</div>'; return; }
+  const slice = _oppFiltered.slice(oppPage * PAGE_SIZE, (oppPage + 1) * PAGE_SIZE);
+  wrap.innerHTML = `
+    <table class="data-table">
+      <thead><tr>
+        <th>Name</th><th>Contact</th><th>Stage</th><th>Type</th>
+        <th class="right">Value</th><th>Close Date</th><th>Owner</th><th></th>
+      </tr></thead>
+      <tbody>${slice.map(o => `
+        <tr>
+          <td class="bold">${escHTML(o.name)}</td>
+          <td>${escHTML(contactMap[o.contact_id] || '—')}</td>
+          <td><span class="badge badge-${o.stage}">${o.stage}</span></td>
+          <td><span class="badge badge-${o.type}">${o.type}</span></td>
+          <td class="right mono">${o.value ? fmt(parseFloat(o.value), o.currency || currentCompany.currency) : '—'}</td>
+          <td class="mono">${o.expected_close || '—'}</td>
+          <td>${escHTML(ownerMap[o.owner_id] || '—')}</td>
+          <td class="right" style="white-space:nowrap;">
+            <button class="btn btn-ghost btn-xs" aria-label="Log Activity" onclick="openNewActivity('${o.id}')">📅</button>
+            <button class="btn btn-ghost btn-xs" aria-label="New Task" onclick="openNewTask('${o.id}')">✅</button>
+            <button class="btn btn-ghost btn-xs" aria-label="Edit" onclick="openEditOpportunity('${o.id}')">✏️</button>
+            <button class="btn btn-ghost btn-xs" aria-label="Delete" onclick="deleteOpportunity('${o.id}')">🗑</button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    ${renderPager(_oppFiltered.length, oppPage, PAGE_SIZE, 'setOppPage')}`;
+}
+
+function setOppPage(n) { oppPage = n; renderPipelineTable(); }
+
+function openNewOpportunity() {
+  _editOppId = null;
+  document.getElementById('modal-opp-title').textContent = 'New Opportunity';
+  ['opp-name','opp-value','opp-close-date','opp-description'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('opp-stage').value    = 'prospect';
+  document.getElementById('opp-type').value     = 'standard';
+  document.getElementById('opp-currency').value = currentCompany.base_currency || currentCompany.currency || 'TTD';
+  _populateOppSelects(null, null);
+  document.getElementById('modal-opportunity').classList.add('show');
+}
+
+function openEditOpportunity(id) {
+  const o = crmOpps.find(x => x.id === id);
+  if (!o) return;
+  _editOppId = id;
+  document.getElementById('modal-opp-title').textContent  = 'Edit Opportunity';
+  document.getElementById('opp-name').value        = o.name            || '';
+  document.getElementById('opp-stage').value       = o.stage           || 'prospect';
+  document.getElementById('opp-type').value        = o.type            || 'standard';
+  document.getElementById('opp-value').value       = o.value           || '';
+  document.getElementById('opp-currency').value    = o.currency        || currentCompany.currency || 'TTD';
+  document.getElementById('opp-close-date').value  = o.expected_close  || '';
+  document.getElementById('opp-description').value = o.description     || '';
+  _populateOppSelects(o.contact_id, o.owner_id);
+  document.getElementById('modal-opportunity').classList.add('show');
+}
+
+function _populateOppSelects(selContactId, selOwnerId) {
+  document.getElementById('opp-contact').innerHTML = '<option value="">— No contact —</option>' +
+    contacts.map(c => `<option value="${c.id}"${c.id===selContactId?' selected':''}>${escHTML(c.trading_name||c.name)}</option>`).join('');
+  document.getElementById('opp-owner').innerHTML = '<option value="">— Unassigned —</option>' +
+    erpUsers.map(u => `<option value="${u.id}"${u.id===selOwnerId?' selected':''}>${escHTML(u.full_name)}</option>`).join('');
+}
+
+async function saveOpportunity() {
+  const name = document.getElementById('opp-name').value.trim();
+  if (!name) { showToast('Name is required.', 'error'); return; }
+  const payload = {
+    company_id:     currentCompany.id,
+    contact_id:     document.getElementById('opp-contact').value    || null,
+    name,
+    stage:          document.getElementById('opp-stage').value,
+    type:           document.getElementById('opp-type').value,
+    value:          parseFloat(document.getElementById('opp-value').value) || null,
+    currency:       document.getElementById('opp-currency').value   || null,
+    expected_close: document.getElementById('opp-close-date').value || null,
+    description:    document.getElementById('opp-description').value.trim() || null,
+    owner_id:       document.getElementById('opp-owner').value      || null,
+  };
+  try {
+    if (_editOppId) await sbPatch('crm_opportunities', _editOppId, payload);
+    else            await sbPost('crm_opportunities', payload);
+    closeModal('modal-opportunity');
+    showToast(_editOppId ? 'Opportunity updated.' : 'Opportunity created.', 'success');
+    await loadPipeline();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function deleteOpportunity(id) {
+  if (!confirm('Delete this opportunity? Linked activities and tasks will also be deleted.')) return;
+  try {
+    await sbDelete('crm_opportunities', id);
+    showToast('Opportunity deleted.', 'success');
+    await loadPipeline();
+  } catch(e) { showToast('Error deleting opportunity.', 'error'); }
+}
+
+// ── CRM ACTIVITIES ────────────────────────────────────────────────
+async function loadCRMActivities() {
+  document.getElementById('act-table-wrap').innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading...</div>';
+  try {
+    [crmActivities, crmOpps, erpUsers] = await Promise.all([
+      sbGet('crm_activities', Q.crmActivities()),
+      sbGet('crm_opportunities', Q.crmOpps()),
+      sbGet('erp_users', 'is_active=eq.true&order=full_name').catch(() => [])
+    ]);
+    filterActivities();
+  } catch(e) {
+    document.getElementById('act-table-wrap').innerHTML = '<div class="table-empty">Error loading activities.</div>';
+  }
+}
+
+function filterActivities() {
+  const q    = (document.getElementById('act-search')?.value    || '').toLowerCase();
+  const type = document.getElementById('act-type-filter')?.value || '';
+  const from = document.getElementById('act-date-from')?.value   || '';
+  const to   = document.getElementById('act-date-to')?.value     || '';
+  _actFiltered = crmActivities.filter(a => {
+    if (type && a.type !== type)           return false;
+    if (from && a.activity_date < from)    return false;
+    if (to   && a.activity_date > to)      return false;
+    if (q && ![(a.subject||''), (a.notes||'')].join(' ').toLowerCase().includes(q)) return false;
+    return true;
+  });
+  actPage = 0;
+  renderActivitiesTable();
+}
+
+function renderActivitiesTable() {
+  const wrap = document.getElementById('act-table-wrap');
+  if (!wrap) return;
+  const oppMap  = {}; crmOpps.forEach(o  => { oppMap[o.id]  = o.name;      });
+  const userMap = {}; erpUsers.forEach(u => { userMap[u.id] = u.full_name; });
+  if (!_actFiltered.length) { wrap.innerHTML = '<div class="table-empty">No activities found.</div>'; return; }
+  const slice = _actFiltered.slice(actPage * PAGE_SIZE, (actPage + 1) * PAGE_SIZE);
+  wrap.innerHTML = `
+    <table class="data-table">
+      <thead><tr>
+        <th>Date</th><th>Type</th><th>Subject</th><th>Opportunity</th><th>By</th><th></th>
+      </tr></thead>
+      <tbody>${slice.map(a => `
+        <tr>
+          <td class="mono">${a.activity_date}</td>
+          <td><span class="badge badge-${a.type}">${a.type}</span></td>
+          <td>${escHTML(a.subject)}</td>
+          <td>${escHTML(oppMap[a.opportunity_id] || '—')}</td>
+          <td>${escHTML(userMap[a.user_id] || '—')}</td>
+          <td class="right" style="white-space:nowrap;">
+            <button class="btn btn-ghost btn-xs" aria-label="Edit" onclick="openEditActivity('${a.id}')">✏️</button>
+            <button class="btn btn-ghost btn-xs" aria-label="Delete" onclick="deleteActivity('${a.id}')">🗑</button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    ${renderPager(_actFiltered.length, actPage, PAGE_SIZE, 'setActPage')}`;
+}
+
+function setActPage(n) { actPage = n; renderActivitiesTable(); }
+
+function openNewActivity(oppId) {
+  _editActId = null;
+  document.getElementById('modal-act-title').textContent = 'Log Activity';
+  document.getElementById('act-type').value    = 'call';
+  document.getElementById('act-date').value    = todayDate();
+  document.getElementById('act-subject').value = '';
+  document.getElementById('act-notes').value   = '';
+  _populateActOppSelect(oppId || null);
+  document.getElementById('modal-crm-activity').classList.add('show');
+}
+
+function openEditActivity(id) {
+  const a = crmActivities.find(x => x.id === id);
+  if (!a) return;
+  _editActId = id;
+  document.getElementById('modal-act-title').textContent = 'Edit Activity';
+  document.getElementById('act-type').value    = a.type          || 'call';
+  document.getElementById('act-date').value    = a.activity_date || todayDate();
+  document.getElementById('act-subject').value = a.subject       || '';
+  document.getElementById('act-notes').value   = a.notes         || '';
+  _populateActOppSelect(a.opportunity_id);
+  document.getElementById('modal-crm-activity').classList.add('show');
+}
+
+function _populateActOppSelect(selOppId) {
+  document.getElementById('act-opportunity').innerHTML = '<option value="">— None —</option>' +
+    crmOpps.map(o => `<option value="${o.id}"${o.id===selOppId?' selected':''}>${escHTML(o.name)}</option>`).join('');
+}
+
+async function saveActivity() {
+  const subject = document.getElementById('act-subject').value.trim();
+  if (!subject) { showToast('Subject is required.', 'error'); return; }
+  const payload = {
+    company_id:     currentCompany.id,
+    opportunity_id: document.getElementById('act-opportunity').value || null,
+    type:           document.getElementById('act-type').value,
+    subject,
+    notes:          document.getElementById('act-notes').value.trim() || null,
+    activity_date:  document.getElementById('act-date').value         || todayDate(),
+    user_id:        currentUser?.id || null,
+  };
+  try {
+    if (_editActId) await sbPatchWhere('crm_activities', `id=eq.${_editActId}`, payload);
+    else            await sbPost('crm_activities', payload);
+    closeModal('modal-crm-activity');
+    showToast(_editActId ? 'Activity updated.' : 'Activity logged.', 'success');
+    await loadCRMActivities();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function deleteActivity(id) {
+  if (!confirm('Delete this activity?')) return;
+  try {
+    await sbDelete('crm_activities', id);
+    showToast('Activity deleted.', 'success');
+    await loadCRMActivities();
+  } catch(e) { showToast('Error deleting activity.', 'error'); }
+}
+
+// ── CRM TASKS ─────────────────────────────────────────────────────
+async function loadCRMTasks() {
+  document.getElementById('task-table-wrap').innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading...</div>';
+  try {
+    [crmTasks, crmOpps, erpUsers] = await Promise.all([
+      sbGet('crm_tasks', Q.crmTasks()),
+      sbGet('crm_opportunities', Q.crmOpps()),
+      sbGet('erp_users', 'is_active=eq.true&order=full_name').catch(() => [])
+    ]);
+    const asSel = document.getElementById('task-assignee-filter');
+    if (asSel) asSel.innerHTML = '<option value="">All Assignees</option>' +
+      erpUsers.map(u => `<option value="${u.id}">${escHTML(u.full_name)}</option>`).join('');
+    renderTaskStats();
+    filterTasks();
+  } catch(e) {
+    document.getElementById('task-table-wrap').innerHTML = '<div class="table-empty">Error loading tasks.</div>';
+  }
+}
+
+function renderTaskStats() {
+  const today  = todayDate();
+  const in7    = new Date(); in7.setDate(in7.getDate() + 7);
+  const in7str = in7.toISOString().slice(0,10);
+  const open   = crmTasks.filter(t => !t.completed);
+  document.getElementById('task-stat-overdue').textContent = open.filter(t => t.due_date && t.due_date < today).length;
+  document.getElementById('task-stat-today').textContent   = open.filter(t => t.due_date === today).length;
+  document.getElementById('task-stat-week').textContent    = open.filter(t => t.due_date > today && t.due_date <= in7str).length;
+  document.getElementById('task-stat-done').textContent    = crmTasks.filter(t => t.completed).length;
+}
+
+function filterTasks() {
+  const q        = (document.getElementById('task-search')?.value       || '').toLowerCase();
+  const status   = document.getElementById('task-status-filter')?.value  || '';
+  const assignee = document.getElementById('task-assignee-filter')?.value || '';
+  const today    = todayDate();
+  _taskFiltered  = crmTasks.filter(t => {
+    if (assignee && t.assignee_id !== assignee) return false;
+    if (status === 'completed' && !t.completed) return false;
+    if (status === 'open'      && (t.completed || (t.due_date && t.due_date < today))) return false;
+    if (status === 'overdue'   && (!t.due_date || t.due_date >= today || t.completed)) return false;
+    if (q && !(t.title||'').toLowerCase().includes(q)) return false;
+    return true;
+  });
+  taskPage = 0;
+  renderTasksTable();
+}
+
+function renderTasksTable() {
+  const wrap = document.getElementById('task-table-wrap');
+  if (!wrap) return;
+  const oppMap  = {}; crmOpps.forEach(o  => { oppMap[o.id]  = o.name;      });
+  const userMap = {}; erpUsers.forEach(u => { userMap[u.id] = u.full_name; });
+  const today   = todayDate();
+  if (!_taskFiltered.length) { wrap.innerHTML = '<div class="table-empty">No tasks found.</div>'; return; }
+  const slice = _taskFiltered.slice(taskPage * PAGE_SIZE, (taskPage + 1) * PAGE_SIZE);
+  wrap.innerHTML = `
+    <table class="data-table">
+      <thead><tr>
+        <th>Title</th><th>Opportunity</th><th>Due Date</th><th>Assignee</th><th>Status</th><th></th>
+      </tr></thead>
+      <tbody>${slice.map(t => {
+        const overdue = !t.completed && t.due_date && t.due_date < today;
+        const statusBadge = t.completed ? '<span class="badge badge-paid">Completed</span>'
+          : overdue ? '<span class="badge badge-overdue">Overdue</span>'
+          : '<span class="badge badge-partial">Open</span>';
+        return `<tr${t.completed ? ' style="opacity:0.6;"' : ''}>
+          <td>${escHTML(t.title)}</td>
+          <td>${escHTML(oppMap[t.opportunity_id] || '—')}</td>
+          <td class="mono"${overdue ? ' style="color:var(--red);"' : ''}>${t.due_date || '—'}</td>
+          <td>${escHTML(userMap[t.assignee_id] || '—')}</td>
+          <td>${statusBadge}</td>
+          <td class="right" style="white-space:nowrap;">
+            ${!t.completed ? `<button class="btn btn-ghost btn-xs" aria-label="Mark complete" onclick="completeTask('${t.id}')">✓</button>` : ''}
+            <button class="btn btn-ghost btn-xs" aria-label="Edit" onclick="openEditTask('${t.id}')">✏️</button>
+            <button class="btn btn-ghost btn-xs" aria-label="Delete" onclick="deleteTask('${t.id}')">🗑</button>
+          </td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>
+    ${renderPager(_taskFiltered.length, taskPage, PAGE_SIZE, 'setTaskPage')}`;
+}
+
+function setTaskPage(n) { taskPage = n; renderTasksTable(); }
+
+function openNewTask(oppId) {
+  _editTaskId = null;
+  document.getElementById('modal-task-title').textContent = 'New Task';
+  ['task-title','task-due-date','task-description'].forEach(id => document.getElementById(id).value = '');
+  _populateTaskSelects(oppId || null, null);
+  document.getElementById('modal-crm-task').classList.add('show');
+}
+
+function openEditTask(id) {
+  const t = crmTasks.find(x => x.id === id);
+  if (!t) return;
+  _editTaskId = id;
+  document.getElementById('modal-task-title').textContent = 'Edit Task';
+  document.getElementById('task-title').value       = t.title       || '';
+  document.getElementById('task-due-date').value    = t.due_date    || '';
+  document.getElementById('task-description').value = t.description || '';
+  _populateTaskSelects(t.opportunity_id, t.assignee_id);
+  document.getElementById('modal-crm-task').classList.add('show');
+}
+
+function _populateTaskSelects(selOppId, selAssigneeId) {
+  document.getElementById('task-opportunity').innerHTML = '<option value="">— None —</option>' +
+    crmOpps.map(o => `<option value="${o.id}"${o.id===selOppId?' selected':''}>${escHTML(o.name)}</option>`).join('');
+  document.getElementById('task-assignee').innerHTML = '<option value="">— Unassigned —</option>' +
+    erpUsers.map(u => `<option value="${u.id}"${u.id===selAssigneeId?' selected':''}>${escHTML(u.full_name)}</option>`).join('');
+}
+
+async function saveTask() {
+  const title = document.getElementById('task-title').value.trim();
+  if (!title) { showToast('Title is required.', 'error'); return; }
+  const payload = {
+    company_id:     currentCompany.id,
+    opportunity_id: document.getElementById('task-opportunity').value || null,
+    title,
+    description:    document.getElementById('task-description').value.trim() || null,
+    due_date:       document.getElementById('task-due-date').value            || null,
+    assignee_id:    document.getElementById('task-assignee').value            || null,
+  };
+  try {
+    if (_editTaskId) await sbPatchWhere('crm_tasks', `id=eq.${_editTaskId}`, payload);
+    else             await sbPost('crm_tasks', payload);
+    closeModal('modal-crm-task');
+    showToast(_editTaskId ? 'Task updated.' : 'Task created.', 'success');
+    await loadCRMTasks();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function completeTask(id) {
+  try {
+    await sbPatchWhere('crm_tasks', `id=eq.${id}`, { completed: true, completed_at: nowISO() });
+    showToast('Task completed.', 'success');
+    crmTasks = crmTasks.map(t => t.id === id ? { ...t, completed: true, completed_at: nowISO() } : t);
+    renderTaskStats();
+    filterTasks();
+  } catch(e) { showToast('Error completing task.', 'error'); }
+}
+
+async function deleteTask(id) {
+  if (!confirm('Delete this task?')) return;
+  try {
+    await sbDelete('crm_tasks', id);
+    showToast('Task deleted.', 'success');
+    await loadCRMTasks();
+  } catch(e) { showToast('Error deleting task.', 'error'); }
 }
 </script>
 </body>
