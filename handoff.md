@@ -18,7 +18,7 @@
 ## Session 18 — CRM Module & Sales nav amalgamation
 
 **Date:** 2026-06-10
-**Branch / PR:** TBD
+**Branch / PR:** [PR #53](https://github.com/brandonr2630/meridian-erp/pull/53)
 
 ### What Changed
 
