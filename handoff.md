@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-10 · Session 12*
+*Last updated: 2026-06-10 · Session 13*
 
 ---
 
@@ -15,6 +15,25 @@
 ---
 
 ## Sessions
+
+## Session 13 — P&L bug fix & handoff cleanup
+
+**Date:** 2026-06-10
+**Branch:** `fix/pl-report-null-uuid-and-handoff` → [PR #36](https://github.com/brandonr2630/meridian-erp/pull/36)
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| P&L null UUID error | `runPL()` now fetches `jeIds` once upfront and returns early with "No posted journal entries found for this period." when null | `getPostedJEIds` returns `null` when no posted JEs exist in the range; interpolating that into `journal_id=in.(null)` caused Postgres to throw `invalid input syntax for type uuid: "null"` — matching guard already existed in `runBS()` |
+| Handoff header | Corrected `Session 11` → `Session 12`, date → 2026-06-10 | Stale from prior session |
+| Handoff Next Up | Inlined full CRM architecture design — replaced "See memory for details" | Handoff must be self-contained without relying on session memory |
+
+### Outstanding
+
+- CRM module — see **Next Up** below
+
+---
 
 ## Session 12 — Multi-company fixes & RLS hardening
 
