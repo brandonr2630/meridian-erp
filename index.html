@@ -1377,6 +1377,9 @@ body {
             <div class="nav-item sub-item" onclick="navigate('tb')" id="nav-tb">
               <span class="nav-item-icon">🗂️</span> Trial Balance
             </div>
+            <div class="nav-item sub-item" onclick="navigate('cf')" id="nav-cf">
+              <span class="nav-item-icon">💸</span> Cash Flow
+            </div>
           </div>
         </div>
       </div>
@@ -1957,6 +1960,24 @@ body {
       <div class="page-body"><div id="tb-wrap"><div class="table-empty" style="margin-top:40px;">Select a period and click Run Report.</div></div></div>
     </div>
 
+    <!-- ── CASH FLOW ── -->
+    <div class="page-view" id="view-cf">
+      <div class="page-header">
+        <div><div class="page-title">Cash Flow Statement</div><div class="page-subtitle">Indirect method</div></div>
+        <div class="page-actions">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:11px;color:var(--text-3);">From</label>
+            <input type="date" id="cf-date-from" class="filter-select mono" style="width:140px;">
+            <label style="font-size:11px;color:var(--text-3);">To</label>
+            <input type="date" id="cf-date-to"   class="filter-select mono" style="width:140px;">
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="previewReport('cf','Cash Flow Statement')">👁 Preview</button>
+          <button class="btn btn-outline btn-sm" onclick="openDownloadMenu('cf',event)">⬇ Download ▾</button>
+          <button class="btn btn-primary btn-sm" onclick="runCF()">▶ Run Report</button>
+        </div>
+      </div>
+      <div class="page-body"><div id="cf-wrap"><div class="table-empty" style="margin-top:40px;">Select a period and click Run Report.</div></div></div>
+    </div>
 
     <!-- ── CLIENTS ── -->
     <div class="page-view" id="view-clients">
@@ -4064,6 +4085,7 @@ const VIEW_SECTIONS = {
   pl:         ['finance', 'finance-reports'],
   bs:         ['finance', 'finance-reports'],
   tb:         ['finance', 'finance-reports'],
+  cf:         ['finance', 'finance-reports'],
   quotations: ['sales'], 'delivery-notes': ['sales'], 'sales-leads': ['sales'],
   clients: ['setup'], vendors: ['setup'], 'erp-companies': ['setup'], settings: ['setup']
 };
@@ -4144,6 +4166,7 @@ async function loadViewData(view) {
     case 'pl':        initReportDates(); break;
     case 'bs':        initReportDates(); break;
     case 'tb':        initReportDates(); break;
+    case 'cf':        initReportDates(); break;
     case 'aged-ar':   initAgedFilters('ar', ['customer','both']); break;
     case 'aged-ap':   initAgedFilters('ap', ['supplier','both']); break;
     case 'quotations':     await loadQuotations(); break;
@@ -6674,8 +6697,8 @@ function initReportDates() {
   // Default to active fiscal year or current calendar year
   const now = new Date(), y = now.getFullYear();
   const from = `${y}-01-01`, to = now.toISOString().slice(0,10);
-  ['pl-date-from','tb-date-from'].forEach(id => { const el = document.getElementById(id); if (el && !el.value) el.value = from; });
-  ['pl-date-to','tb-date-to'].forEach(id => { const el = document.getElementById(id); if (el && !el.value) el.value = to; });
+  ['pl-date-from','tb-date-from','cf-date-from'].forEach(id => { const el = document.getElementById(id); if (el && !el.value) el.value = from; });
+  ['pl-date-to','tb-date-to','cf-date-to'].forEach(id => { const el = document.getElementById(id); if (el && !el.value) el.value = to; });
   ['bs-date','aged-ar-to','aged-ap-to'].forEach(id => { const el = document.getElementById(id); if (el && !el.value) el.value = to; });
 }
 
@@ -6885,7 +6908,8 @@ function triggerBlobDownload(blob, filename) {
 async function downloadReportAs(type, format) {
   const titleMap = {
     pl: 'Profit & Loss', bs: 'Balance Sheet', tb: 'Trial Balance',
-    'aged-ar': 'Aged Receivables', 'aged-ap': 'Aged Payables'
+    'aged-ar': 'Aged Receivables', 'aged-ap': 'Aged Payables',
+    cf: 'Cash Flow Statement'
   };
   const title    = titleMap[type] || type.toUpperCase();
   const safeName = `${(currentCompany?.name||'Report').replace(/[^a-zA-Z0-9]/g,'_')}_${type}_${new Date().toISOString().slice(0,10)}`;
@@ -7114,6 +7138,147 @@ async function runTB() {
   } catch(e) { wrap.innerHTML = `<div class="table-empty">Error: ${escHTML(e.message)}</div>`; }
 }
 
+async function runCF() {
+  const from = document.getElementById('cf-date-from').value;
+  const to   = document.getElementById('cf-date-to').value;
+  if (!from || !to) { showToast('Select a date range.', 'warn'); return; }
+  const wrap = document.getElementById('cf-wrap');
+  wrap.innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Generating Cash Flow Statement…</div>';
+  try {
+    const coId = currentCompany.id;
+    const cur  = currentCompany.currency;
+
+    // Opening balance = day before the period
+    const d = new Date(from); d.setDate(d.getDate() - 1);
+    const openDateStr = d.toISOString().slice(0, 10);
+
+    const [jeIds, openBal, closeBal] = await Promise.all([
+      getPostedJEIds(coId, from, to),
+      getBSBalances(coId, openDateStr),
+      getBSBalances(coId, to)
+    ]);
+
+    const accMap = {};
+    accounts.forEach(a => { accMap[a.id] = a; });
+
+    // Sum raw debit-credit balances for accounts matching type + optional subtype
+    const sumBy = (bal, type, subtype) =>
+      accounts.filter(a => a.account_type === type && (!subtype || a.account_subtype === subtype) && !a.is_header)
+              .reduce((s, a) => s + (bal[a.id] || 0), 0);
+
+    // Cash flow impact: -(close - open)
+    // Works for both assets (decrease = source) and liabilities (increase = source, stored negative)
+    const chg = (open, close) => -(close - open);
+
+    // ── 1. NET INCOME ─────────────────────────────────────────────
+    let netIncome = 0, depreciation = 0;
+    if (jeIds) {
+      const lines = await sbGet('journal_lines', `journal_id=in.(${jeIds})`);
+      let totalRev = 0, totalExp = 0;
+      lines.forEach(l => {
+        const acc = accMap[l.account_id];
+        if (!acc) return;
+        if (acc.account_type === 'revenue') totalRev += parseFloat(l.credit||0) - parseFloat(l.debit||0);
+        if (acc.account_type === 'expense') {
+          const amount = parseFloat(l.debit||0) - parseFloat(l.credit||0);
+          totalExp += amount;
+          if (/depreciation|amortiz/i.test(acc.name)) depreciation += amount;
+        }
+      });
+      netIncome = totalRev - totalExp;
+    }
+
+    // ── 2. WORKING CAPITAL CHANGES ────────────────────────────────
+    const wcItems = [
+      { label: 'Change in Accounts Receivable',  val: chg(sumBy(openBal,'asset','receivable'),   sumBy(closeBal,'asset','receivable')) },
+      { label: 'Change in Inventory',            val: chg(sumBy(openBal,'asset','inventory'),    sumBy(closeBal,'asset','inventory')) },
+      { label: 'Change in Prepaid Expenses',     val: chg(sumBy(openBal,'asset','prepaid'),      sumBy(closeBal,'asset','prepaid')) },
+      { label: 'Change in Accounts Payable',     val: chg(sumBy(openBal,'liability','payable'),  sumBy(closeBal,'liability','payable')) },
+      { label: 'Change in Accrued Liabilities',  val: chg(sumBy(openBal,'liability','accrued'),  sumBy(closeBal,'liability','accrued')) },
+      { label: 'Change in Tax Payable',          val: chg(sumBy(openBal,'liability','tax'),      sumBy(closeBal,'liability','tax')) },
+    ].filter(r => Math.abs(r.val) > 0.005);
+
+    const totalWC  = wcItems.reduce((s, r) => s + r.val, 0);
+    const netOps   = netIncome + depreciation + totalWC;
+
+    // ── 3. INVESTING ──────────────────────────────────────────────
+    const chgFixed    = chg(sumBy(openBal,'asset','fixed_asset'), sumBy(closeBal,'asset','fixed_asset'));
+    const netInvesting = chgFixed;
+
+    // ── 4. FINANCING ──────────────────────────────────────────────
+    const chgDebt   = chg(sumBy(openBal,'liability','long_term'), sumBy(closeBal,'liability','long_term'));
+    const chgEquity = chg(sumBy(openBal,'equity',null),           sumBy(closeBal,'equity',null));
+    const finItems  = [
+      { label: 'Net change in long-term borrowings',       val: chgDebt },
+      { label: 'Net equity movements (capital / drawings)', val: chgEquity },
+    ].filter(r => Math.abs(r.val) > 0.005);
+    const netFinancing = finItems.reduce((s, r) => s + r.val, 0);
+
+    // ── 5. CASH RECONCILIATION ────────────────────────────────────
+    const isCash   = a => a.account_type === 'asset' && (a.account_subtype === 'cash' || a.is_bank) && !a.is_header;
+    const openCash  = accounts.filter(isCash).reduce((s, a) => s + (openBal[a.id]  || 0), 0);
+    const closeCash = accounts.filter(isCash).reduce((s, a) => s + (closeBal[a.id] || 0), 0);
+    const calcNet   = netOps + netInvesting + netFinancing;
+    const actualNet = closeCash - openCash;
+    const gap       = calcNet - actualNet;
+
+    // ── RENDER ────────────────────────────────────────────────────
+    const secHead = label =>
+      `<tr class="header-row"><td colspan="2" style="padding:10px 16px;font-size:12px;letter-spacing:1px;text-transform:uppercase;">${label}</td></tr>`;
+
+    const row = (label, val, { indent, bold, grand, subheader } = {}) => {
+      if (subheader) return `<tr><td colspan="2" style="padding:8px 16px 4px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-3);">${label}</td></tr>`;
+      if (grand) return `<tr style="border-top:3px solid var(--text);background:var(--gold-bg);">
+        <td style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;padding:12px 16px;color:var(--gold);">${label}</td>
+        <td class="right mono" style="font-weight:700;font-size:14px;color:${val >= 0 ? 'var(--green)' : 'var(--red)'};">${fmt(val, cur)}</td>
+      </tr>`;
+      const trStyle  = bold ? ' style="border-top:2px solid var(--border);"' : '';
+      const tdLabel  = bold ? 'font-weight:600;padding:10px 16px;' : indent ? 'padding-left:32px;' : '';
+      const amtColor = !bold && val < 0 ? 'color:var(--red);' : '';
+      return `<tr${trStyle}>
+        <td style="${tdLabel}">${label}</td>
+        <td class="right mono" style="${bold ? 'font-weight:600;' : ''}${amtColor}">${Math.abs(val) < 0.005 ? '—' : fmt(val, cur)}</td>
+      </tr>`;
+    };
+
+    wrap.innerHTML = `
+      <div style="max-width:700px;">
+        <div style="margin-bottom:20px;">
+          <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;">${currentCompany.name}</div>
+          <div style="font-size:12px;color:var(--text-3);">Cash Flow Statement · ${formatDateDisplay(from)} to ${formatDateDisplay(to)}</div>
+        </div>
+        <table class="data-table"><tbody>
+          ${secHead('Operating Activities')}
+          ${row(`Net ${netIncome >= 0 ? 'Profit' : 'Loss'}`, netIncome, { indent: true })}
+          ${depreciation > 0 ? row('Depreciation & Amortisation (add back)', depreciation, { indent: true }) : ''}
+          ${wcItems.length ? row('Changes in working capital', 0, { subheader: true }) : ''}
+          ${wcItems.map(r => row(r.label, r.val, { indent: true })).join('')}
+          ${row('Net Cash from Operating Activities', netOps, { bold: true })}
+
+          ${secHead('Investing Activities')}
+          ${row('Net change in fixed assets', chgFixed, { indent: true })}
+          ${row('Net Cash from Investing Activities', netInvesting, { bold: true })}
+
+          ${secHead('Financing Activities')}
+          ${finItems.length
+            ? finItems.map(r => row(r.label, r.val, { indent: true })).join('')
+            : row('No financing activity in period', 0, { indent: true })}
+          ${row('Net Cash from Financing Activities', netFinancing, { bold: true })}
+
+          ${row('Net Change in Cash', calcNet, { grand: true })}
+
+          ${secHead('Cash Reconciliation')}
+          ${row(`Opening cash (${formatDateDisplay(openDateStr)})`, openCash, { indent: true })}
+          ${row(`Closing cash (${formatDateDisplay(to)})`, closeCash, { indent: true })}
+          ${row('Actual net change in cash', actualNet, { bold: true })}
+        </tbody></table>
+        ${Math.abs(gap) < 0.01
+          ? '<div style="margin-top:12px;padding:10px 14px;background:var(--green-bg);border:1px solid rgba(76,175,125,.2);border-radius:var(--radius);font-size:12px;color:var(--green);">✓ Reconciled — calculated net change matches actual cash movement</div>'
+          : `<div style="margin-top:12px;padding:10px 14px;background:var(--amber-bg,#fffbeb);border:1px solid rgba(245,158,11,.2);border-radius:var(--radius);font-size:12px;color:var(--amber,#b45309);">⚠ Reconciliation gap of ${fmt(Math.abs(gap), cur)} — check for accounts not assigned to a sub-type, or unposted entries</div>`}
+      </div>`;
+  } catch(e) { wrap.innerHTML = `<div class="table-empty">Error: ${escHTML(e.message)}</div>`; }
+}
+
 // ── REPORT HELPERS ────────────────────────────────────────────────
 async function getPostedJEIds(coId, from, to) {
   const jes = await sbGet('journal_entries', `company_id=eq.${coId}&status=eq.posted&entry_date=gte.${from}&entry_date=lte.${to}&select=id`);
@@ -7126,6 +7291,17 @@ async function getPostedJEIdsAsAt(coId, asAt) {
 async function getAccountIdsByType(coId, type) {
   const accs = await sbGet('accounts', `company_id=eq.${coId}&account_type=eq.${type}&is_header=eq.false&select=id`);
   return accs.length ? accs.map(a => a.id).join(',') : "'00000000-0000-0000-0000-000000000000'";
+}
+async function getBSBalances(coId, date) {
+  const jeIds = await getPostedJEIdsAsAt(coId, date);
+  if (!jeIds) return {};
+  const lines = await sbGet('journal_lines', `journal_id=in.(${jeIds})`);
+  const bal = {};
+  lines.forEach(l => {
+    if (!bal[l.account_id]) bal[l.account_id] = 0;
+    bal[l.account_id] += parseFloat(l.debit||0) - parseFloat(l.credit||0);
+  });
+  return bal;
 }
 
 // ── CARRY sales_lead_id THROUGH quote → invoice conversion ────────

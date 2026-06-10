@@ -15,6 +15,37 @@
 
 ---
 
+## Session 17 — Cash Flow Statement
+
+**Date:** 2026-06-10
+**Branch / PR:** TBD
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| Cash Flow Statement view | New `view-cf` page with From/To date pickers, Preview, Download ▾, and Run Report | Matches the exact structure of P&L / BS / TB views |
+| Nav item | "💸 Cash Flow" added under Finance → Reports sub-menu after Trial Balance | Wired to `navigate('cf')` |
+| `VIEW_SECTIONS` | `cf: ['finance', 'finance-reports']` added | Auto-expands the Finance and Reports sections on navigation |
+| `loadViewData` | `case 'cf': initReportDates()` | Populates default date range on first visit |
+| `initReportDates` | `cf-date-from` / `cf-date-to` added to the date-init arrays | Defaults to current calendar year |
+| `downloadReportAs` titleMap | `cf: 'Cash Flow Statement'` | Enables PDF, HTML, CSV, and Excel export |
+| `getBSBalances(coId, date)` | New helper — returns a `{ account_id: debit-credit balance }` map for all posted JEs up to `date` | Shared by both opening and closing balance snapshots |
+| `runCF()` | Indirect method: Net Income → Depreciation add-back → Working Capital changes → Investing (fixed assets) → Financing (long-term debt + equity movements) → Net Change in Cash → Reconciliation against actual bank/cash balances | WC lines filtered to non-zero only; reconciliation banner green (✓) or amber (⚠ with gap amount) |
+
+### Logic notes
+
+- **Sign convention:** `chg(open, close) = -(close - open)` works for both asset and liability accounts using raw debit-credit balances — asset decrease and liability increase both yield positive cash flow.
+- **Cash accounts:** identified as `account_type='asset'` AND (`account_subtype='cash'` OR `is_bank=true`).
+- **Depreciation:** detected by account name regex `/depreciation|amortiz/i` within expense accounts; added back in the operating section.
+- **Reconciliation gap:** if `calcNet ≠ actualNet`, an amber banner shows the gap and prompts the user to check account sub-type assignments or unposted entries.
+
+### Outstanding
+
+- CRM module — see **Next Up** below
+
+---
+
 ## Session 16 — Typography preferences
 
 **Date:** 2026-06-10
@@ -412,6 +443,43 @@ PDFs rendered client-side with a custom multi-page renderer. SheetJS lazy-loaded
 ## Known Issues
 
 No known issues.
+
+## Backlog
+
+Items are grouped by theme and ordered by suggested priority within each group. Tick them off as sessions complete them.
+
+### Sales & CRM
+
+- [ ] **CRM module** *(designed, not yet built)* — Pipeline, Activities, Tasks views; "Convert to Quote" on won deals; `type: development` for dev inquiry handling. See architecture detail below.
+- [ ] **Email delivery** — send invoices, quotes, and receipts directly from the app via Supabase Edge Function → Resend/SendGrid. Closes the biggest day-to-day manual step.
+- [ ] **Recurring invoices** — flag an invoice as recurring with a frequency; auto-generate the next one on due date. Useful for retainer/monthly clients.
+- [ ] **Overdue reminders** — automated or one-click email reminder for outstanding AR balances. Drives off existing `balance_due` and `due_date` fields.
+
+### Finance
+
+- [x] **Cash Flow Statement** — indirect method; `runCF()` + `getBSBalances()` helper. See Session 17.
+- [ ] **Purchase Orders** — PO that a bill can be matched against; enables approval-before-spend workflows and 3-way matching.
+- [ ] **VAT / Tax report** — output tax vs input tax by period; useful for filing. Derived from tax-category accounts already in the CoA.
+- [ ] **Spend approval thresholds** — bills/POs above a configurable amount require admin approval before payment is released. Ties into existing role system.
+- [ ] **Credit limit management** — configurable credit limit per client; warning or block when a new invoice would exceed it.
+
+### Dashboard & Reporting
+
+- [ ] **Cash position widget** — sum of all bank account balances by currency on the dashboard. Data already in `bank_accounts`.
+- [ ] **Receivables / payables aging chart** — visual bar chart version of the aged AR/AP reports shown on the dashboard.
+- [ ] **Sales pipeline KPIs** — deals by stage, conversion rate, average deal size. Builds on CRM module.
+
+### Usability
+
+- [ ] **Keyboard shortcuts** — `N` new record in current view, `S` save, `/` focus search. High ROI for daily users.
+- [ ] **Bulk operations** — multi-select rows in AR/AP to mark as sent, batch-apply a payment, or export selected.
+- [ ] **Global search / command palette** — `Ctrl+K` to jump to any client, invoice, or bill by number/name.
+
+### Integration
+
+- [ ] **Q2M Job Cards link** — cost summary from a job card pre-fills a Meridian invoice. Both apps share the same Supabase project.
+
+---
 
 ## Next Up
 
