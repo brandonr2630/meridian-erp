@@ -1622,6 +1622,10 @@ body {
               <option value="overdue">Overdue</option>
               <option value="void">Void</option>
             </select>
+            <span style="font-size:12px;color:var(--text-3);white-space:nowrap">From</span>
+            <input type="date" class="filter-select" id="ar-date-from" onchange="filterAR()" style="width:140px">
+            <span style="font-size:12px;color:var(--text-3)">–</span>
+            <input type="date" class="filter-select" id="ar-date-to" onchange="filterAR()" style="width:140px">
           </div>
           <div id="ar-table-wrap"><div class="page-loading"><div class="loading-spinner"></div> Loading...</div></div>
         </div>
@@ -1851,6 +1855,10 @@ body {
               <option value="paid">Paid</option>
               <option value="overdue">Overdue</option>
             </select>
+            <span style="font-size:12px;color:var(--text-3);white-space:nowrap">From</span>
+            <input type="date" class="filter-select" id="ap-date-from" onchange="filterAP()" style="width:140px">
+            <span style="font-size:12px;color:var(--text-3)">–</span>
+            <input type="date" class="filter-select" id="ap-date-to" onchange="filterAP()" style="width:140px">
           </div>
           <div id="ap-table-wrap"><div class="page-loading"><div class="loading-spinner"></div> Loading...</div></div>
         </div>
@@ -4712,12 +4720,17 @@ function sortAP(col) {
 }
 function filterAP() {
   apPage = 0;
-  const q      = document.getElementById('ap-search').value.toLowerCase();
-  const status = document.getElementById('ap-status-filter').value;
-  const cmap   = Object.fromEntries(contacts.map(c => [c.id, (c.trading_name || c.name).toLowerCase()]));
+  const q        = document.getElementById('ap-search').value.toLowerCase();
+  const status   = document.getElementById('ap-status-filter').value;
+  const dateFrom = document.getElementById('ap-date-from').value;
+  const dateTo   = document.getElementById('ap-date-to').value;
+  const cmap     = Object.fromEntries(contacts.map(c => [c.id, (c.trading_name || c.name).toLowerCase()]));
   const filtered = bills.filter(b => {
     if (status && b.status !== status) return false;
     if (q && !(b.bill_no||'').toLowerCase().includes(q) && !(cmap[b.contact_id]||'').includes(q)) return false;
+    const d = (b.bill_date||'').slice(0,10);
+    if (dateFrom && d < dateFrom) return false;
+    if (dateTo   && d > dateTo)   return false;
     return true;
   });
   renderAPTable(filtered);
@@ -7629,8 +7642,10 @@ function sortAR(col) {
 
 function filterAR() {
   arPage = 0;
-  const q      = document.getElementById('ar-search').value.toLowerCase();
-  const status = document.getElementById('ar-status-filter').value;
+  const q       = document.getElementById('ar-search').value.toLowerCase();
+  const status  = document.getElementById('ar-status-filter').value;
+  const dateFrom = document.getElementById('ar-date-from').value;
+  const dateTo   = document.getElementById('ar-date-to').value;
   const contactMap = {};
   contacts.forEach(c => { contactMap[c.id] = (c.trading_name || c.name).toLowerCase(); });
   const filtered = invoices.filter(inv => {
@@ -7638,6 +7653,9 @@ function filterAR() {
     if (q && !(inv.invoice_no||'').toLowerCase().includes(q) &&
         !(contactMap[inv.contact_id]||'').includes(q) &&
         !(inv.client_ref||'').toLowerCase().includes(q)) return false;
+    const d = (inv.invoice_date||'').slice(0,10);
+    if (dateFrom && d < dateFrom) return false;
+    if (dateTo   && d > dateTo)   return false;
     return true;
   });
   renderARTable(filtered, Object.fromEntries(contacts.map(c => [c.id, c.trading_name || c.name])));
