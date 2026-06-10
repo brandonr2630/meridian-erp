@@ -158,6 +158,20 @@ body {
 /* Notification badge */
 .notif-badge { position:absolute; top:4px; right:4px; width:8px; height:8px; background:var(--red); border-radius:50%; border:2px solid var(--bg-2); }
 .topbar-icon-btn { position:relative; }
+/* Notification dropdown */
+.notif-dropdown { position:absolute; top:calc(100% + 8px); right:0; background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); width:300px; z-index:var(--z-dropdown); display:none; overflow:hidden; }
+.notif-dropdown.open { display:block; }
+.notif-header { padding:12px 14px 10px; font-size:12px; font-weight:600; color:var(--text-2); border-bottom:1px solid var(--border); text-transform:uppercase; letter-spacing:.04em; }
+.notif-empty { padding:20px 14px; font-size:13px; color:var(--text-3); text-align:center; }
+.notif-row { display:flex; align-items:center; gap:10px; padding:11px 14px; cursor:pointer; border-bottom:1px solid var(--border); transition:background .1s; }
+.notif-row:last-child { border-bottom:none; }
+.notif-row:hover { background:var(--bg-3); }
+.notif-urgent { border-left:3px solid var(--red); }
+.notif-row-icon { font-size:16px; flex-shrink:0; }
+.notif-row-body { flex:1; min-width:0; }
+.notif-row-title { font-size:13px; font-weight:500; color:var(--text); }
+.notif-row-sub { font-size:11px; color:var(--text-3); margin-top:2px; }
+.notif-row-arrow { font-size:18px; color:var(--text-3); flex-shrink:0; }
 
 /* Company Switcher */
 .company-switcher {
@@ -1305,7 +1319,10 @@ body {
   </div>
 
   <div class="topbar-right">
-    <button class="topbar-icon-btn" title="Notifications" aria-label="Notifications" id="notif-btn" onclick="toggleNotifications()">🔔<span class="notif-badge" id="notif-badge" style="display:none;"></span></button>
+    <div style="position:relative;" id="notif-wrapper">
+      <button class="topbar-icon-btn" title="Notifications" aria-label="Notifications" id="notif-btn" onclick="toggleNotifications()">🔔<span class="notif-badge" id="notif-badge" style="display:none;"></span></button>
+      <div class="notif-dropdown" id="notif-dropdown"></div>
+    </div>
     <button class="topbar-icon-btn" title="Toggle theme" aria-label="Toggle theme" onclick="toggleTheme()" id="theme-toggle-btn">🌙</button>
     <button class="topbar-icon-btn" title="Settings" aria-label="Settings" onclick="navigate('settings')">⚙️</button>
     <div class="topbar-divider"></div>
@@ -3755,6 +3772,7 @@ let journalEntries   = [];
 let bankAccounts     = [];
 let coaExpanded      = {};
 let currentView      = 'dashboard';
+let notifData        = null;
 let editingAccountId = null;
 let _accessToken     = null;
 
@@ -4226,8 +4244,14 @@ async function loadDashboard() {
     document.getElementById('alert-bills-val').textContent   = billsDue7.length ? fmt(bills7val, currentCompany.currency) : 'All clear';
     document.getElementById('alert-drafts').textContent      = totalDrafts || '—';
 
-    // Update notification badge
+    // Update notification badge and panel data
     updateNotifBadge(overdue.length + expiring.length + billsDue7.length);
+    notifData = {
+      overdue:   { count: overdue.length,    value: overdueVal, currency: base },
+      due7:      { count: due7.length,        value: due7val,    currency: base },
+      expiring:  { count: expiring.length },
+      billsDue7: { count: billsDue7.length,   value: bills7val,  currency: currentCompany.currency }
+    };
 
     // Highlight overdue card if there are overdue invoices
     const overdueCard = document.getElementById('alert-overdue')?.closest('.stat-card');
@@ -10179,11 +10203,33 @@ async function switchCompanyAndNav(coId, view) {
 }
 
 function toggleNotifications() {
-  // Future: open a slide-out notifications panel
-  // For now navigate to dashboard attention zone
-  navigate('dashboard');
-  showToast('Notifications panel coming soon.', 'info');
+  const panel = document.getElementById('notif-dropdown');
+  if (panel.classList.contains('open')) { panel.classList.remove('open'); return; }
+  panel.innerHTML = renderNotifPanel();
+  panel.classList.add('open');
 }
+function closeNotifPanel() {
+  document.getElementById('notif-dropdown')?.classList.remove('open');
+}
+function renderNotifPanel() {
+  const d = notifData;
+  const total = d ? (d.overdue.count + d.due7.count + d.expiring.count + d.billsDue7.count) : 0;
+  const header = `<div class="notif-header">Notifications</div>`;
+  if (!d || total === 0) return header + `<div class="notif-empty">✅ All clear — nothing needs attention</div>`;
+  let rows = '';
+  if (d.overdue.count)   rows += _notifRow('🔴','Overdue Invoices',`${d.overdue.count} invoice${d.overdue.count>1?'s':''} · ${fmt(d.overdue.value,d.overdue.currency)}`,"navigate('ar');closeNotifPanel()",true);
+  if (d.due7.count)      rows += _notifRow('🟡','Due in 7 Days',`${d.due7.count} invoice${d.due7.count>1?'s':''} · ${fmt(d.due7.value,d.due7.currency)}`,"navigate('ar');closeNotifPanel()");
+  if (d.expiring.count)  rows += _notifRow('📋','Expiring Quotes',`${d.expiring.count} quotation${d.expiring.count>1?'s':''} expiring soon`,"navigate('quotations');closeNotifPanel()");
+  if (d.billsDue7.count) rows += _notifRow('📦','Bills Due Soon',`${d.billsDue7.count} bill${d.billsDue7.count>1?'s':''} · ${fmt(d.billsDue7.value,d.billsDue7.currency)}`,"navigate('ap');closeNotifPanel()");
+  return header + rows;
+}
+function _notifRow(icon, title, sub, action, urgent=false) {
+  return `<div class="notif-row${urgent?' notif-urgent':''}" onclick="${action}"><span class="notif-row-icon">${icon}</span><div class="notif-row-body"><div class="notif-row-title">${title}</div><div class="notif-row-sub">${sub}</div></div><span class="notif-row-arrow">›</span></div>`;
+}
+document.addEventListener('click', e => {
+  const wrapper = document.getElementById('notif-wrapper');
+  if (wrapper && !wrapper.contains(e.target)) closeNotifPanel();
+});
 
 function updateNotifBadge(count) {
   const badge = document.getElementById('notif-badge');
