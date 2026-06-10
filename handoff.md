@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-10 · Session 16*
+*Last updated: 2026-06-10 · Session 19*
 
 ---
 
@@ -12,6 +12,29 @@
 | GitHub repo | `brandonr2630/meridian-erp` |
 | Deploy | Push to `master` via PR → GitHub Actions → GreenGeeks cPanel auto-deploys |
 | Deploy workflow | `.github/workflows/deploy.yml` → cPanel Fileman API (`chi203.greengeeks.net`) |
+
+---
+
+## Session 19 — Custom SVG nav icons
+
+**Date:** 2026-06-10
+**Branches / PRs:** [PR #55](https://github.com/brandonr2630/meridian-erp/pull/55) · [PR #56](https://github.com/brandonr2630/meridian-erp/pull/56)
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| `assets/` directory | New | Holds custom SVG icon files deployed alongside `index.html` |
+| Accounts Receivable nav icon | `📤` → `assets/Acc Receivables Icon.svg` | Green dollar-sign split icon |
+| Accounts Payable nav icon | `📥` → `assets/Acc Payables Icon.svg` | Red dollar-sign split icon |
+| Cash Flow nav icon | `💸` → `assets/Cash Flow Icon.svg` | Yellow dollar-sign with + symbol |
+| Credit Notes nav icon | `↩️` → `assets/Credit Note.svg` | Custom credit note icon |
+
+Icons are rendered as `<img src="assets/..." style="width:18px;height:18px;vertical-align:middle;">` inside the existing `.nav-item-icon` spans.
+
+### Outstanding
+
+- No new outstanding items
 
 ---
 
