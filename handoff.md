@@ -18,7 +18,7 @@
 ## Session 17 — Cash Flow Statement
 
 **Date:** 2026-06-10
-**Branch / PR:** TBD
+**Branch / PR:** [PR #49](https://github.com/brandonr2630/meridian-erp/pull/49)
 
 ### What Changed
 
