@@ -15,6 +15,41 @@
 
 ---
 
+## Session 18 — CRM Module & Sales nav amalgamation
+
+**Date:** 2026-06-10
+**Branch / PR:** TBD
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| Nav section renamed | "Sales & Marketing" → "Sales" | Amalgamates the old section with the new CRM sub-group |
+| CRM sub-group | New collapsible "CRM" sub-group under Sales with Pipeline, Activities, Tasks | Mirrors the Finance > Reports sub-group pattern; auto-expands via `VIEW_SECTIONS` |
+| `view-pipeline` | New page — stat cards (Open Deals, Open Value, Won This Month, Win Rate) + filterable Opportunities table | Filters: search, stage, type, owner; inline 📅 / ✅ buttons to log activity or add task from a deal row |
+| `view-crm-activities` | New page — Activity Log table | Filters: search, type (call/email/meeting/note), date range; type badges use new CSS classes |
+| `view-crm-tasks` | New page — Tasks table with stat cards (Overdue, Due Today, Due This Week, Completed) | Inline ✓ button marks task complete without opening modal; overdue dates highlighted red |
+| 3 new Supabase tables | `crm_opportunities`, `crm_activities`, `crm_tasks` | RLS via `rls_crm_*` ALL policies using existing `my_company_ids()` / `is_super_admin()` helpers; cascade delete on activities and tasks when an opportunity is deleted |
+| Badge CSS | 14 new badge classes: prospect, qualified, proposal, negotiation, won, lost, standard, development, call, email, meeting, note | Added after existing badge rules |
+| `Q` object | `crmOpps`, `crmActivities`, `crmTasks` query builders added | Company-scoped, ordered by `created_at.desc` / `activity_date.desc` / `due_date.asc` |
+| `NO_UPDATED_AT` | `crm_activities` and `crm_tasks` added | Neither table has an `updated_at` column |
+| `applyRoleNav` `salesVisible` | `nav-pipeline`, `nav-crm-activities`, `nav-crm-tasks` added | Sales role can access all CRM views |
+
+### Schema
+
+**`crm_opportunities`:** id · company_id · contact_id · name · stage (prospect→won/lost) · type (standard/development) · value · currency · expected_close · description · quotation_id · owner_id (erp_users) · created_at · updated_at
+
+**`crm_activities`:** id · company_id · opportunity_id · contact_id · type · subject · notes · activity_date · user_id (erp_users) · created_at
+
+**`crm_tasks`:** id · company_id · opportunity_id · contact_id · title · description · due_date · assignee_id (erp_users) · completed · completed_at · created_at
+
+### Outstanding
+
+- "Convert to Quote" on a won opportunity (write `quotation_id` back to opportunity, pre-fill quote form)
+- CRM pipeline KPI widget on the Dashboard (deals by stage, conversion rate)
+
+---
+
 ## Session 17 — Cash Flow Statement
 
 **Date:** 2026-06-10
