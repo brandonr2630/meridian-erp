@@ -43,6 +43,11 @@
   --z-toast:           700;
   --z-login:           800;
 
+  /* Font sizes — overridden by user typography prefs via JS */
+  --fs-ui:      14px;
+  --fs-heading: 22px;
+  --fs-mono:    13px;
+
   /* Company themes */
   --co-qql-primary: #C9A84C;
   --co-qql-bg:      #1A1500;
@@ -85,7 +90,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: 'DM Sans', sans-serif;
-  font-size: 14px;
+  font-size: var(--fs-ui);
   display: flex;
   flex-direction: column;
 }
@@ -390,7 +395,7 @@ body {
 }
 .page-title {
   font-family: 'Syne', sans-serif;
-  font-size: 22px;
+  font-size: var(--fs-heading);
   font-weight: 700;
   color: var(--text);
   letter-spacing: -0.3px;
@@ -413,7 +418,7 @@ body {
   padding: 7px 14px;
   border-radius: var(--radius);
   font-family: 'DM Sans', sans-serif;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   font-weight: 500;
   cursor: pointer;
   border: 1px solid transparent;
@@ -602,7 +607,7 @@ body {
   vertical-align: middle;
 }
 .data-table td.right { text-align: right; }
-.data-table td.mono { font-family: 'DM Mono', monospace; font-size: 13px; }
+.data-table td.mono { font-family: 'DM Mono', monospace; font-size: var(--fs-mono); }
 .data-table td.bold { font-weight: 600; color: var(--text); }
 .data-table tr.header-row { background: var(--bg-3); }
 .data-table tr.header-row td { color: var(--text-2); font-weight: 600; font-size: 12px; letter-spacing:.5px; }
@@ -691,7 +696,7 @@ body {
 }
 .modal-title {
   font-family: 'Syne', sans-serif;
-  font-size: 18px;
+  font-size: calc(var(--fs-heading) - 4px);
   font-weight: 700;
   color: var(--text);
 }
@@ -2052,6 +2057,53 @@ body {
         <div class="section-card">
           <div class="section-card-header"><div class="section-card-title">Fiscal Years</div><button class="btn btn-outline btn-sm" onclick="openFYModal()">Manage</button></div>
           <div id="settings-fy-wrap"><div class="page-loading"><div class="loading-spinner"></div> Loading...</div></div>
+        </div>
+        <!-- Typography -->
+        <div class="section-card">
+          <div class="section-card-header">
+            <div class="section-card-title">Typography</div>
+            <button class="btn btn-ghost btn-sm" onclick="resetFontPrefs()">Reset to defaults</button>
+          </div>
+          <div class="section-card-body">
+            <div style="display:flex;flex-direction:column;gap:18px;max-width:480px;">
+              <div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                  <span style="font-size:12px;font-weight:600;color:var(--text-2)">UI Text</span>
+                  <span style="font-size:12px;font-family:'DM Mono',monospace;color:var(--gold)" id="font-ui-val">14px</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span style="font-size:10px;color:var(--text-3)">12</span>
+                  <input type="range" min="12" max="18" step="1" value="14" id="font-ui-slider" oninput="onFontSlider('ui',this.value)" style="flex:1;accent-color:var(--gold)">
+                  <span style="font-size:10px;color:var(--text-3)">18</span>
+                </div>
+                <div style="font-size:10px;color:var(--text-3);margin-top:4px;">Body text, buttons, labels</div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                  <span style="font-size:12px;font-weight:600;color:var(--text-2)">Headings</span>
+                  <span style="font-size:12px;font-family:'DM Mono',monospace;color:var(--gold)" id="font-heading-val">22px</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span style="font-size:10px;color:var(--text-3)">16</span>
+                  <input type="range" min="16" max="28" step="1" value="22" id="font-heading-slider" oninput="onFontSlider('heading',this.value)" style="flex:1;accent-color:var(--gold)">
+                  <span style="font-size:10px;color:var(--text-3)">28</span>
+                </div>
+                <div style="font-size:10px;color:var(--text-3);margin-top:4px;">Page titles, modal titles</div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                  <span style="font-size:12px;font-weight:600;color:var(--text-2)">Table Numbers</span>
+                  <span style="font-size:12px;font-family:'DM Mono',monospace;color:var(--gold)" id="font-mono-val">13px</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span style="font-size:10px;color:var(--text-3)">11</span>
+                  <input type="range" min="11" max="17" step="1" value="13" id="font-mono-slider" oninput="onFontSlider('mono',this.value)" style="flex:1;accent-color:var(--gold)">
+                  <span style="font-size:10px;color:var(--text-3)">17</span>
+                </div>
+                <div style="font-size:10px;color:var(--text-3);margin-top:4px;">Monospace values in tables — amounts, dates, codes</div>
+              </div>
+            </div>
+          </div>
         </div>
         <!-- Invoice Numbering -->
         <div class="section-card">
@@ -5535,6 +5587,38 @@ async function saveErpCompany() {
 
 
 // ── SETTINGS (enhanced) ──────────────────────────────────────────
+// ── TYPOGRAPHY PREFS ─────────────────────────────────────────────
+const FONT_DEFAULTS = { ui: 14, heading: 22, mono: 13 };
+function applyFontPrefs(prefs) {
+  const p = { ...FONT_DEFAULTS, ...prefs };
+  const r = document.documentElement;
+  r.style.setProperty('--fs-ui',      p.ui      + 'px');
+  r.style.setProperty('--fs-heading', p.heading + 'px');
+  r.style.setProperty('--fs-mono',    p.mono    + 'px');
+}
+function onFontSlider(key, val) {
+  const saved = JSON.parse(localStorage.getItem('erp_font_prefs') || '{}');
+  saved[key] = parseInt(val);
+  localStorage.setItem('erp_font_prefs', JSON.stringify(saved));
+  applyFontPrefs(saved);
+  document.getElementById(`font-${key}-val`).textContent = val + 'px';
+}
+function resetFontPrefs() {
+  localStorage.removeItem('erp_font_prefs');
+  applyFontPrefs({});
+  syncFontSliders();
+  showToast('Typography reset to defaults.', 'success');
+}
+function syncFontSliders() {
+  const saved = JSON.parse(localStorage.getItem('erp_font_prefs') || '{}');
+  const p = { ...FONT_DEFAULTS, ...saved };
+  [['ui', 12, 18], ['heading', 16, 28], ['mono', 11, 17]].forEach(([key]) => {
+    const slider = document.getElementById(`font-${key}-slider`);
+    const label  = document.getElementById(`font-${key}-val`);
+    if (slider) { slider.value = p[key]; label.textContent = p[key] + 'px'; }
+  });
+}
+
 async function loadSettings() {
   try {
     const rates = await sbGet('exchange_rates', `order=effective_date.desc&limit=20`);
@@ -5557,6 +5641,7 @@ async function loadSettings() {
 
     await loadInvoiceCounterSettings();
     await loadSettingsBankAccounts();
+    syncFontSliders();
   } catch(e) { showToast('Settings load error: ' + e.message, 'error'); }
 }
 
@@ -5609,8 +5694,18 @@ function toggleTheme() {
   localStorage.setItem('erp_theme', isLight ? 'light' : 'dark');
 }
 
-// Apply saved theme on load
+// Apply saved theme and font prefs on load
 (function() {
+  const fp = localStorage.getItem('erp_font_prefs');
+  if (fp) {
+    try {
+      const p = JSON.parse(fp);
+      const r = document.documentElement;
+      if (p.ui)      r.style.setProperty('--fs-ui',      p.ui      + 'px');
+      if (p.heading) r.style.setProperty('--fs-heading', p.heading + 'px');
+      if (p.mono)    r.style.setProperty('--fs-mono',    p.mono    + 'px');
+    } catch(e) {}
+  }
   const saved = localStorage.getItem('erp_theme');
   if (saved === 'light') {
     document.body.classList.add('light');
