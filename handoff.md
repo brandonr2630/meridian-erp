@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-10 · Session 13*
+*Last updated: 2026-06-10 · Session 14*
 
 ---
 
@@ -12,6 +12,28 @@
 | GitHub repo | `brandonr2630/meridian-erp` |
 | Deploy | Push to `master` via PR → GitHub Actions → GreenGeeks cPanel auto-deploys |
 | Deploy workflow | `.github/workflows/deploy.yml` → cPanel Fileman API (`chi203.greengeeks.net`) |
+
+---
+
+## Session 14 — Collapsible sidebar nav & item reorder
+
+**Date:** 2026-06-10
+**Branches:** `feat/collapsible-sidebar-nav` → [PR #38](https://github.com/brandonr2630/meridian-erp/pull/38) · `chore/nav-reorder` → [PR #39](https://github.com/brandonr2630/meridian-erp/pull/39)
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| Collapsible nav sections | Finance, Sales & Marketing, Setup collapse/expand with `+`/`−` toggle | Collapsed state persisted to `localStorage` under key `erp_nav_state`; `restoreNavState()` called on init |
+| Finance > Reports sub-group | Aged Receivables, Aged Payables, P&L, Balance Sheet, Trial Balance moved from top-level Reports section into a nested sub-group under Finance | Top-level Reports section dissolved; sub-group independently collapsible; `applyRoleNav()` hides the sub-header when all children are role-hidden |
+| Auto-expand on navigate | `navigate()` calls `expandSection()` for each parent in `VIEW_SECTIONS[view]` | Clicking a collapsed section's item expands it before activating |
+| Finance item order | AR → Credit Notes → AP → Bank & Cash → Journal Entries → Chart of Accounts | Transactional-first order consistent with Xero/QB/Sage |
+| Sales item order | Sales Leads → Quotations → Delivery Notes | Workflow/funnel order; "Sales Lead Reports" renamed to "Sales Leads" |
+| Handoff cleanup | Removed orphaned `## Sessions` header, stale Code Review Backlog section, duplicate References section; moved deploy path into Quick Reference | Structural issues from prior sessions |
+
+### Outstanding
+
+- CRM module — see **Next Up** below
 
 ---
 
