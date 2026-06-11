@@ -130,7 +130,7 @@ Icons are rendered as `<img src="assets/..." style="width:18px;height:18px;verti
 
 ### Outstanding
 
-- CRM module — see **Next Up** below
+- CRM module — designed, not yet built at the time (built in Session 18)
 
 ---
 
@@ -149,7 +149,7 @@ Icons are rendered as `<img src="assets/..." style="width:18px;height:18px;verti
 
 ### Outstanding
 
-- CRM module — see **Next Up** below
+- CRM module — designed, not yet built at the time (built in Session 18)
 
 ---
 
@@ -169,7 +169,7 @@ Icons are rendered as `<img src="assets/..." style="width:18px;height:18px;verti
 
 ### Outstanding
 
-- CRM module — see **Next Up** below
+- CRM module — designed, not yet built at the time (built in Session 18)
 
 ---
 
@@ -191,7 +191,7 @@ Icons are rendered as `<img src="assets/..." style="width:18px;height:18px;verti
 
 ### Outstanding
 
-- CRM module — see **Next Up** below
+- CRM module — designed, not yet built at the time (built in Session 18)
 
 ---
 
@@ -210,7 +210,7 @@ Icons are rendered as `<img src="assets/..." style="width:18px;height:18px;verti
 
 ### Outstanding
 
-- CRM module — see **Next Up** below
+- CRM module — designed, not yet built at the time (built in Session 18)
 
 ---
 
@@ -494,7 +494,7 @@ Rewrote `.github/workflows/deploy.yml` to upload files directly via `Fileman/sav
 
 ### Application
 
-The entire app is `index.html` — approximately 8,400 lines of inline CSS and JavaScript. **Never edit `index2–5.html`; those are archives.**
+The entire app is `index.html` — approximately 10,200 lines of inline CSS and JavaScript. **Never edit `index2–5.html`; those are archives.**
 
 ### Backend
 
@@ -516,7 +516,7 @@ Finance modules (AP, Bank, CoA, Journal, Reports) are admin-only. Check `canPost
 
 ### Modules
 
-Dashboard · Chart of Accounts · Journal Entries · AR · AP · Vendor Payments · Clients · Vendors · ERP Companies · Settings · Bank Accounts · Bank Transactions & Reconciliation · Bills · Financial Reports · Quotations · Sales Leads
+Dashboard · Chart of Accounts · Journal Entries · AR · AP · Vendor Payments · Clients · Vendors · ERP Companies · Settings · Bank Accounts · Bank Transactions & Reconciliation · Bills · Financial Reports (P&L · Balance Sheet · Trial Balance · Cash Flow · Aged AR/AP) · Quotations · Delivery Notes · Credit Notes · Sales Leads · CRM (Pipeline · Activities · Tasks)
 
 ### Currencies
 
@@ -538,7 +538,8 @@ Items are grouped by theme and ordered by suggested priority within each group. 
 
 ### Sales & CRM
 
-- [ ] **CRM module** *(designed, not yet built)* — Pipeline, Activities, Tasks views; "Convert to Quote" on won deals; `type: development` for dev inquiry handling. See architecture detail below.
+- [x] **CRM module** — Pipeline, Activities, Tasks views under the Sales nav; `type: development` for dev inquiry handling. Built in Session 18.
+- [ ] **"Convert to Quote" on won deals** — write `quotation_id` back to the opportunity and pre-fill the quote form. The remaining piece of the CRM module.
 - [ ] **Email delivery** — send invoices, quotes, and receipts directly from the app via Supabase Edge Function → Resend/SendGrid. Closes the biggest day-to-day manual step.
 - [ ] **Recurring invoices** — flag an invoice as recurring with a frequency; auto-generate the next one on due date. Useful for retainer/monthly clients.
 - [ ] **Overdue reminders** — automated or one-click email reminder for outstanding AR balances. Drives off existing `balance_due` and `due_date` fields.
@@ -565,35 +566,15 @@ Items are grouped by theme and ordered by suggested priority within each group. 
 
 ### Integration
 
-- [ ] **Q2M Job Cards link** — cost summary from a job card pre-fills a Meridian invoice. Both apps share the same Supabase project.
+- [ ] **Q2M Job Cards link** — cost summary from a job card pre-fills a Meridian invoice. Note: the apps use **separate** Supabase projects (verified Session 20), so this needs a cross-project integration rather than a shared-table join.
 
 ---
 
 ## Next Up
 
-### CRM module — designed, not yet built
+### To Do
 
-Architecture designed 2026-05-23. Parked for consideration before building.
-
-#### 3 new Supabase tables
-
-| Table | Purpose |
-|-------|---------|
-| `crm_opportunities` | Pipeline deals — stages: prospect → qualified → proposal → negotiation → won → lost. `type` field: `standard` \| `development`. Linked to `contacts`; optional `quotation_id` once converted. |
-| `crm_activities` | Timeline log (call / email / meeting / note). Hangs off an opportunity or a contact directly. |
-| `crm_tasks` | Assignable follow-ups with due dates. Hangs off an opportunity or contact. |
-
-#### 3 views under a new top-level "CRM" nav section
-
-1. **Pipeline** — deal list/board with stage filter; opportunity detail panel with inline activities + tasks; "Convert to Quote" on won deals
-2. **Activities** — company-wide feed, filterable by type / date / user
-3. **Tasks** — to-do list, filterable by assignee / due date / completion
-
-#### Integration
-
-Won opportunity → Convert to Quotation → pre-fills contact, currency, value → writes `quotation_id` back to opportunity; stage locks to `won`.
-
-#### Dev inquiry handling
-
-`type: development` on an opportunity covers this — no separate table needed. The `description` field captures evolving scope; activities log discovery conversations. Reaches `proposal` stage before a quote is raised.
+- [ ] **Enable leaked password protection** — Supabase Dashboard → Authentication → Passwords. Checks new passwords against HaveIBeenPwned; flagged by the security advisors in Session 20 and cannot be enabled via SQL/MCP — requires a manual dashboard toggle.
+- [ ] **"Convert to Quote" on a won opportunity** — pre-fill the quote form from the deal; write `quotation_id` back to the opportunity (carried over from Session 18)
+- [ ] **CRM pipeline KPI widget on the Dashboard** — deals by stage, conversion rate (carried over from Session 18; same item as "Sales pipeline KPIs" in the Backlog)
 
