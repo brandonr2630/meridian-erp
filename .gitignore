@@ -11,3 +11,6 @@ Desktop.ini
 
 # Claude Code
 .claude/
+
+# Node (local tooling/scratch — app has no build system)
+node_modules/
