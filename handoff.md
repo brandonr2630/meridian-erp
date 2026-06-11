@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-10 · Session 19*
+*Last updated: 2026-06-11 · Session 20*
 
 ---
 
@@ -12,6 +12,36 @@
 | GitHub repo | `brandonr2630/meridian-erp` |
 | Deploy | Push to `master` via PR → GitHub Actions → GreenGeeks cPanel auto-deploys |
 | Deploy workflow | `.github/workflows/deploy.yml` → cPanel Fileman API (`chi203.greengeeks.net`) |
+
+---
+
+## Session 20 — Security hardening (XSS, CSV injection, Supabase)
+
+**Date:** 2026-06-11
+**Branch / PR:** [PR #58](https://github.com/brandonr2630/meridian-erp/pull/58) · 3 Supabase migrations (applied directly)
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| Stored XSS | ~70 interpolation sites wrapped in `escHTML` | User-entered fields (names, descriptions, references, addresses, logo URLs) were rendered raw into `innerHTML` across tables, dropdown builders, global search, dashboard activity feed, report views, and PDF/report HTML builders. `escHTML` itself now also escapes `'` |
+| CSV exports | Formula-injection guard + `String(cell ?? '')` coercion | Report CSV and CoA CSV prefix `'` on cells starting `=` `+` `@` or non-numeric `-`; CoA export also gained quote doubling (was producing corrupt CSV); fixes crash on numeric cells and `0` exporting as empty |
+| `filterJE` crash | Null guard on `entry_no` / `description` | Search threw when a JE had a null description |
+| AR customer cell | Dropped raw `contact_id` fallback | Unknown contact now shows `—` instead of the raw UUID |
+| Supabase: function `search_path` | `my_company_ids`, `is_super_admin`, `set_line_total` pinned to `search_path = public` | Advisor `function_search_path_mutable` |
+| Supabase: anon EXECUTE revoked | RLS helper functions no longer callable by `anon`/`public`; `authenticated` keeps EXECUTE (required for policy evaluation) | Anon REST/RPC now gets explicit 401/42501 |
+| Supabase: storage policies | Logo uploads now require authentication (INSERT policy was open to `anon`); broad SELECT policy dropped so the public bucket can no longer be listed | Public object URLs unaffected (verified 200 after change) |
+| `.gitignore` | `node_modules/` added | Local tooling scratch from slide generation |
+
+### Verification
+
+All inline `<script>` blocks parse clean under Node; public logo URL serves (200); anonymous storage upload rejected (400); anonymous RPC rejected; security advisors re-run clean apart from intentional `authenticated` EXECUTE on RLS helpers.
+
+### Outstanding
+
+- **Enable leaked password protection** — Supabase Dashboard → Authentication → Passwords (cannot be set via SQL/MCP)
+- Auth tokens live in `localStorage` (`erp_session`) — standard for a static-host Supabase app, but means any future XSS regression exposes the JWT; keep escaping discipline for new renderers
+- No CSP meta tag — of limited value while all CSS/JS is inline (`unsafe-inline` would be required), revisit if the app is ever split into files
 
 ---
 
