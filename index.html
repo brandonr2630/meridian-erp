@@ -4329,7 +4329,7 @@ function renderCompanySwitcher() {
   // Button logo/avatar
   const btnLogoEl = document.getElementById('co-btn-logo');
   if (co.logo_url) {
-    btnLogoEl.innerHTML = `<img src="${co.logo_url}" style="width:22px;height:22px;object-fit:contain;border-radius:4px;display:block;">`;
+    btnLogoEl.innerHTML = `<img src="${escHTML(co.logo_url)}" style="width:22px;height:22px;object-fit:contain;border-radius:4px;display:block;">`;
   } else {
     btnLogoEl.innerHTML = `<div style="width:22px;height:22px;border-radius:4px;background:${color};display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:8px;color:#000;">${(co.code||co.name||'?').slice(0,2).toUpperCase()}</div>`;
   }
@@ -4342,13 +4342,13 @@ function renderCompanySwitcher() {
     const col = colors[c.code] || '#888';
     const isActive = c.id === currentCompany.id;
     const iconHtml = c.logo_url
-      ? `<img src="${c.logo_url}" loading="lazy" style="width:28px;height:28px;object-fit:contain;border-radius:6px;flex-shrink:0;">`
-      : `<div class="company-item-icon" style="background:${col}22;color:${col};">${c.code}</div>`;
+      ? `<img src="${escHTML(c.logo_url)}" loading="lazy" style="width:28px;height:28px;object-fit:contain;border-radius:6px;flex-shrink:0;">`
+      : `<div class="company-item-icon" style="background:${col}22;color:${col};">${escHTML(c.code)}</div>`;
     return `<div class="company-dropdown-item ${isActive?'active':''}" onclick="switchCompany('${c.id}')">
       ${iconHtml}
       <div class="company-item-info">
-        <div class="name">${c.trading_name || c.name}</div>
-        <div class="sub">${c.name} · ${c.currency}</div>
+        <div class="name">${escHTML(c.trading_name || c.name)}</div>
+        <div class="sub">${escHTML(c.name)} · ${c.currency}</div>
       </div>
       ${isActive ? '<span class="company-item-check">✓</span>' : ''}
     </div>`;
@@ -4618,10 +4618,10 @@ async function loadRecentActivity() {
         <div onclick="(${a.action})()" style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s;" onmouseover="this.style.background='var(--bg-3)'" onmouseout="this.style.background=''">
           <span style="font-size:16px;width:24px;text-align:center;flex-shrink:0;">${a.icon}</span>
           <div style="flex:1;min-width:0;">
-            <div style="font-size:12px;font-weight:600;color:var(--text);font-family:'DM Mono',monospace;">${a.label}</div>
-            <div style="font-size:11px;color:var(--text-3);margin-top:1px;">${a.sub}</div>
+            <div style="font-size:12px;font-weight:600;color:var(--text);font-family:'DM Mono',monospace;">${escHTML(a.label)}</div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:1px;">${escHTML(a.sub)}</div>
           </div>
-          ${isSuperAdmin() && a.co ? `<span style="font-size:10px;color:var(--gold);background:var(--gold-bg);border:1px solid var(--gold-border);border-radius:3px;padding:1px 6px;flex-shrink:0;">${a.co}</span>` : ''}
+          ${isSuperAdmin() && a.co ? `<span style="font-size:10px;color:var(--gold);background:var(--gold-bg);border:1px solid var(--gold-border);border-radius:3px;padding:1px 6px;flex-shrink:0;">${escHTML(a.co)}</span>` : ''}
           <span class="badge badge-${a.status}" style="flex-shrink:0;">${a.status}</span>
           <span style="font-size:10px;color:var(--text-3);flex-shrink:0;">${a.date||''}</span>
         </div>`).join('')}
@@ -4681,10 +4681,10 @@ function renderCoA(accs) {
     if (isExp) {
       typeAccs.forEach(acc => {
         html += `<tr onclick="openEditAccount('${acc.id}')" data-type="${type}">
-          <td class="mono">${acc.code}</td>
+          <td class="mono">${escHTML(acc.code)}</td>
           <td>
             <span style="color:${acc.is_header ? 'var(--text-2)' : 'var(--text)'};font-weight:${acc.is_header?'600':'400'}">
-              ${acc.is_header ? '📁 ' : ''}${acc.name}
+              ${acc.is_header ? '📁 ' : ''}${escHTML(acc.name)}
             </span>
             ${acc.is_bank ? '<span style="font-size:10px;color:var(--blue);margin-left:6px;">🏦 Bank</span>' : ''}
           </td>
@@ -4843,7 +4843,11 @@ async function saveAccount() {
 function exportCoA() {
   const rows = [['Code','Name','Type','Sub-type','Currency','Normal Balance','Active','Header','Bank']];
   accounts.forEach(a => rows.push([a.code, a.name, a.account_type, a.account_subtype||'', a.currency||'', a.normal_balance||'', a.is_active, a.is_header, a.is_bank]));
-  const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+  const csv = rows.map(r => r.map(c => {
+    let s = String(c ?? '');
+    if (/^[=+@]|^-[^\d.]/.test(s)) s = "'" + s;
+    return `"${s.replace(/"/g,'""')}"`;
+  }).join(',')).join('\n');
   const blob = new Blob([csv], {type:'text/csv'});
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
@@ -4876,10 +4880,10 @@ function renderJETable(jes) {
       </tr></thead>
       <tbody>${jes.map(je => `
         <tr>
-          <td class="mono bold">${je.entry_no}</td>
+          <td class="mono bold">${escHTML(je.entry_no)}</td>
           <td class="mono">${je.entry_date}</td>
-          <td>${je.description}</td>
-          <td class="mono">${je.reference||'—'}</td>
+          <td>${escHTML(je.description)}</td>
+          <td class="mono">${escHTML(je.reference)||'—'}</td>
           <td style="text-transform:capitalize;">${je.entry_type}</td>
           <td class="mono">${je.currency}</td>
           <td><span class="badge badge-${je.status}">${je.status}</span></td>
@@ -4897,7 +4901,7 @@ function filterJE() {
   const status = document.getElementById('je-status-filter').value;
   const filtered = journalEntries.filter(je => {
     if (status && je.status !== status) return false;
-    if (q && !je.entry_no.toLowerCase().includes(q) && !je.description.toLowerCase().includes(q) && !(je.reference||'').toLowerCase().includes(q)) return false;
+    if (q && !(je.entry_no||'').toLowerCase().includes(q) && !(je.description||'').toLowerCase().includes(q) && !(je.reference||'').toLowerCase().includes(q)) return false;
     return true;
   });
   renderJETable(filtered);
@@ -4918,7 +4922,7 @@ function addJELine() {
   const tbody = document.getElementById('je-lines-body');
   const lid   = 'jl-' + Date.now() + Math.random().toString(36).substr(2,4);
   const accOpts = accounts.filter(a => !a.is_header && a.is_active).map(a =>
-    `<option value="${a.id}">${a.code} — ${a.name}</option>`
+    `<option value="${a.id}">${escHTML(a.code)} — ${escHTML(a.name)}</option>`
   ).join('');
   const tr = document.createElement('tr'); tr.id = lid;
   tr.innerHTML = `
@@ -5088,8 +5092,8 @@ function renderAPTable(list) {
         return `
         <tr>
           <td class="mono bold">${b.bill_no || '<span style="color:var(--text-3);font-style:italic;font-size:11px;">Draft</span>'}</td>
-          <td class="mono">${b.vendor_ref || '—'}</td>
-          <td>${contactMap[b.contact_id] || '—'}</td>
+          <td class="mono">${escHTML(b.vendor_ref) || '—'}</td>
+          <td>${escHTML(contactMap[b.contact_id]) || '—'}</td>
           <td class="mono">${b.bill_date}</td>
           <td class="mono">${b.due_date || '—'}</td>
           <td class="mono">${b.currency}</td>
@@ -5179,7 +5183,7 @@ function openPayBillModal(billId) {
   const sel = document.getElementById('bill-pay-bank-account');
   sel.innerHTML = '<option value="">— Select account —</option>';
   bankAccounts.forEach(a => {
-    sel.innerHTML += `<option value="${a.id}">${a.account_name} (${a.currency})</option>`;
+    sel.innerHTML += `<option value="${a.id}">${escHTML(a.account_name)} (${a.currency})</option>`;
   });
 
   document.getElementById('modal-bill-payment').classList.add('show');
@@ -5325,15 +5329,15 @@ async function openBillPaymentHistory(billId) {
             return `<tr style="${voided ? 'opacity:0.55;' : ''}">
               <td class="mono bold" style="color:var(--gold);">${p.payment_no || '—'}</td>
               <td class="mono">${p.payment_date || '—'}</td>
-              <td>${p.payment_method || '—'}</td>
-              <td style="font-size:11px;">${bankMap[p.bank_account_id] || '—'}</td>
-              <td class="mono" style="font-size:11px;">${p.reference || '—'}</td>
+              <td>${escHTML(p.payment_method) || '—'}</td>
+              <td style="font-size:11px;">${escHTML(bankMap[p.bank_account_id]) || '—'}</td>
+              <td class="mono" style="font-size:11px;">${escHTML(p.reference) || '—'}</td>
               <td class="right mono">${fmt(alloc.amount, bill.currency)}</td>
               <td><span class="badge badge-${voided ? 'void' : 'paid'}">${voided ? 'voided' : 'posted'}</span></td>
               <td class="right">
                 ${!voided
                   ? `<button class="btn btn-danger btn-sm" onclick="voidVendorPayment('${p.id}','${billId}')">Void</button>`
-                  : `<span style="font-size:10px;color:var(--text-3);" title="${p.void_reason || ''}">Voided</span>`}
+                  : `<span style="font-size:10px;color:var(--text-3);" title="${escHTML(p.void_reason)}">Voided</span>`}
               </td>
             </tr>`;
           }).join('')}
@@ -5449,12 +5453,12 @@ function renderClientsTable(list) {
       <th>Code</th><th>Name</th><th>Industry</th><th>TRN</th><th>Contact Person</th><th>Phone</th><th>Currency</th><th>Credit Limit</th><th>Status</th><th class="right">Actions</th>
     </tr></thead><tbody>${page.map(c => `
       <tr>
-        <td class="mono">${c.code||'—'}</td>
-        <td class="bold">${c.trading_name||c.name}</td>
-        <td>${c.industry||'—'}</td>
-        <td class="mono">${c.trn||'—'}</td>
-        <td>${c.contact_person_name||'—'}</td>
-        <td class="mono">${c.phone||'—'}</td>
+        <td class="mono">${escHTML(c.code)||'—'}</td>
+        <td class="bold">${escHTML(c.trading_name||c.name)}</td>
+        <td>${escHTML(c.industry)||'—'}</td>
+        <td class="mono">${escHTML(c.trn)||'—'}</td>
+        <td>${escHTML(c.contact_person_name)||'—'}</td>
+        <td class="mono">${escHTML(c.phone)||'—'}</td>
         <td class="mono">${c.currency}</td>
         <td class="mono">${c.credit_limit ? fmt(c.credit_limit, c.currency) : '—'}</td>
         <td><span class="badge ${c.is_active!==false?'badge-posted':'badge-void'}">${c.is_active!==false?'Active':'Inactive'}</span></td>
@@ -5615,12 +5619,12 @@ function renderVendorsTable(list) {
       <th>Code</th><th>Name</th><th>Industry</th><th>TRN</th><th>Contact Person</th><th>Payment Method</th><th>Currency</th><th>Status</th><th class="right">Actions</th>
     </tr></thead><tbody>${page.map(v => `
       <tr>
-        <td class="mono">${v.code||'—'}</td>
-        <td class="bold">${v.trading_name||v.name}</td>
-        <td>${v.industry||'—'}</td>
-        <td class="mono">${v.trn||'—'}</td>
-        <td>${v.contact_person_name||'—'}</td>
-        <td>${v.payment_method||'—'}</td>
+        <td class="mono">${escHTML(v.code)||'—'}</td>
+        <td class="bold">${escHTML(v.trading_name||v.name)}</td>
+        <td>${escHTML(v.industry)||'—'}</td>
+        <td class="mono">${escHTML(v.trn)||'—'}</td>
+        <td>${escHTML(v.contact_person_name)||'—'}</td>
+        <td>${escHTML(v.payment_method)||'—'}</td>
         <td class="mono">${v.currency}</td>
         <td><span class="badge ${v.is_active!==false?'badge-posted':'badge-void'}">${v.is_active!==false?'Active':'Inactive'}</span></td>
         <td class="right">
@@ -5762,14 +5766,14 @@ async function loadErpCompanies() {
         <th>Logo</th><th>Code</th><th>Name</th><th>Trading Name</th><th>Currency</th><th>TIN</th><th>VAT Reg</th><th>Email</th><th class="right">Actions</th>
       </tr></thead><tbody>${cos.map(c => `
         <tr>
-          <td>${c.logo_url ? `<img src="${c.logo_url}" loading="lazy" style="height:32px;width:32px;object-fit:contain;border-radius:4px;">` : `<div style="width:32px;height:32px;background:var(--gold-bg);border:1px solid var(--gold-border);border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:10px;color:var(--gold);">${c.code?.slice(0,2)||'?'}</div>`}</td>
-          <td class="mono bold">${c.code}</td>
-          <td>${c.name}</td>
-          <td>${c.trading_name||'—'}</td>
+          <td>${c.logo_url ? `<img src="${escHTML(c.logo_url)}" loading="lazy" style="height:32px;width:32px;object-fit:contain;border-radius:4px;">` : `<div style="width:32px;height:32px;background:var(--gold-bg);border:1px solid var(--gold-border);border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:10px;color:var(--gold);">${escHTML(c.code?.slice(0,2))||'?'}</div>`}</td>
+          <td class="mono bold">${escHTML(c.code)}</td>
+          <td>${escHTML(c.name)}</td>
+          <td>${escHTML(c.trading_name)||'—'}</td>
           <td class="mono">${c.currency}</td>
-          <td class="mono">${c.tin||'—'}</td>
-          <td class="mono">${c.vat_reg||'—'}</td>
-          <td>${c.email||'—'}</td>
+          <td class="mono">${escHTML(c.tin)||'—'}</td>
+          <td class="mono">${escHTML(c.vat_reg)||'—'}</td>
+          <td>${escHTML(c.email)||'—'}</td>
           <td class="right">
             <button class="btn btn-ghost btn-sm btn-icon" onclick="openEditErpCompany('${c.id}')" title="Edit" aria-label="Edit company">✏️</button>
           </td>
@@ -5842,7 +5846,7 @@ async function openEditErpCompany(id) {
     document.getElementById('erp-co-logo-file').value = '';
     const preview = document.getElementById('erp-co-logo-preview');
     if (c.logo_url) {
-      preview.innerHTML = `<img src="${c.logo_url}" style="width:100%;height:100%;object-fit:contain;border-radius:8px;">`;
+      preview.innerHTML = `<img src="${escHTML(c.logo_url)}" style="width:100%;height:100%;object-fit:contain;border-radius:8px;">`;
     } else {
       preview.innerHTML = c.code?.slice(0,2) || '?';
     }
@@ -5980,7 +5984,7 @@ async function loadSettings() {
     document.getElementById('settings-fy-wrap').innerHTML = fys.length ?
       `<table class="data-table"><thead><tr><th>Name</th><th>Start</th><th>End</th><th>Status</th></tr></thead>
       <tbody>${fys.map(fy => `<tr>
-        <td class="bold">${fy.name}</td><td class="mono">${fy.start_date}</td><td class="mono">${fy.end_date}</td>
+        <td class="bold">${escHTML(fy.name)}</td><td class="mono">${fy.start_date}</td><td class="mono">${fy.end_date}</td>
         <td><span class="badge ${fy.is_closed?'badge-void':'badge-posted'}">${fy.is_closed?'Closed':'Open'}</span></td>
       </tr>`).join('')}</tbody></table>` :
       '<div class="table-empty">No fiscal years set up yet.</div>';
@@ -6197,9 +6201,9 @@ function openReceivePayment(invoiceId) {
     bankSel.innerHTML = '<option value="">No bank accounts — add one in Settings</option>';
   } else {
     bankSel.innerHTML =
-      matching.map(b => `<option value="${b.id}">${b.account_name} — ${b.bank_name} (${b.currency})</option>`).join('') +
+      matching.map(b => `<option value="${b.id}">${escHTML(b.account_name)} — ${escHTML(b.bank_name)} (${b.currency})</option>`).join('') +
       (rest.length && matching.length ? `<optgroup label="Other currencies">` : '') +
-      rest.map(b => `<option value="${b.id}">${b.account_name} — ${b.bank_name} (${b.currency})</option>`).join('') +
+      rest.map(b => `<option value="${b.id}">${escHTML(b.account_name)} — ${escHTML(b.bank_name)} (${b.currency})</option>`).join('') +
       (rest.length && matching.length ? `</optgroup>` : '');
   }
 
@@ -6332,7 +6336,7 @@ async function savePayment() {
 let _lastReceiptId = null;
 
 function escHTML(s) {
-  return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : '';
+  return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;') : '';
 }
 
 function amountToWords(amount, currency) {
@@ -6512,8 +6516,8 @@ async function openInvoiceReceiptHistory(invoiceId) {
             return `<tr style="${voided ? 'opacity:0.55;' : ''}">
               <td class="mono bold" style="color:var(--gold);">${r.receipt_no}</td>
               <td class="mono">${r.receipt_date}</td>
-              <td>${methodLabels[r.payment_method] || r.payment_method || '—'}</td>
-              <td style="font-size:11px;">${bankMap[r.bank_account_id] || '—'}</td>
+              <td>${methodLabels[r.payment_method] || escHTML(r.payment_method) || '—'}</td>
+              <td style="font-size:11px;">${escHTML(bankMap[r.bank_account_id]) || '—'}</td>
               <td class="mono" style="font-size:11px;">${escHTML(r.reference) || '—'}</td>
               <td class="right mono">${fmt(r.amount, r.currency)}</td>
               <td><span class="badge badge-${voided ? 'void' : 'paid'}">${voided ? 'voided' : 'posted'}</span></td>
@@ -6608,10 +6612,10 @@ async function loadSettingsBankAccounts() {
       <thead><tr><th>Account Name</th><th>Bank</th><th>Currency</th><th>Account No.</th><th class="right">Current Balance</th><th>Status</th><th class="right">Actions</th></tr></thead>
       <tbody>${bankAccounts.map(b => `
         <tr>
-          <td style="font-weight:500;">${b.account_name}${!b.account_id ? ' <span class="badge" style="background:rgba(180,83,9,.15);color:#d97706;font-size:10px;vertical-align:middle;margin-left:6px;" title="No GL account linked — journal entries will not be created for this account">No GL</span>' : ''}</td>
-          <td>${b.bank_name}</td>
+          <td style="font-weight:500;">${escHTML(b.account_name)}${!b.account_id ? ' <span class="badge" style="background:rgba(180,83,9,.15);color:#d97706;font-size:10px;vertical-align:middle;margin-left:6px;" title="No GL account linked — journal entries will not be created for this account">No GL</span>' : ''}</td>
+          <td>${escHTML(b.bank_name)}</td>
           <td class="mono">${b.currency}</td>
-          <td class="mono">${b.account_number ? '••••' + b.account_number.slice(-4) : '—'}</td>
+          <td class="mono">${b.account_number ? '••••' + escHTML(b.account_number.slice(-4)) : '—'}</td>
           <td class="right mono">${fmt(b.current_balance, b.currency)}</td>
           <td><span class="badge ${b.is_active ? 'badge-posted' : 'badge-void'}">${b.is_active ? 'Active' : 'Inactive'}</span></td>
           <td class="right">
@@ -6636,7 +6640,7 @@ function openAddBankAccount() {
   const sel = document.getElementById('ba-gl-account');
   sel.innerHTML = '<option value="">— None —</option>';
   const assetAccts = accounts.filter(a => a.account_type === 'asset');
-  assetAccts.forEach(a => { sel.innerHTML += `<option value="${a.id}">${a.code} — ${a.name}</option>`; });
+  assetAccts.forEach(a => { sel.innerHTML += `<option value="${a.id}">${escHTML(a.code)} — ${escHTML(a.name)}</option>`; });
   const hint = document.getElementById('ba-gl-hint');
   if (assetAccts.length) {
     hint.textContent = '(required)'; hint.style.color = 'var(--danger)';
@@ -6662,7 +6666,7 @@ function openEditBankAccount(id) {
   const sel = document.getElementById('ba-gl-account');
   sel.innerHTML = '<option value="">— None —</option>';
   const assetAccts = accounts.filter(a => a.account_type === 'asset');
-  assetAccts.forEach(a => { sel.innerHTML += `<option value="${a.id}" ${a.id === b.account_id ? 'selected' : ''}>${a.code} — ${a.name}</option>`; });
+  assetAccts.forEach(a => { sel.innerHTML += `<option value="${a.id}" ${a.id === b.account_id ? 'selected' : ''}>${escHTML(a.code)} — ${escHTML(a.name)}</option>`; });
   const hint = document.getElementById('ba-gl-hint');
   if (assetAccts.length) {
     hint.textContent = '(required)'; hint.style.color = 'var(--danger)';
@@ -6722,15 +6726,15 @@ async function loadBank() {
   const summary = document.getElementById('bank-accounts-summary');
   summary.innerHTML = bankAccounts.map(b => `
     <div class="stat-card" style="cursor:pointer;" onclick="selectBankAccount('${b.id}')">
-      <div class="stat-label">${b.account_name}</div>
+      <div class="stat-label">${escHTML(b.account_name)}</div>
       <div class="stat-value" style="font-size:18px;">${fmt(b.current_balance, b.currency)}</div>
-      <div class="stat-sub">${b.bank_name} · ${b.currency}</div>
+      <div class="stat-sub">${escHTML(b.bank_name)} · ${b.currency}</div>
     </div>`).join('') || '<div class="table-empty">No bank accounts. Add one in Settings.</div>';
 
   // Populate account filter
   const sel = document.getElementById('bank-account-filter');
   sel.innerHTML = '<option value="">Select account…</option>';
-  bankAccounts.forEach(b => { sel.innerHTML += `<option value="${b.id}">${b.account_name} (${b.currency})</option>`; });
+  bankAccounts.forEach(b => { sel.innerHTML += `<option value="${b.id}">${escHTML(b.account_name)} (${b.currency})</option>`; });
 }
 
 function selectBankAccount(id) {
@@ -6769,8 +6773,8 @@ function renderBankTxns(txns) {
         <tr>
           <td><input type="checkbox" class="bank-txn-check" data-id="${t.id}" ${t.is_reconciled ? 'disabled' : ''} style="width:auto;"></td>
           <td class="mono">${t.transaction_date}</td>
-          <td>${t.description || '—'}</td>
-          <td class="mono">${t.reference || '—'}</td>
+          <td>${escHTML(t.description) || '—'}</td>
+          <td class="mono">${escHTML(t.reference) || '—'}</td>
           <td class="right mono">${parseFloat(t.debit||0) > 0 ? fmt(t.debit, cur) : '—'}</td>
           <td class="right mono">${parseFloat(t.credit||0) > 0 ? fmt(t.credit, cur) : '—'}</td>
           <td class="right mono">${fmt(t.balance, cur)}</td>
@@ -7051,8 +7055,8 @@ function buildReportHTML(type, title) {
   const co = currentCompany;
   const agedReport = (type === 'aged-ar' || type === 'aged-ap');
   const logoHtml = co.logo_url
-    ? `<img src="${co.logo_url}" style="height:48px;max-width:140px;object-fit:contain;display:block;margin-bottom:6px;">`
-    : `<div style="width:40px;height:40px;border-radius:6px;background:linear-gradient(135deg,#C9A84C,#E8C76A);display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:14px;color:#000;margin-bottom:6px;">${(co.code||co.name||'?').slice(0,2).toUpperCase()}</div>`;
+    ? `<img src="${escHTML(co.logo_url)}" style="height:48px;max-width:140px;object-fit:contain;display:block;margin-bottom:6px;">`
+    : `<div style="width:40px;height:40px;border-radius:6px;background:linear-gradient(135deg,#C9A84C,#E8C76A);display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:14px;color:#000;margin-bottom:6px;">${escHTML((co.code||co.name||'?').slice(0,2).toUpperCase())}</div>`;
 
   return `<!DOCTYPE html>
 <html style="color-scheme:light;">
@@ -7100,9 +7104,9 @@ function buildReportHTML(type, title) {
   <div class="report-header">
     <div class="report-header-left">
       ${logoHtml}
-      <div class="co-name">${co.name}</div>
-      ${co.address_line1 ? `<div class="co-detail">${[co.address_line1, co.address_line2, co.address_country].filter(Boolean).join(', ')}</div>` : ''}
-      ${co.tin ? `<div class="co-detail">TIN: ${co.tin}</div>` : ''}
+      <div class="co-name">${escHTML(co.name)}</div>
+      ${co.address_line1 ? `<div class="co-detail">${escHTML([co.address_line1, co.address_line2, co.address_country].filter(Boolean).join(', '))}</div>` : ''}
+      ${co.tin ? `<div class="co-detail">TIN: ${escHTML(co.tin)}</div>` : ''}
     </div>
     <div class="report-header-right">
       <div class="report-title">${title}</div>
@@ -7111,7 +7115,7 @@ function buildReportHTML(type, title) {
   </div>
   ${wrap.innerHTML}
   <div class="report-footer">
-    <span>${co.name}</span>
+    <span>${escHTML(co.name)}</span>
     <span>Meridian &mdash; SME Solutions</span>
     <span class="report-page-num">Page <span class="report-pg-cur"></span></span>
   </div>
@@ -7258,7 +7262,12 @@ async function downloadReportAs(type, format) {
     const data = extractReportData(type);
     if (!data) { showToast('Run the report first.', 'warn'); return; }
     const csv = data.map(row =>
-      row.map(cell => `"${(cell||'').replace(/"/g,'""')}"`).join(',')
+      row.map(cell => {
+        let s = String(cell ?? '');
+        // Guard against spreadsheet formula injection (=, +, @, or - not starting a number)
+        if (/^[=+@]|^-[^\d.]/.test(s)) s = "'" + s;
+        return `"${s.replace(/"/g,'""')}"`;
+      }).join(',')
     ).join('\r\n');
     // BOM prefix ensures Excel opens UTF-8 CSV correctly
     triggerBlobDownload(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }), `${safeName}.csv`);
@@ -7326,17 +7335,17 @@ async function runPL() {
       <div style="max-width:700px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
           <div>
-            <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;">${currentCompany.name}</div>
+            <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;">${escHTML(currentCompany.name)}</div>
             <div style="font-size:12px;color:var(--text-3);">Profit & Loss · ${formatDateDisplay(from)} to ${formatDateDisplay(to)}</div>
           </div>
         </div>
         <table class="data-table">
           <tbody>
             <tr class="header-row"><td colspan="2" style="padding:10px 16px;font-size:12px;letter-spacing:1px;text-transform:uppercase;">Revenue</td></tr>
-            ${revRows.map(r => `<tr><td style="padding-left:32px;">${r.acc.code} — ${r.acc.name}</td><td class="right mono">${fmt(r.total, currentCompany.currency)}</td></tr>`).join('')}
+            ${revRows.map(r => `<tr><td style="padding-left:32px;">${escHTML(r.acc.code)} — ${escHTML(r.acc.name)}</td><td class="right mono">${fmt(r.total, currentCompany.currency)}</td></tr>`).join('')}
             <tr style="border-top:2px solid var(--border);"><td style="font-weight:600;padding:10px 16px;">Total Revenue</td><td class="right mono" style="font-weight:600;">${fmt(totalRev, currentCompany.currency)}</td></tr>
             <tr class="header-row"><td colspan="2" style="padding:10px 16px;font-size:12px;letter-spacing:1px;text-transform:uppercase;">Expenses</td></tr>
-            ${expRows.map(r => `<tr><td style="padding-left:32px;">${r.acc.code} — ${r.acc.name}</td><td class="right mono">${fmt(r.total, currentCompany.currency)}</td></tr>`).join('')}
+            ${expRows.map(r => `<tr><td style="padding-left:32px;">${escHTML(r.acc.code)} — ${escHTML(r.acc.name)}</td><td class="right mono">${fmt(r.total, currentCompany.currency)}</td></tr>`).join('')}
             <tr style="border-top:2px solid var(--border);"><td style="font-weight:600;padding:10px 16px;">Total Expenses</td><td class="right mono" style="font-weight:600;">${fmt(totalExp, currentCompany.currency)}</td></tr>
             <tr style="border-top:3px solid var(--text);background:var(--gold-bg);">
               <td style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;padding:12px 16px;color:var(--gold);">Net ${netIncome >= 0 ? 'Profit' : 'Loss'}</td>
@@ -7382,19 +7391,19 @@ async function runBS() {
       <div style="max-width:700px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
           <div>
-            <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;">${currentCompany.name}</div>
+            <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;">${escHTML(currentCompany.name)}</div>
             <div style="font-size:12px;color:var(--text-3);">Balance Sheet · As at ${formatDateDisplay(asAt)}</div>
           </div>
         </div>
         <table class="data-table"><tbody>
           <tr class="header-row"><td colspan="2" style="padding:10px 16px;font-size:12px;letter-spacing:1px;text-transform:uppercase;">Assets</td></tr>
-          ${assets.rows.map(a => `<tr><td style="padding-left:32px;">${a.code} — ${a.name}</td><td class="right mono">${fmt(balances[a.id], currentCompany.currency)}</td></tr>`).join('')}
+          ${assets.rows.map(a => `<tr><td style="padding-left:32px;">${escHTML(a.code)} — ${escHTML(a.name)}</td><td class="right mono">${fmt(balances[a.id], currentCompany.currency)}</td></tr>`).join('')}
           <tr style="border-top:2px solid var(--border);"><td style="font-weight:600;padding:10px 16px;">Total Assets</td><td class="right mono" style="font-weight:600;">${fmt(assets.total, currentCompany.currency)}</td></tr>
           <tr class="header-row"><td colspan="2" style="padding:10px 16px;font-size:12px;letter-spacing:1px;text-transform:uppercase;">Liabilities</td></tr>
-          ${liabilities.rows.map(a => `<tr><td style="padding-left:32px;">${a.code} — ${a.name}</td><td class="right mono">${fmt(-balances[a.id], currentCompany.currency)}</td></tr>`).join('')}
+          ${liabilities.rows.map(a => `<tr><td style="padding-left:32px;">${escHTML(a.code)} — ${escHTML(a.name)}</td><td class="right mono">${fmt(-balances[a.id], currentCompany.currency)}</td></tr>`).join('')}
           <tr style="border-top:2px solid var(--border);"><td style="font-weight:600;padding:10px 16px;">Total Liabilities</td><td class="right mono" style="font-weight:600;">${fmt(liabilities.total, currentCompany.currency)}</td></tr>
           <tr class="header-row"><td colspan="2" style="padding:10px 16px;font-size:12px;letter-spacing:1px;text-transform:uppercase;">Equity</td></tr>
-          ${equity.rows.map(a => `<tr><td style="padding-left:32px;">${a.code} — ${a.name}</td><td class="right mono">${fmt(-balances[a.id], currentCompany.currency)}</td></tr>`).join('')}
+          ${equity.rows.map(a => `<tr><td style="padding-left:32px;">${escHTML(a.code)} — ${escHTML(a.name)}</td><td class="right mono">${fmt(-balances[a.id], currentCompany.currency)}</td></tr>`).join('')}
           <tr style="border-top:2px solid var(--border);"><td style="font-weight:600;padding:10px 16px;">Total Equity</td><td class="right mono" style="font-weight:600;">${fmt(equity.total, currentCompany.currency)}</td></tr>
           <tr style="border-top:3px solid var(--text);background:var(--gold-bg);">
             <td style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;padding:12px 16px;color:var(--gold);">Total Liabilities & Equity</td>
@@ -7435,15 +7444,15 @@ async function runTB() {
     wrap.innerHTML = `
       <div style="max-width:700px;">
         <div style="margin-bottom:20px;">
-          <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;">${currentCompany.name}</div>
+          <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;">${escHTML(currentCompany.name)}</div>
           <div style="font-size:12px;color:var(--text-3);">Trial Balance · ${formatDateDisplay(from)} to ${formatDateDisplay(to)}</div>
         </div>
         <table class="data-table">
           <thead><tr><th>Code</th><th>Account</th><th class="right">Debit</th><th class="right">Credit</th></tr></thead>
           <tbody>
             ${rows.map(r => `<tr>
-              <td class="mono">${r.acc.code}</td>
-              <td>${r.acc.name}</td>
+              <td class="mono">${escHTML(r.acc.code)}</td>
+              <td>${escHTML(r.acc.name)}</td>
               <td class="right mono">${r.debit > 0 ? fmt(r.debit, currentCompany.currency) : '—'}</td>
               <td class="right mono">${r.credit > 0 ? fmt(r.credit, currentCompany.currency) : '—'}</td>
             </tr>`).join('')}
@@ -7550,16 +7559,16 @@ async function runCF() {
       `<tr class="header-row"><td colspan="2" style="padding:10px 16px;font-size:12px;letter-spacing:1px;text-transform:uppercase;">${label}</td></tr>`;
 
     const row = (label, val, { indent, bold, grand, subheader } = {}) => {
-      if (subheader) return `<tr><td colspan="2" style="padding:8px 16px 4px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-3);">${label}</td></tr>`;
+      if (subheader) return `<tr><td colspan="2" style="padding:8px 16px 4px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-3);">${escHTML(label)}</td></tr>`;
       if (grand) return `<tr style="border-top:3px solid var(--text);background:var(--gold-bg);">
-        <td style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;padding:12px 16px;color:var(--gold);">${label}</td>
+        <td style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;padding:12px 16px;color:var(--gold);">${escHTML(label)}</td>
         <td class="right mono" style="font-weight:700;font-size:14px;color:${val >= 0 ? 'var(--green)' : 'var(--red)'};">${fmt(val, cur)}</td>
       </tr>`;
       const trStyle  = bold ? ' style="border-top:2px solid var(--border);"' : '';
       const tdLabel  = bold ? 'font-weight:600;padding:10px 16px;' : indent ? 'padding-left:32px;' : '';
       const amtColor = !bold && val < 0 ? 'color:var(--red);' : '';
       return `<tr${trStyle}>
-        <td style="${tdLabel}">${label}</td>
+        <td style="${tdLabel}">${escHTML(label)}</td>
         <td class="right mono" style="${bold ? 'font-weight:600;' : ''}${amtColor}">${Math.abs(val) < 0.005 ? '—' : fmt(val, cur)}</td>
       </tr>`;
     };
@@ -7567,7 +7576,7 @@ async function runCF() {
     wrap.innerHTML = `
       <div style="max-width:700px;">
         <div style="margin-bottom:20px;">
-          <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;">${currentCompany.name}</div>
+          <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;">${escHTML(currentCompany.name)}</div>
           <div style="font-size:12px;color:var(--text-3);">Cash Flow Statement · ${formatDateDisplay(from)} to ${formatDateDisplay(to)}</div>
         </div>
         <table class="data-table"><tbody>
@@ -7781,7 +7790,7 @@ async function openEditInvoice(id) {
       const amt = parseFloat(l.line_total ?? l.amount ?? 0);
       tr.innerHTML = `
         <td style="padding:6px 8px;color:var(--text-3);font-size:11px;font-family:'DM Mono',monospace;">${n}</td>
-        <td><input type="text" placeholder="Item description..." style="min-width:200px;" value="${(l.description||'').replace(/"/g,'&quot;')}"></td>
+        <td><input type="text" placeholder="Item description..." style="min-width:200px;" value="${escHTML(l.description)}"></td>
         <td><input type="number" class="mono" placeholder="1" value="${l.quantity||1}" min="0" step="any" oninput="recalcLine('${lid}')"></td>
         <td><input type="number" class="mono" placeholder="0.00" value="${l.unit_price||0}" min="0" step="0.01" oninput="recalcLine('${lid}')"></td>
         <td><div class="inv-line-amount" id="${lid}-amt">${fmtNum(amt)}</div></td>
@@ -8208,7 +8217,7 @@ function renderARTable(invs, contactMap) {
       <tbody>${page.map(inv => `
         <tr>
           <td class="mono bold">${inv.invoice_no || '<span style="color:var(--text-3);font-style:italic;font-size:11px;">Draft</span>'}</td>
-          <td>${cmap?.[inv.contact_id] || inv.contact_id || '—'}</td>
+          <td>${escHTML(cmap?.[inv.contact_id]) || '—'}</td>
           <td class="mono">${inv.invoice_date}</td>
           <td class="mono">${inv.due_date || '—'}</td>
           <td class="mono">${inv.currency}</td>
@@ -8336,7 +8345,7 @@ async function loadQuotations() {
     const leadFilter = document.getElementById('quo-lead-filter');
     leadFilter.innerHTML = '<option value="">All Sales Leads</option>';
     salesLeads.forEach(l => {
-      leadFilter.innerHTML += `<option value="${l.id}">${l.name}</option>`;
+      leadFilter.innerHTML += `<option value="${l.id}">${escHTML(l.name)}</option>`;
     });
 
     const contactMap = {};
@@ -8381,7 +8390,7 @@ function renderQuotationsTable(quos, contactMap, leadMap) {
       <tbody>${page.map(q => `
         <tr>
           <td class="mono bold">${q.quote_no || '<span style="color:var(--text-3);font-style:italic;font-size:11px;">Draft</span>'}</td>
-          <td>${cmap[q.contact_id] || '—'}</td>
+          <td>${escHTML(cmap[q.contact_id]) || '—'}</td>
           <td>${lmap[q.sales_lead_id] || '—'}</td>
           <td class="mono">${q.quote_date}</td>
           <td class="mono">${q.valid_until || '—'}</td>
@@ -8427,7 +8436,7 @@ async function openNewQuotation() {
   } catch(e) {}
   const leadSel = document.getElementById('quo-sales-lead-id');
   leadSel.innerHTML = '<option value="">— Select Sales Lead —</option>';
-  salesLeads.forEach(l => { leadSel.innerHTML += `<option value="${l.id}">${l.name}</option>`; });
+  salesLeads.forEach(l => { leadSel.innerHTML += `<option value="${l.id}">${escHTML(l.name)}</option>`; });
 
   document.getElementById('quo-next-number').textContent = 'assigned when sent';
   document.getElementById('modal-quotation-title').textContent = 'New Quotation';
@@ -8492,7 +8501,7 @@ function renderTemplatePicker(list, contactMap) {
           <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:600;color:var(--gold);">${q.quote_no || '<span style="color:var(--text-3);font-style:italic;font-size:11px;">Draft</span>'}</span>
           <span class="badge badge-${q.status}" style="font-size:9px;">${q.status}</span>
         </div>
-        <div style="font-size:12px;color:var(--text-2);margin-top:2px;">${contactMap[q.contact_id] || '—'}</div>
+        <div style="font-size:12px;color:var(--text-2);margin-top:2px;">${escHTML(contactMap[q.contact_id]) || '—'}</div>
       </div>
       <div style="text-align:right;flex-shrink:0;">
         <div style="font-size:12px;font-family:'DM Mono',monospace;">${fmt(q.total, q.currency)}</div>
@@ -8514,7 +8523,7 @@ async function openEditQuotation(id) {
   try { salesLeads = await sbGet('sales_leads', Q.salesLeads()); } catch(e) {}
   const leadSel = document.getElementById('quo-sales-lead-id');
   leadSel.innerHTML = '<option value="">— Select Sales Lead —</option>';
-  salesLeads.forEach(l => { leadSel.innerHTML += `<option value="${l.id}">${l.name}</option>`; });
+  salesLeads.forEach(l => { leadSel.innerHTML += `<option value="${l.id}">${escHTML(l.name)}</option>`; });
 
   // Mark edit mode
   document.getElementById('quo-edit-id').value = id;
@@ -8550,7 +8559,7 @@ async function openEditQuotation(id) {
       const idx = i + 1;
       tr.innerHTML = `
         <td style="color:var(--text-3);font-size:11px;padding:6px 8px;text-align:center;">${idx}</td>
-        <td><input type="text" placeholder="Description of goods or service" value="${(l.description||'').replace(/"/g,'&quot;')}"></td>
+        <td><input type="text" placeholder="Description of goods or service" value="${escHTML(l.description)}"></td>
         <td><input type="number" class="mono" placeholder="0" min="0" step="any" oninput="recalcQuoTotals()" value="${l.quantity||''}"></td>
         <td><input type="number" class="mono" placeholder="0.00" min="0" step="0.01" oninput="recalcQuoTotals()" value="${l.unit_price||''}"></td>
         <td><div class="inv-line-amount" id="quo-line-amt-${idx}">0.00</div></td>
@@ -8572,7 +8581,7 @@ async function openQuoFromTemplate(id) {
   try { salesLeads = await sbGet('sales_leads', Q.salesLeads()); } catch(e) {}
   const leadSel = document.getElementById('quo-sales-lead-id');
   leadSel.innerHTML = '<option value="">— Select Sales Lead —</option>';
-  salesLeads.forEach(l => { leadSel.innerHTML += `<option value="${l.id}">${l.name}</option>`; });
+  salesLeads.forEach(l => { leadSel.innerHTML += `<option value="${l.id}">${escHTML(l.name)}</option>`; });
 
   // New quotation mode — no edit ID
   document.getElementById('quo-edit-id').value = '';
@@ -8610,7 +8619,7 @@ async function openQuoFromTemplate(id) {
       const idx = i + 1;
       tr.innerHTML = `
         <td style="color:var(--text-3);font-size:11px;padding:6px 8px;text-align:center;">${idx}</td>
-        <td><input type="text" placeholder="Description of goods or service" value="${(l.description||'').replace(/"/g,'&quot;')}"></td>
+        <td><input type="text" placeholder="Description of goods or service" value="${escHTML(l.description)}"></td>
         <td><input type="number" class="mono" placeholder="0" min="0" step="any" oninput="recalcQuoTotals()" value="${l.quantity||''}"></td>
         <td><input type="number" class="mono" placeholder="0.00" min="0" step="0.01" oninput="recalcQuoTotals()" value="${l.unit_price||''}"></td>
         <td><div class="inv-line-amount" id="quo-line-amt-${idx}">0.00</div></td>
@@ -8921,9 +8930,9 @@ async function refreshSLList() {
       <thead><tr><th>Name</th><th>Title</th><th>Email</th><th>Status</th><th></th></tr></thead>
       <tbody>${salesLeads.map(l => `
         <tr>
-          <td style="font-weight:500;">${l.name}</td>
-          <td style="color:var(--text-3);">${l.title || '—'}</td>
-          <td style="color:var(--text-3);">${l.email || '—'}</td>
+          <td style="font-weight:500;">${escHTML(l.name)}</td>
+          <td style="color:var(--text-3);">${escHTML(l.title) || '—'}</td>
+          <td style="color:var(--text-3);">${escHTML(l.email) || '—'}</td>
           <td><span class="badge ${l.is_active ? 'badge-posted' : 'badge-void'}">${l.is_active ? 'Active' : 'Inactive'}</span></td>
           <td class="right">
             <button class="btn btn-ghost btn-sm" onclick="toggleSLActive('${l.id}',${!l.is_active})">${l.is_active ? 'Deactivate' : 'Activate'}</button>
@@ -8960,7 +8969,7 @@ async function loadSalesLeadsPage() {
     salesLeads = await sbGet('sales_leads', Q.salesLeads());
     const sel = document.getElementById('slr-lead-filter');
     sel.innerHTML = '<option value="">All Sales Leads</option>';
-    salesLeads.forEach(l => { sel.innerHTML += `<option value="${l.id}">${l.name}</option>`; });
+    salesLeads.forEach(l => { sel.innerHTML += `<option value="${l.id}">${escHTML(l.name)}</option>`; });
     // Default date range: current year
     const now = new Date();
     document.getElementById('slr-date-from').value = `${now.getFullYear()}-01-01`;
@@ -9021,7 +9030,7 @@ async function runSalesLeadReport() {
           <tbody>${data.map(q => `
             <tr>
               <td class="mono bold">${q.quote_no}</td>
-              <td>${contactMap[q.contact_id] || '—'}</td>
+              <td>${escHTML(contactMap[q.contact_id]) || '—'}</td>
               <td>${leadMap[q.sales_lead_id] || '—'}</td>
               <td class="mono">${q.quote_date}</td>
               <td class="mono">${q.currency}</td>
@@ -9209,10 +9218,10 @@ function renderDNTable(dns, contactMap) {
       <tbody>${dns.map(d => `
         <tr>
           <td class="mono bold">${d.dn_no || '<span style="color:var(--text-3);font-style:italic;font-size:11px;">Draft</span>'}</td>
-          <td>${contactMap[d.contact_id] || '—'}</td>
+          <td>${escHTML(contactMap[d.contact_id]) || '—'}</td>
           <td class="mono">${d.dn_date}</td>
           <td class="mono">${d.delivery_date || '—'}</td>
-          <td>${d.recipient_name || '—'}</td>
+          <td>${escHTML(d.recipient_name) || '—'}</td>
           <td><span class="badge badge-${d.status}">${d.status}</span></td>
           <td class="right" style="white-space:nowrap;">
             ${d.dn_no ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="openDNPDF('${d.id}')" title="Preview" aria-label="Preview delivery note" style="font-size:15px;padding:4px 7px;">🖨</button>` : ''}
@@ -9484,7 +9493,7 @@ function renderCNTable(cns, contactMap) {
         return `<tr>
           <td class="mono bold">${cn.cn_no || '<span style="color:var(--text-3);font-style:italic;font-size:11px;">Draft</span>'}</td>
           <td class="mono">${inv?.invoice_no || '—'}</td>
-          <td>${contactMap[cn.contact_id] || '—'}</td>
+          <td>${escHTML(contactMap[cn.contact_id]) || '—'}</td>
           <td class="mono">${cn.cn_date}</td>
           <td class="mono">${cn.currency}</td>
           <td class="right mono">${fmt(cn.total, cn.currency)}</td>
@@ -9519,7 +9528,7 @@ async function openNewCreditNote() {
   const sel    = document.getElementById('cn-invoice-id');
   sel.innerHTML = '<option value="">— Select Invoice —</option>';
   posted.forEach(inv => {
-    sel.innerHTML += `<option value="${inv.id}">${inv.invoice_no} — ${cMap[inv.contact_id]||'?'} — ${fmt(inv.balance_due, inv.currency)}</option>`;
+    sel.innerHTML += `<option value="${inv.id}">${inv.invoice_no} — ${escHTML(cMap[inv.contact_id])||'?'} — ${fmt(inv.balance_due, inv.currency)}</option>`;
   });
 
   document.getElementById('cn-date').value  = todayDate();
@@ -9804,7 +9813,7 @@ async function runAgedAR() {
           : `<td class="right mono" style="color:var(--text-3);">—</td>`;
         return `<tr>
           <td class="mono bold">${inv.invoice_no}</td>
-          ${showClient ? `<td>${cMap[inv.contact_id]||'—'}</td>` : ''}
+          ${showClient ? `<td>${escHTML(cMap[inv.contact_id])||'—'}</td>` : ''}
           <td class="mono">${inv.invoice_date}</td>
           <td class="mono">${inv.due_date||'—'}</td>
           <td class="right mono">${fmt(bal, ccy)}</td>
@@ -9830,13 +9839,13 @@ async function runAgedAR() {
         </table>`;
     }).join('');
 
-    const contactLabel = contactId ? ` · ${cMap[contactId]||''}` : '';
+    const contactLabel = contactId ? ` · ${escHTML(cMap[contactId])||''}` : '';
     const dateRange = from ? `${formatDateDisplay(from)} → ${formatDateDisplay(asAt)}` : `As at ${formatDateDisplay(asAt)}`;
 
     wrap.innerHTML = `
       <div style="max-width:1100px;overflow-x:auto;">
         <div style="margin-bottom:20px;">
-          <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;">${currentCompany.name}</div>
+          <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;">${escHTML(currentCompany.name)}</div>
           <div style="font-size:12px;color:var(--text-3);">Aged Receivables · ${dateRange}${contactLabel}${multi ? ' · Multiple currencies' : ' · '+ccys[0]}</div>
         </div>
         ${ccyTables}
@@ -9908,7 +9917,7 @@ async function runAgedAP() {
           : `<td class="right mono" style="color:var(--text-3);">—</td>`;
         return `<tr>
           <td class="mono bold">${b.bill_no||'—'}</td>
-          ${showVendor ? `<td>${cMap[b.contact_id]||'—'}</td>` : ''}
+          ${showVendor ? `<td>${escHTML(cMap[b.contact_id])||'—'}</td>` : ''}
           <td class="mono">${b.bill_date}</td>
           <td class="mono">${b.due_date||'—'}</td>
           <td class="right mono">${fmt(bal, ccy)}</td>
@@ -9934,13 +9943,13 @@ async function runAgedAP() {
         </table>`;
     }).join('');
 
-    const contactLabel = contactId ? ` · ${cMap[contactId]||''}` : '';
+    const contactLabel = contactId ? ` · ${escHTML(cMap[contactId])||''}` : '';
     const dateRange = from ? `${formatDateDisplay(from)} → ${formatDateDisplay(asAt)}` : `As at ${formatDateDisplay(asAt)}`;
 
     wrap.innerHTML = `
       <div style="max-width:1100px;overflow-x:auto;">
         <div style="margin-bottom:20px;">
-          <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;">${currentCompany.name}</div>
+          <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;">${escHTML(currentCompany.name)}</div>
           <div style="font-size:12px;color:var(--text-3);">Aged Payables · ${dateRange}${contactLabel}${multi ? ' · Multiple currencies' : ' · '+ccys[0]}</div>
         </div>
         ${ccyTables}
@@ -9993,28 +10002,28 @@ function coPageDims() {
 
 function buildPDFHeader(co, docTitle, docNo, balanceLabel, balanceValue, contact, metaRows) {
   const logoHtml = co.logo_url
-    ? `<img src="${co.logo_url}" style="height:56px;max-width:160px;object-fit:contain;margin-bottom:8px;display:block;">`
-    : `<div style="width:52px;height:52px;border-radius:8px;background:linear-gradient(135deg,#C9A84C,#E8C76A);display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:18px;color:#000;margin-bottom:8px;">${co.code?.slice(0,2)||co.name?.slice(0,2).toUpperCase()}</div>`;
+    ? `<img src="${escHTML(co.logo_url)}" style="height:56px;max-width:160px;object-fit:contain;margin-bottom:8px;display:block;">`
+    : `<div style="width:52px;height:52px;border-radius:8px;background:linear-gradient(135deg,#C9A84C,#E8C76A);display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:18px;color:#000;margin-bottom:8px;">${escHTML(co.code?.slice(0,2)||co.name?.slice(0,2).toUpperCase())}</div>`;
 
-  const addrLine1 = co.address_line1 || '';
-  const addrLine2 = [co.address_line2, co.address_line3].filter(Boolean).join(', ');
-  const addrLine3 = [co.address_country, co.address_postal].filter(Boolean).join(' ');
-  const contactLine = [co.email, co.phone ? `Tel: ${co.phone}` : null].filter(Boolean).join(' | ');
+  const addrLine1 = escHTML(co.address_line1 || '');
+  const addrLine2 = escHTML([co.address_line2, co.address_line3].filter(Boolean).join(', '));
+  const addrLine3 = escHTML([co.address_country, co.address_postal].filter(Boolean).join(' '));
+  const contactLine = escHTML([co.email, co.phone ? `Tel: ${co.phone}` : null].filter(Boolean).join(' | '));
 
   const clientAddrParts = [contact.bill_line1, contact.bill_line2, contact.bill_line3, contact.bill_country].filter(Boolean);
-  const clientAddr = clientAddrParts.length ? clientAddrParts.join('<br>') : (contact.address||'').replace(/\n/g,'<br>');
+  const clientAddr = clientAddrParts.length ? clientAddrParts.map(p => escHTML(p)).join('<br>') : escHTML(contact.address||'').replace(/\n/g,'<br>');
 
   return `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
       <div style="max-width:260px;">
         ${logoHtml}
-        <div style="font-size:14px;font-weight:700;color:#1a1a1a;margin-bottom:2px;">${co.name}</div>
+        <div style="font-size:14px;font-weight:700;color:#1a1a1a;margin-bottom:2px;">${escHTML(co.name)}</div>
         ${addrLine1 ? `<div style="font-size:10px;color:#555;line-height:1.5;">${addrLine1}</div>` : ''}
         ${addrLine2 ? `<div style="font-size:10px;color:#555;line-height:1.5;">${addrLine2}</div>` : ''}
         ${addrLine3 ? `<div style="font-size:10px;color:#555;line-height:1.5;">${addrLine3}</div>` : ''}
         ${contactLine ? `<div style="font-size:10px;color:#555;line-height:1.5;margin-top:2px;">${contactLine}</div>` : ''}
-        ${co.tin     ? `<div style="font-size:10px;color:#888;margin-top:2px;">TIN: ${co.tin}</div>` : ''}
-        ${co.vat_reg ? `<div style="font-size:10px;color:#888;">VAT Reg: ${co.vat_reg}</div>` : ''}
+        ${co.tin     ? `<div style="font-size:10px;color:#888;margin-top:2px;">TIN: ${escHTML(co.tin)}</div>` : ''}
+        ${co.vat_reg ? `<div style="font-size:10px;color:#888;">VAT Reg: ${escHTML(co.vat_reg)}</div>` : ''}
       </div>
       <div style="text-align:right;">
         <div style="font-size:36px;font-weight:300;color:#1a1a1a;letter-spacing:-1px;line-height:1;">${docTitle}</div>
@@ -10026,8 +10035,8 @@ function buildPDFHeader(co, docTitle, docNo, balanceLabel, balanceValue, contact
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #e8e8e8;">
       <div>
         <div style="font-size:9px;color:#999;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Bill To / Prepared For</div>
-        <div style="font-size:13px;font-weight:700;color:#1a1a1a;">${contact.trading_name||contact.name||'—'}</div>
-        ${contact.trading_name && contact.trading_name !== contact.name ? `<div style="font-size:11px;color:#555;">${contact.name}</div>` : ''}
+        <div style="font-size:13px;font-weight:700;color:#1a1a1a;">${escHTML(contact.trading_name||contact.name)||'—'}</div>
+        ${contact.trading_name && contact.trading_name !== contact.name ? `<div style="font-size:11px;color:#555;">${escHTML(contact.name)}</div>` : ''}
         ${clientAddr ? `<div style="font-size:10px;color:#555;line-height:1.6;margin-top:2px;">${clientAddr}</div>` : ''}
       </div>
       <div style="display:grid;grid-template-columns:auto auto;gap:3px 20px;align-content:start;">
@@ -10050,16 +10059,16 @@ function buildPDFLineTable(lines, showPricing, currency) {
   const rows = lines.map((l, i) => showPricing
     ? `<tr>
         <td style="${tdBase}font-size:11px;color:#999;text-align:center;">${l._globalIdx??i+1}</td>
-        <td style="${tdBase}font-size:12px;color:#333;">${l.description||'—'}</td>
+        <td style="${tdBase}font-size:12px;color:#333;">${escHTML(l.description)||'—'}</td>
         <td style="${tdBase}font-size:11px;color:#333;text-align:right;font-family:monospace;">${fmtNum(l.quantity)}</td>
         <td style="${tdBase}font-size:11px;color:#333;text-align:right;font-family:monospace;">${fmtNum(l.unit_price??0)}</td>
         <td style="${tdLast}font-size:11px;color:#333;text-align:right;font-family:monospace;">${fmtNum(parseFloat(l.line_total??0)||parseFloat(l.amount??0)||(parseFloat(l.unit_price??0)*parseFloat(l.quantity??1)))}</td>
        </tr>`
     : `<tr>
         <td style="${tdBase}font-size:11px;color:#999;text-align:center;">${l._globalIdx??i+1}</td>
-        <td style="${tdBase}font-size:12px;color:#333;">${l.description||'—'}</td>
+        <td style="${tdBase}font-size:12px;color:#333;">${escHTML(l.description)||'—'}</td>
         <td style="${tdBase}font-size:11px;color:#333;text-align:right;font-family:monospace;">${fmtNum(l.quantity)}</td>
-        <td style="${tdLast}font-size:11px;color:#555;text-align:center;">${l.unit||'—'}</td>
+        <td style="${tdLast}font-size:11px;color:#555;text-align:center;">${escHTML(l.unit)||'—'}</td>
        </tr>`
   ).join('');
 
@@ -10435,11 +10444,11 @@ async function onGlobalSearch() {
             <div class="search-result-item" onclick="${navFn(item)}">
               <span class="search-result-icon">${icon}</span>
               <div class="search-result-main">
-                <div class="search-result-title">${getTitle(item)}</div>
-                <div class="search-result-sub">${getSub(item)}</div>
+                <div class="search-result-title">${escHTML(getTitle(item))}</div>
+                <div class="search-result-sub">${escHTML(getSub(item))}</div>
               </div>
-              ${showCo && item._co ? `<span class="search-result-co">${item._co}</span>` : ''}
-              <span class="search-result-meta">${getMeta(item)}</span>
+              ${showCo && item._co ? `<span class="search-result-co">${escHTML(item._co)}</span>` : ''}
+              <span class="search-result-meta">${escHTML(getMeta(item))}</span>
             </div>`).join('');
       };
 
