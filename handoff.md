@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-11 · Session 20*
+*Last updated: 2026-06-17 · Session 21*
 
 ---
 
@@ -12,6 +12,41 @@
 | GitHub repo | `brandonr2630/meridian-erp` |
 | Deploy | Push to `master` via PR → GitHub Actions → GreenGeeks cPanel auto-deploys |
 | Deploy workflow | `.github/workflows/deploy.yml` → cPanel Fileman API (`chi203.greengeeks.net`) |
+
+---
+
+## Session 21 — Workshop / Job Cards module
+
+**Date:** 2026-06-17
+**Branch / PR:** [PR #61](https://github.com/brandonr2630/meridian-erp/pull/61) · Supabase migration applied directly
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| Workshop nav section | New collapsible sidebar section with **Job Cards** and **Job Config** | Job Config hidden for non-admin roles via `applyRoleNav()`; `sales` role can see Job Cards |
+| `view-job-cards` | Full job management view — dashboard + 10-card job form | Dashboard: KPI strip (open / overdue / in-progress / completed), sortable/searchable register table, status pills. Form cards: Job Details, Labour, Equipment, Materials, Consumables, Sub-contractors, QC Checklist, Costing Summary, Drawings/Specs/Reports, Sign-off & Completion |
+| `view-job-config` | Tabbed config manager (admin-only) | 7 tabs: Labour · Equipment · Materials · Consumables · Tasks · QC Checklists · Employees — full add/edit/delete, shared `#jc-cfg-modal` |
+| Dashboard Workshop zone | New stat row on the ERP main dashboard | 4 cards: Open Jobs, Overdue, Due This Week, Completed This Month — overdue card gets red border when count > 0 |
+| Supabase schema | 14 new tables applied to ERP project (`fcagxvjxfqqkmuposmcb`) | `jobs`, `labour_entries`, `equipment_entries`, `material_entries`, `consumable_entries`, `subcontractor_entries`, `job_audit_log`, `employees`, `config_labour`, `config_materials`, `config_consumables`, `config_tasks`, `config_qc_checklists`, `config_equipment` |
+| `next_job_no()` RPC | Postgres sequence `job_no_seq` → `JC-0001`, `JC-0002`, … | Called via `sb('rpc/next_job_no', { method:'POST', body:{} })` when opening a new job form |
+| Multi-company scoping | All job queries include `company_id=eq.${currentCompany.id}` | `UNIQUE (company_id, job_no)` constraint on `jobs` |
+| API pattern | All Supabase SDK calls converted to ERP raw-fetch wrappers | `sbGet / sbPost / sbPatch / sbDelete / sbDeleteWhere` throughout; no Supabase JS SDK dependency |
+| Namespace | All DOM IDs prefixed `jc-`; all JS functions/vars prefixed `jc` or `jcCfg` | Prevents collision with existing ERP identifiers |
+
+### Architecture notes
+
+- **Entry points:** `loadJobCards()` (dashboard) and `loadJobConfig()` (config manager)
+- **Config cache:** `jcConfig` object loaded on every `loadJobCards()` call; also refreshed after any add/edit/delete in Job Config so form dropdowns stay current
+- **Save pattern:** job header PATCH/POST, then parallel DELETE + re-INSERT for all entry child tables (labour, equipment, materials, consumables, sub-contractors)
+- **QC state** stored as JSONB on the `jobs` row; drawings/specs/reports likewise
+- **Job audit log** fires fire-and-forget on every save; failures do not block the save
+
+### Outstanding
+
+- **Job → Invoice link** — completed job's costing summary pre-fills a Meridian invoice (replaces the old "Q2M Job Cards link" backlog item)
+- **Job Cards PDF** — printable job card / work order report
+- **Job number prefix per company** — currently hardcoded `JC-`; may want company-configurable prefix like invoice numbering
 
 ---
 
@@ -494,7 +529,7 @@ Rewrote `.github/workflows/deploy.yml` to upload files directly via `Fileman/sav
 
 ### Application
 
-The entire app is `index.html` — approximately 10,200 lines of inline CSS and JavaScript. **Never edit `index2–5.html`; those are archives.**
+The entire app is `index.html` — approximately 13,200 lines of inline CSS and JavaScript. **Never edit `index2–5.html`; those are archives.**
 
 ### Backend
 
@@ -516,7 +551,7 @@ Finance modules (AP, Bank, CoA, Journal, Reports) are admin-only. Check `canPost
 
 ### Modules
 
-Dashboard · Chart of Accounts · Journal Entries · AR · AP · Vendor Payments · Clients · Vendors · ERP Companies · Settings · Bank Accounts · Bank Transactions & Reconciliation · Bills · Financial Reports (P&L · Balance Sheet · Trial Balance · Cash Flow · Aged AR/AP) · Quotations · Delivery Notes · Credit Notes · Sales Leads · CRM (Pipeline · Activities · Tasks)
+Dashboard · Chart of Accounts · Journal Entries · AR · AP · Vendor Payments · Clients · Vendors · ERP Companies · Settings · Bank Accounts · Bank Transactions & Reconciliation · Bills · Financial Reports (P&L · Balance Sheet · Trial Balance · Cash Flow · Aged AR/AP) · Quotations · Delivery Notes · Credit Notes · Sales Leads · CRM (Pipeline · Activities · Tasks) · **Workshop (Job Cards · Job Config)**
 
 ### Currencies
 
@@ -566,7 +601,8 @@ Items are grouped by theme and ordered by suggested priority within each group. 
 
 ### Integration
 
-- [ ] **Q2M Job Cards link** — cost summary from a job card pre-fills a Meridian invoice. Note: the apps use **separate** Supabase projects (verified Session 20), so this needs a cross-project integration rather than a shared-table join.
+- [x] **Workshop / Job Cards module** — fully assimilated into the ERP in Session 21; no longer a separate app integration. Schema lives in the ERP Supabase project.
+- [ ] **Job → Invoice link** — completed job's costing summary pre-fills a Meridian invoice. Now feasible as a same-project query (no cross-project integration needed).
 
 ---
 
@@ -577,4 +613,6 @@ Items are grouped by theme and ordered by suggested priority within each group. 
 - [ ] **Enable leaked password protection** — Supabase Dashboard → Authentication → Passwords. Checks new passwords against HaveIBeenPwned; flagged by the security advisors in Session 20 and cannot be enabled via SQL/MCP — requires a manual dashboard toggle.
 - [ ] **"Convert to Quote" on a won opportunity** — pre-fill the quote form from the deal; write `quotation_id` back to the opportunity (carried over from Session 18)
 - [ ] **CRM pipeline KPI widget on the Dashboard** — deals by stage, conversion rate (carried over from Session 18; same item as "Sales pipeline KPIs" in the Backlog)
+- [ ] **Job → Invoice link** — completed job's costing summary pre-fills a Meridian invoice (new in Session 21; same-project query now feasible)
+- [ ] **Job Cards PDF** — printable job card / work order report for the workshop floor
 
