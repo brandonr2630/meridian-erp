@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-17 · Session 21*
+*Last updated: 2026-06-17 · Session 22*
 
 ---
 
@@ -12,6 +12,29 @@
 | GitHub repo | `brandonr2630/meridian-erp` |
 | Deploy | Push to `master` via PR → GitHub Actions → GreenGeeks cPanel auto-deploys |
 | Deploy workflow | `.github/workflows/deploy.yml` → cPanel Fileman API (`chi203.greengeeks.net`) |
+
+---
+
+## Session 22 — JWT auto-refresh & escHTML bug fix
+
+**Date:** 2026-06-17
+**Branch / PR:** [PR #64](https://github.com/brandonr2630/meridian-erp/pull/64)
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| `sb()` — JWT auto-refresh | Added retry-on-401 logic | When a Supabase REST call returns 401 (expired access token), `sb()` now silently calls `sbAuthRefresh()` with the stored refresh token, calls `persistSession()` with the new token, then retries the original request once. If refresh fails, `clearSession()` is called and the login overlay is shown — user sees "Session expired. Please log in again." instead of a generic save error. |
+| `escHtml` → `escHTML` in job cards module | Fixed 28 call sites in the Workshop / Job Cards module (lines 5671–6676) | Session 21 introduced the module using `escHtml()` (mixed case), but the ERP only defines `escHTML()` (all caps). This caused "Save failed: escHtml is not defined" on any job card save. Fixed via `replace_all` in [PR #63](https://github.com/brandonr2630/meridian-erp/pull/63). |
+
+### Architecture notes
+
+- **Token lifetime:** Supabase access tokens expire after 1 hour. `tryRestoreSession()` already proactively refreshes within 5 minutes of expiry on page load. The new 401-retry in `sb()` covers tokens that expire mid-session (e.g., a tab left open past 1 hour).
+- **Retry is single-shot:** if the retry also returns non-OK, the error propagates normally. This prevents infinite loops if there's a genuine auth issue.
+
+### Outstanding
+
+- No new outstanding items (escHTML and JWT expiry both resolved this session)
 
 ---
 
@@ -565,7 +588,7 @@ PDFs rendered client-side with a custom multi-page renderer. SheetJS lazy-loaded
 
 ## Known Issues
 
-No known issues.
+- **`voidVendorPayment()` untested** — AP void flow hasn't been exercised since the payments table FK was fixed (2026-05-08). Confirm it sets status to 'void', reverses the JE, and recalculates the bill balance.
 
 ## Backlog
 
