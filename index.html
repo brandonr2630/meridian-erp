@@ -1264,6 +1264,225 @@ body {
 
   .toast { left: 12px; right: 12px; bottom: 12px; max-width: none; min-width: 0; }
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   JOB CARDS MODULE
+══════════════════════════════════════════════════════════════════ */
+
+/* ── JC TOOLBAR & STATUS BAR ─── */
+.jc-toolbar { background:var(--bg-2); border-bottom:1px solid var(--border); padding:7px 16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.jc-toolbar-divider { width:1px; height:24px; background:var(--border); }
+.jc-search-wrap { display:flex; align-items:center; gap:6px; flex:1; min-width:200px; position:relative; }
+.jc-search-select { background:var(--bg-3); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); padding:5px 8px; font-size:12px; cursor:pointer; }
+.jc-search-input { background:var(--bg-3); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); padding:5px 10px; font-size:12px; flex:1; outline:none; transition:border-color .15s; }
+.jc-search-input:focus { border-color:var(--gold); }
+.jc-search-results { position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:500; background:var(--bg-2); border:1px solid var(--gold); border-radius:var(--radius); box-shadow:var(--shadow-lg); max-height:280px; overflow-y:auto; display:none; }
+.jc-sri { padding:9px 14px; cursor:pointer; border-bottom:1px solid var(--border); transition:background .1s; }
+.jc-sri:hover { background:var(--bg-3); }
+.jc-sri-jobno { font-family:'DM Mono',monospace; font-size:11px; color:var(--gold); font-weight:600; }
+.jc-sri-customer { font-size:13px; color:var(--text); }
+.jc-sri-meta { font-size:11px; color:var(--text-2); margin-top:2px; }
+.jc-statusbar { background:var(--bg-2); border-bottom:1px solid var(--border); padding:7px 16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.jc-status-label { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text-3); }
+.jc-status-options { display:flex; gap:5px; flex-wrap:wrap; }
+.jc-status-btn { padding:3px 12px; border-radius:20px; border:1.5px solid var(--border-2); background:transparent; color:var(--text-2); font-size:11px; font-weight:600; letter-spacing:.5px; text-transform:uppercase; cursor:pointer; transition:all .15s; }
+.jc-status-btn:hover { border-color:var(--gold); color:var(--gold); }
+.jc-status-btn.active { background:var(--gold); border-color:var(--gold); color:#000; font-weight:700; }
+.jc-status-btn.active.green { background:var(--green); border-color:var(--green); color:#fff; }
+.jc-status-btn.active.blue { background:var(--blue); border-color:var(--blue); color:#fff; }
+.jc-status-btn.active.dark { background:var(--text); border-color:var(--text); color:var(--bg); }
+.jc-cat-btn { padding:3px 12px; border-radius:20px; border:1.5px solid var(--border-2); background:transparent; color:var(--text-2); font-size:11px; font-weight:600; letter-spacing:.5px; text-transform:uppercase; cursor:pointer; transition:all .15s; }
+.jc-cat-btn.active { background:var(--text); border-color:var(--text); color:var(--bg); }
+.jc-priority-select { background:var(--bg-3); border:1px solid var(--border); color:var(--text); padding:4px 8px; border-radius:var(--radius); font-size:12px; cursor:pointer; }
+.jc-lock-banner { background:var(--red-bg); border-bottom:2px solid var(--red); padding:6px 16px; display:none; align-items:center; gap:10px; font-size:12px; font-weight:600; color:var(--red); }
+.jc-lock-banner.show { display:flex; }
+.jc-unsaved-banner { background:var(--amber-bg); border-bottom:1px solid var(--amber); padding:5px 16px; display:none; align-items:center; font-size:11px; color:var(--amber); }
+.jc-unsaved-banner.show { display:flex; }
+.jc-job-no-bar { background:var(--bg-3); border-bottom:1px solid var(--border); padding:5px 16px; display:flex; align-items:center; gap:12px; }
+.jc-job-no-label { font-size:10px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-3); }
+.jc-job-no-value { font-family:'DM Mono',monospace; font-size:18px; color:var(--gold); letter-spacing:2px; font-weight:600; }
+.jc-last-saved { font-size:10px; color:var(--text-3); font-family:'DM Mono',monospace; margin-left:auto; }
+.jc-draft-dot { width:7px; height:7px; border-radius:50%; background:var(--amber); display:none; animation:pulse 2s infinite; }
+.jc-draft-dot.show { display:inline-block; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+/* ── JC FORM ─── */
+.jc-form-wrap { display:none; flex-direction:column; }
+.jc-form-wrap.active { display:flex; }
+.jc-main-wrap { padding:16px; display:flex; flex-direction:column; gap:14px; max-width:1400px; }
+
+/* Cards (section containers) */
+.card { background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; box-shadow:var(--shadow); }
+.card-header { background:var(--bg-3); border-bottom:1px solid var(--border); padding:10px 16px; display:flex; align-items:center; gap:8px; }
+.card-header-icon { font-size:15px; }
+.card-header-title { font-size:12px; font-weight:700; letter-spacing:.5px; color:var(--text); flex:1; }
+.card-header-badge { font-family:'DM Mono',monospace; font-size:10px; color:var(--gold); background:var(--gold-bg); border:1px solid var(--gold-border); border-radius:10px; padding:1px 8px; }
+.card-body { padding:14px 16px; }
+
+/* Section divider within cards */
+.section-divider { font-size:10px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-3); padding:8px 0 4px; border-bottom:1px solid var(--border); margin-bottom:10px; }
+
+/* Grids — reuse ERP's .form-grid but add column variants */
+.grid-2 { grid-template-columns:1fr 1fr; }
+.grid-3 { grid-template-columns:1fr 1fr 1fr; }
+.grid-4 { grid-template-columns:1fr 1fr 1fr 1fr; }
+.hse-grid { grid-template-columns:1fr 1fr 1fr; }
+.span-2 { grid-column:span 2; }
+.span-3 { grid-column:span 3; }
+.span-4 { grid-column:span 4; }
+
+/* Dynamic inline-editing tables */
+.dyn-table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.dyn-table { width:100%; border-collapse:collapse; }
+.dyn-table thead tr { background:var(--bg-3); border-bottom:2px solid var(--border); }
+.dyn-table th { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text-3); padding:7px 6px; text-align:left; white-space:nowrap; }
+.dyn-table th.right { text-align:right; }
+.dyn-table tbody tr { border-bottom:1px solid var(--border); }
+.dyn-table tbody tr:hover { background:var(--bg-3); }
+.dyn-table td { padding:3px 4px; vertical-align:middle; }
+.dyn-table td.right { text-align:right; padding-right:6px; }
+.dyn-table tfoot tr { border-top:2px solid var(--border); background:var(--bg-3); }
+.dyn-table tfoot td { padding:7px 8px; font-weight:600; color:var(--text-2); font-size:12px; }
+.dyn-table tfoot td.right { text-align:right; }
+.dyn-table td input, .dyn-table td select { background:transparent; border:1px solid transparent; border-radius:var(--radius); color:var(--text); padding:4px 5px; font-size:12px; width:100%; outline:none; transition:border-color .15s,background .15s; }
+.dyn-table td input:focus, .dyn-table td select:focus { border-color:var(--gold); background:var(--gold-bg); }
+.dyn-table td input[type="date"], .dyn-table td input[type="time"] { font-family:'DM Mono',monospace; font-size:11px; }
+.dyn-table td .row-total { font-family:'DM Mono',monospace; font-size:12px; color:var(--text-2); text-align:right; padding-right:4px; min-width:80px; display:block; font-weight:600; }
+.dyn-table td input.num { text-align:right; font-family:'DM Mono',monospace; font-size:12px; }
+
+/* Register tables (drawings, specs, reports) */
+.register-table { width:100%; border-collapse:collapse; }
+.register-table th { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text-3); padding:5px 7px; text-align:left; background:var(--bg-3); border-bottom:1px solid var(--border); }
+.register-table td { padding:3px 3px; border-bottom:1px solid var(--border); vertical-align:middle; }
+.register-table td input, .register-table td select { background:var(--bg-3); border:1px solid transparent; border-radius:var(--radius); color:var(--text); padding:4px 6px; font-size:12px; width:100%; outline:none; transition:border-color .15s; }
+.register-table td input:focus { border-color:var(--gold); background:var(--gold-bg); }
+
+/* Row management buttons */
+.btn-add-row { background:transparent; border:1px dashed var(--border-2); border-radius:var(--radius); color:var(--text-2); padding:5px 12px; font-size:11px; cursor:pointer; margin-top:6px; transition:all .15s; }
+.btn-add-row:hover { border-color:var(--gold); color:var(--gold); }
+.btn-del { background:transparent; border:none; color:var(--text-3); cursor:pointer; font-size:16px; padding:2px 4px; line-height:1; transition:color .15s; }
+.btn-del:hover { color:var(--red); }
+.scroll-hint { display:none; font-size:10px; color:var(--text-3); margin-bottom:6px; font-style:italic; }
+
+/* Costing summary */
+.cost-summary { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+.cost-breakdown table { width:100%; border-collapse:collapse; }
+.cost-breakdown td { padding:5px 8px; font-size:12px; color:var(--text-2); border-bottom:1px solid var(--border); }
+.cost-breakdown td:last-child { text-align:right; font-family:'DM Mono',monospace; color:var(--text); font-weight:600; }
+.cost-breakdown .total-row td { border-top:2px solid var(--border); border-bottom:none; font-weight:700; font-size:13px; color:var(--text); padding-top:8px; }
+.cost-breakdown .total-row td:last-child { color:var(--gold); font-size:14px; }
+.cost-over-warning { background:var(--red-bg); border:1px solid var(--red); border-radius:var(--radius); padding:6px 10px; font-size:11px; font-weight:600; color:var(--red); margin-top:8px; display:none; }
+.cost-over-warning.show, .cost-near-warning.show { display:block; }
+.cost-near-warning { background:var(--amber-bg); border:1px solid var(--amber); border-radius:var(--radius); padding:6px 10px; font-size:11px; font-weight:600; color:var(--amber); margin-top:8px; display:none; }
+.cost-meta .form-grid { gap:10px; }
+.admin-locked { border:1px solid var(--border-2); border-radius:var(--radius); padding:10px 14px; margin-top:10px; }
+.admin-locked-label { display:flex; align-items:center; justify-content:space-between; font-size:11px; font-weight:600; color:var(--text-2); margin-bottom:8px; }
+.admin-locked-fields { display:grid; grid-template-columns:1fr 1fr; gap:10px; pointer-events:none; opacity:.5; }
+.admin-locked-fields.unlocked { pointer-events:auto; opacity:1; }
+.btn-unlock { background:transparent; border:1px solid var(--border-2); border-radius:var(--radius); color:var(--text-2); font-size:10px; padding:2px 10px; cursor:pointer; transition:all .15s; }
+.btn-unlock:hover { border-color:var(--gold); color:var(--gold); }
+.btn-unlock.unlocked { color:var(--green); border-color:var(--green); }
+.profit-indicator { font-size:11px; color:var(--text-3); margin-top:8px; font-style:italic; }
+.profit-indicator.good { color:var(--green); font-style:normal; font-weight:600; }
+.profit-indicator.bad  { color:var(--red);   font-style:normal; font-weight:600; }
+
+/* QC checklist */
+.qc-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
+.qc-item { display:flex; align-items:center; gap:8px; padding:7px 10px; border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; transition:all .15s; }
+.qc-item:hover { border-color:var(--gold); }
+.qc-item.pass { background:var(--green-bg); border-color:var(--green); }
+.qc-item.fail { background:var(--red-bg); border-color:var(--red); }
+.qc-check { width:22px; height:22px; border-radius:4px; border:2px solid var(--border-2); display:flex; align-items:center; justify-content:center; font-size:12px; flex-shrink:0; }
+.qc-item.pass .qc-check { background:var(--green); border-color:var(--green); color:#fff; }
+.qc-item.fail .qc-check { background:var(--red);   border-color:var(--red);   color:#fff; }
+.qc-label { font-size:12px; color:var(--text); }
+
+/* Sign-off section */
+.signoff-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+.signoff-box { border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px; }
+.signoff-role { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text-3); margin-bottom:10px; }
+.signoff-line { display:flex; justify-content:space-between; font-size:11px; color:var(--text-2); padding-top:8px; border-top:1px solid var(--border); }
+
+/* Audit trail */
+.audit-list { max-height:200px; overflow-y:auto; display:flex; flex-direction:column; gap:4px; }
+.audit-entry { display:flex; gap:8px; align-items:flex-start; padding:4px 0; border-bottom:1px solid var(--border); font-size:11px; }
+.audit-empty { font-size:12px; color:var(--text-3); font-style:italic; padding:8px 0; }
+
+/* Action bar */
+.jc-action-bar { display:flex; align-items:center; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--border); background:var(--bg-2); flex-wrap:wrap; }
+
+/* ── JC DASHBOARD ─── */
+.jc-dashboard { display:none; flex-direction:column; }
+.jc-dashboard.active { display:flex; }
+.jc-dash-filters { padding:10px 16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; border-bottom:1px solid var(--border); background:var(--bg-2); }
+.jc-dash-search { background:var(--bg-3); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); padding:6px 10px; font-size:12px; flex:1; min-width:200px; outline:none; }
+.jc-dash-search:focus { border-color:var(--gold); }
+.jc-dash-filter { background:var(--bg-3); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); padding:5px 8px; font-size:12px; cursor:pointer; }
+.jc-dash-body { padding:16px; display:flex; flex-direction:column; gap:16px; overflow-y:auto; }
+.jc-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+.jc-kpi { background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-lg); padding:14px 16px; cursor:pointer; transition:border-color .15s; }
+.jc-kpi:hover { border-color:var(--gold); }
+.jc-kpi-num { font-family:'DM Mono',monospace; font-size:28px; font-weight:700; color:var(--gold); line-height:1; }
+.jc-kpi-num.blue { color:var(--blue); }
+.jc-kpi-num.amber { color:var(--amber); }
+.jc-kpi-num.green { color:var(--green); }
+.jc-kpi-label { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text-3); margin-top:4px; }
+.jc-section-head { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.jc-section-title { font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-2); }
+.jc-section-line { flex:1; height:1px; background:var(--border); }
+.jc-section-count { font-size:11px; font-weight:600; color:var(--text-3); font-family:'DM Mono',monospace; }
+.jc-action-cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:8px; }
+.jc-ac { background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-lg); padding:12px 14px; cursor:pointer; transition:border-color .15s,box-shadow .15s; }
+.jc-ac:hover { border-color:var(--gold); box-shadow:var(--shadow); }
+.jc-ac-jobno { font-family:'DM Mono',monospace; font-size:11px; color:var(--gold); font-weight:600; }
+.jc-ac-customer { font-size:13px; color:var(--text); font-weight:500; margin-top:2px; }
+.jc-ac-meta { font-size:11px; color:var(--text-2); margin-top:4px; display:flex; gap:6px; flex-wrap:wrap; }
+.jc-ac-flag { display:inline-block; font-size:9px; font-weight:700; padding:1px 6px; border-radius:10px; letter-spacing:.5px; text-transform:uppercase; }
+.jc-ac-flag.overdue { background:var(--red-bg);   color:var(--red);   border:1px solid var(--red); }
+.jc-ac-flag.urgent  { background:var(--amber-bg); color:var(--amber); border:1px solid var(--amber); }
+.jc-ac-flag.hold    { background:var(--blue-bg);  color:var(--blue);  border:1px solid var(--blue); }
+.jc-empty-state { padding:32px; text-align:center; font-size:13px; color:var(--text-3); }
+.dash-table-wrap { overflow-x:auto; background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-lg); }
+.dash-table { width:100%; border-collapse:collapse; font-size:12px; }
+.dash-table thead tr { background:var(--bg-3); }
+.dash-table th { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text-2); padding:9px 12px; text-align:left; white-space:nowrap; cursor:pointer; user-select:none; }
+.dash-table th:hover { color:var(--gold); }
+.dash-table tbody tr { border-bottom:1px solid var(--border); cursor:pointer; transition:background .1s; }
+.dash-table tbody tr:hover { background:var(--gold-bg); }
+.dash-table td { padding:8px 12px; color:var(--text-2); }
+.dash-jno { font-family:'DM Mono',monospace; font-size:11px; color:var(--gold); font-weight:600; }
+.jc-status-pill { display:inline-block; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; text-transform:uppercase; letter-spacing:.5px; background:var(--bg-4); color:var(--text-2); }
+.jc-status-pill.received   { background:var(--bg-4);     color:var(--text-2); }
+.jc-status-pill.progress   { background:var(--blue-bg);  color:var(--blue); }
+.jc-status-pill.hold       { background:var(--amber-bg); color:var(--amber); }
+.jc-status-pill.completed  { background:var(--green-bg); color:var(--green); }
+.jc-status-pill.invoiced   { background:var(--bg-3);     color:var(--text-3); }
+.jc-status-pill.closed     { background:var(--bg-3);     color:var(--text-3); }
+.jc-priority-pill { display:inline-block; font-size:10px; font-weight:700; padding:2px 7px; border-radius:10px; text-transform:uppercase; }
+.jc-priority-pill.urgent { background:var(--red-bg);   color:var(--red); }
+.jc-priority-pill.rush   { background:var(--amber-bg); color:var(--amber); }
+.jc-priority-pill.normal { background:var(--bg-4);     color:var(--text-3); }
+
+/* Remove page-body padding for job cards so the toolbar/statusbar go edge-to-edge */
+#view-job-cards .page-body { padding:0; display:flex; flex-direction:column; }
+#view-job-cards .jc-main-wrap { flex:1; }
+
+/* JC extras */
+.jc-kpi-num.red   { color:var(--red); }
+.jc-kpi-num.amber { color:var(--amber); }
+.jc-dash-row-overdue td { background:color-mix(in srgb, var(--red-bg) 60%, transparent); }
+.jc-dash-row-today td   { background:color-mix(in srgb, var(--amber-bg) 60%, transparent); }
+.jc-ot-badge { display:inline-block; font-size:9px; font-weight:700; background:var(--amber-bg); color:var(--amber); border:1px solid var(--amber); border-radius:3px; padding:0 4px; margin-right:4px; vertical-align:middle; }
+.jc-ot-row td { background:color-mix(in srgb, var(--amber-bg) 50%, transparent); }
+.profit-indicator.healthy { color:var(--green); font-weight:600; font-style:normal; }
+.profit-indicator.warn    { color:var(--amber); font-weight:600; font-style:normal; }
+.profit-indicator.danger  { color:var(--red);   font-weight:600; font-style:normal; }
+.jc-readonly { pointer-events:none; opacity:.75; }
+.jc-sri { padding:9px 14px; cursor:pointer; border-bottom:1px solid var(--border); transition:background .1s; }
+.jc-sri:hover { background:var(--bg-3); }
+.jc-search-empty { padding:12px 14px; font-size:12px; color:var(--text-3); text-align:center; }
+.btn-add-task { background:transparent; border:1px dashed var(--border); border-radius:var(--radius); color:var(--text-3); padding:2px 8px; font-size:11px; cursor:pointer; margin:4px 0; transition:all .15s; }
+.btn-add-task:hover { border-color:var(--gold); color:var(--gold); }
 </style>
 </head>
 <body>
@@ -1449,6 +1668,21 @@ body {
         </div>
       </div>
     </div>
+    <div class="sidebar-section" data-section="workshop">
+      <div class="sidebar-section-header" onclick="toggleNavSection('workshop')">
+        <div class="sidebar-section-label">Workshop</div>
+        <span class="nav-toggle" id="toggle-workshop">&#8722;</span>
+      </div>
+      <div class="nav-section-body" id="section-body-workshop">
+        <div class="nav-item" onclick="navigate('job-cards')" id="nav-job-cards">
+          <span class="nav-item-icon">🔧</span> Job Cards
+          <span class="nav-badge" id="badge-job-cards" style="display:none;">0</span>
+        </div>
+        <div class="nav-item" id="nav-job-config" onclick="navigate('job-config')" style="display:none;">
+          <span class="nav-item-icon">⚙️</span> Job Config
+        </div>
+      </div>
+    </div>
     <div class="sidebar-section" data-section="setup">
       <div class="sidebar-section-header" onclick="toggleNavSection('setup')">
         <div class="sidebar-section-label">Setup</div>
@@ -1547,7 +1781,32 @@ body {
           <div class="stat-card accent"><div class="stat-label">Revenue This Month</div><div class="stat-value" id="stat-revenue">—</div><div class="stat-sub" id="stat-revenue-sub">vs last month</div></div>
         </div>
 
-        <!-- Zone 3: Recent Activity -->
+        <!-- Zone 3: Workshop -->
+        <div style="margin-bottom:8px;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);">Workshop</div>
+        <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px;">
+          <div class="stat-card" onclick="navigate('job-cards')" style="cursor:pointer;">
+            <div class="stat-label">Open Jobs</div>
+            <div class="stat-value" id="dash-jc-open">—</div>
+            <div class="stat-sub" id="dash-jc-open-sub">Active</div>
+          </div>
+          <div class="stat-card negative" onclick="navigate('job-cards')" style="cursor:pointer;">
+            <div class="stat-label">Overdue</div>
+            <div class="stat-value" id="dash-jc-overdue">—</div>
+            <div class="stat-sub">Past due date</div>
+          </div>
+          <div class="stat-card accent" onclick="navigate('job-cards')" style="cursor:pointer;">
+            <div class="stat-label">Due This Week</div>
+            <div class="stat-value" id="dash-jc-week">—</div>
+            <div class="stat-sub">Next 7 days</div>
+          </div>
+          <div class="stat-card positive" onclick="navigate('job-cards')" style="cursor:pointer;">
+            <div class="stat-label">Completed This Month</div>
+            <div class="stat-value" id="dash-jc-completed">—</div>
+            <div class="stat-sub">This month</div>
+          </div>
+        </div>
+
+        <!-- Zone 4: Recent Activity -->
         <div style="display:grid;grid-template-columns:1fr 340px;gap:20px;">
           <div class="section-card">
             <div class="section-card-header">
@@ -2309,6 +2568,438 @@ body {
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- ── JOB CARDS ── -->
+    <div class="page-view" id="view-job-cards">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Job Cards</div>
+          <div class="page-subtitle" id="job-cards-subtitle">Q2 Machines workshop jobs</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-outline btn-sm" onclick="jcOpenDashboard()">Dashboard</button>
+          <button class="btn btn-primary btn-sm" onclick="jcNewJob()">+ New Job</button>
+        </div>
+      </div>
+      <div class="page-body" id="job-cards-body">
+
+        <!-- ── DASHBOARD ── -->
+        <div class="jc-dashboard active" id="jc-dashboard">
+          <div class="jc-dash-filters">
+            <input class="jc-dash-search" id="jc-dash-search" placeholder="Search job no., customer, description…" oninput="jcRenderDash()">
+            <select class="jc-dash-filter" id="jc-dash-status" onchange="jcRenderDash()">
+              <option value="">All Statuses</option>
+              <option>Received</option><option>In Progress</option><option>On Hold</option>
+              <option>Completed</option><option>Invoiced</option><option>Closed</option>
+            </select>
+            <select class="jc-dash-filter" id="jc-dash-priority" onchange="jcRenderDash()">
+              <option value="">All Priorities</option>
+              <option>Urgent</option><option>Rush</option><option>Normal</option><option>Scheduled</option>
+            </select>
+            <button class="btn btn-ghost btn-sm" onclick="jcLoadDashboard()">↺ Refresh</button>
+          </div>
+          <div class="jc-dash-body" id="jc-dash-body">
+            <div class="jc-kpis" id="jc-kpis"></div>
+            <div>
+              <div class="jc-section-head">
+                <div class="jc-section-title">Needs Attention</div>
+                <div class="jc-section-line"></div>
+                <div class="jc-section-count" id="jc-action-count">0</div>
+              </div>
+              <div class="jc-action-cards" id="jc-action-cards"><div class="jc-empty-state">Loading…</div></div>
+            </div>
+            <div>
+              <div class="jc-section-head">
+                <div class="jc-section-title">All Jobs</div>
+                <div class="jc-section-line"></div>
+                <div class="jc-section-count" id="jc-all-count">0</div>
+              </div>
+              <div class="dash-table-wrap">
+                <table class="dash-table">
+                  <thead><tr>
+                    <th onclick="jcDashSort('job_no')">Job No. ↕</th>
+                    <th onclick="jcDashSort('customer')">Customer ↕</th>
+                    <th onclick="jcDashSort('job_type')">Type ↕</th>
+                    <th onclick="jcDashSort('status')">Status ↕</th>
+                    <th onclick="jcDashSort('priority')">Priority ↕</th>
+                    <th onclick="jcDashSort('date_received')">Received ↕</th>
+                    <th onclick="jcDashSort('due_date')">Due ↕</th>
+                    <th>Description</th>
+                  </tr></thead>
+                  <tbody id="jc-dash-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── FORM ── -->
+        <div class="jc-form-wrap" id="jc-form-wrap">
+          <!-- Job no bar -->
+          <div class="jc-job-no-bar">
+            <span class="jc-job-no-label">Job No.</span>
+            <span class="jc-job-no-value" id="jc-job-no-display">—</span>
+            <span class="jc-draft-dot" id="jc-draft-dot" title="Unsaved changes"></span>
+            <span class="jc-last-saved" id="jc-last-saved">Not yet saved</span>
+          </div>
+          <!-- Lock banner -->
+          <div class="jc-lock-banner" id="jc-lock-banner">
+            🔒 This job is locked (Invoiced / Closed). View only.
+            <button class="btn btn-outline btn-sm" style="margin-left:8px;" onclick="jcAdminUnlock()">Admin Unlock</button>
+          </div>
+          <!-- Unsaved banner -->
+          <div class="jc-unsaved-banner" id="jc-unsaved-banner">● Unsaved changes — save before leaving.</div>
+          <!-- Toolbar -->
+          <div class="jc-toolbar">
+            <div style="display:flex;gap:6px;">
+              <button class="btn btn-ghost btn-sm" onclick="jcOpenDashboard()">← All Jobs</button>
+              <button class="btn btn-ghost btn-sm" onclick="jcDuplicateJob()">⧉ Duplicate</button>
+            </div>
+            <div class="jc-toolbar-divider"></div>
+            <div class="jc-search-wrap">
+              <select class="jc-search-select" id="jc-search-type">
+                <option value="jobno">Job No.</option>
+                <option value="customer">Customer</option>
+              </select>
+              <input class="jc-search-input" id="jc-search-input" placeholder="Search and load existing job…" oninput="jcSearchJobs()" onblur="jcHideSearch()">
+              <div id="jc-search-results" class="jc-search-results"></div>
+            </div>
+            <div class="jc-toolbar-divider"></div>
+            <button class="btn btn-primary btn-sm" onclick="jcSaveJob()">💾 Save</button>
+            <button class="btn btn-ghost btn-sm" onclick="window.print()">🖨 Print</button>
+          </div>
+          <!-- Status bar -->
+          <div class="jc-statusbar">
+            <span class="jc-status-label">Category:</span>
+            <div style="display:flex;gap:5px;">
+              <button class="jc-cat-btn active" id="jc-cat-customer" onclick="jcSetCategory('Customer',this)">Customer</button>
+              <button class="jc-cat-btn" id="jc-cat-internal" onclick="jcSetCategory('Internal',this)">Internal</button>
+            </div>
+            <div class="jc-toolbar-divider" style="height:22px;"></div>
+            <span class="jc-status-label">Status:</span>
+            <div class="jc-status-options" id="jc-status-btns">
+              <button class="jc-status-btn active" data-color="" onclick="jcSetStatus(this)">Received</button>
+              <button class="jc-status-btn" data-color="blue" onclick="jcSetStatus(this)">In Progress</button>
+              <button class="jc-status-btn" data-color="" onclick="jcSetStatus(this)">On Hold</button>
+              <button class="jc-status-btn" data-color="green" onclick="jcSetStatus(this)">Completed</button>
+              <button class="jc-status-btn" data-color="dark" onclick="jcConfirmLockStatus(this,'Invoiced')">Invoiced</button>
+              <button class="jc-status-btn" data-color="dark" onclick="jcConfirmLockStatus(this,'Closed')">Closed</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+              <span class="jc-status-label">Priority:</span>
+              <select class="jc-priority-select" id="jc-priority-select" onchange="jcMarkDirty()">
+                <option>Normal</option><option>Urgent</option><option>Rush</option><option>Scheduled</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Form cards -->
+          <div class="jc-main-wrap">
+
+            <!-- 1. Customer & Job Info -->
+            <div class="card">
+              <div class="card-header"><span class="card-header-icon">👤</span><span class="card-header-title">Customer &amp; Job Information</span></div>
+              <div class="card-body">
+                <div class="form-grid grid-4">
+                  <div class="field span-2"><label class="field-label">Customer Name / Company</label><input type="text" id="jc-f-customer" placeholder="e.g. ABC Engineering Ltd." oninput="jcMarkDirty()"></div>
+                  <div class="field"><label class="field-label">Contact Person</label><input type="text" id="jc-f-contact" placeholder="Full name" oninput="jcMarkDirty()"></div>
+                  <div class="field"><label class="field-label">Phone / WhatsApp</label><input type="tel" id="jc-f-phone" placeholder="+1 (868) 000-0000" oninput="jcMarkDirty()"></div>
+                  <div class="field span-2"><label class="field-label">Email</label><input type="email" id="jc-f-email" placeholder="customer@example.com" oninput="jcMarkDirty()"></div>
+                  <div class="field"><label class="field-label">Date Received</label><input type="date" id="jc-f-date-received" oninput="jcMarkDirty()"></div>
+                  <div class="field"><label class="field-label">Due Date</label><input type="date" id="jc-f-due-date" oninput="jcMarkDirty()"></div>
+                  <div class="field span-4"><label class="field-label">Job Description / Scope of Work</label><textarea id="jc-f-description" rows="3" placeholder="Describe the work to be carried out…" oninput="jcMarkDirty()"></textarea></div>
+                  <div class="field span-2"><label class="field-label">Part / Component Name</label><input type="text" id="jc-f-part-name" placeholder="e.g. Pump Shaft, Bracket" oninput="jcMarkDirty()"></div>
+                  <div class="field"><label class="field-label">Job Type</label>
+                    <select id="jc-f-job-type" onchange="jcOnJobTypeChange()">
+                      <option value="">Select…</option>
+                      <option>Machining</option><option>Fabrication / Welding</option><option>Repair / Overhaul</option>
+                      <option>Modification</option><option>Assembly</option><option>Inspection / Testing</option>
+                      <option>Internal — Maintenance</option><option>Internal — Manufacturing</option><option>Other</option>
+                    </select>
+                  </div>
+                  <div class="field"><label class="field-label">Execution Location</label>
+                    <select id="jc-f-location" onchange="jcMarkDirty()">
+                      <option value="">Select…</option>
+                      <option>Workshop</option><option>On-Site</option><option>Mixed</option>
+                    </select>
+                  </div>
+                  <div class="field"><label class="field-label">Customer PO / Reference</label><input type="text" id="jc-f-cust-po" placeholder="PO number" oninput="jcMarkDirty()"></div>
+                  <div class="field span-2"><label class="field-label">Quoted Amount (TTD)</label><input type="number" id="jc-f-quoted" placeholder="0.00" step="0.01" oninput="jcSyncQuoted(this)"></div>
+                  <div class="field"><label class="field-label">Accepted By (Shop)</label><input type="text" id="jc-f-accepted-by" placeholder="Staff member" oninput="jcMarkDirty()"></div>
+                  <div class="field"><label class="field-label">Modified By</label><input type="text" id="jc-f-modified-by" placeholder="Your name" oninput="jcMarkDirty()"></div>
+                </div>
+                <div class="section-divider" style="margin-top:14px;">Drawing Control Register</div>
+                <div class="dyn-table-wrap"><table class="register-table"><thead><tr>
+                  <th style="width:120px">Drawing No.</th><th>Drawing Title</th>
+                  <th style="width:90px">Revision No.</th><th style="width:120px">Date</th>
+                  <th style="width:120px">Source</th><th style="width:32px"></th>
+                </tr></thead><tbody id="jc-drawings-body"></tbody></table></div>
+                <button class="btn-add-row" onclick="jcAddDrawingRow()">+ Add Drawing</button>
+                <div class="section-divider" style="margin-top:14px;">Specifications Register</div>
+                <div class="dyn-table-wrap"><table class="register-table"><thead><tr>
+                  <th style="width:120px">Spec No. / Ref</th><th>Spec Title / Description</th>
+                  <th style="width:90px">Revision No.</th><th style="width:120px">Date Received</th>
+                  <th style="width:100px">Source</th><th style="width:32px"></th>
+                </tr></thead><tbody id="jc-specs-body"></tbody></table></div>
+                <button class="btn-add-row" onclick="jcAddSpecRow()">+ Add Specification</button>
+              </div>
+            </div>
+
+            <!-- 2. H&S / JSA -->
+            <div class="card">
+              <div class="card-header"><span class="card-header-icon">⚠</span><span class="card-header-title">Health &amp; Safety — JSA Reference</span></div>
+              <div class="card-body">
+                <div class="form-grid hse-grid">
+                  <div class="field"><label class="field-label">JSA Reference No.</label><input type="text" id="jc-f-jsa-ref" placeholder="Auto-generated on save" readonly style="opacity:.6;"></div>
+                  <div class="field span-2"><label class="field-label">JSA Title / Description</label><input type="text" id="jc-f-jsa-title" placeholder="e.g. Motor Repair — Hot Work JSA" oninput="jcMarkDirty()"></div>
+                  <div class="field"><label class="field-label">Date Issued</label><input type="date" id="jc-f-jsa-date" oninput="jcMarkDirty()"></div>
+                  <div class="field"><label class="field-label">Issued By</label><input type="text" id="jc-f-jsa-by" placeholder="Name of issuer" oninput="jcMarkDirty()"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. Labour -->
+            <div class="card">
+              <div class="card-header"><span class="card-header-icon">🕐</span><span class="card-header-title">Labour &amp; Time Tracking</span><span class="card-header-badge" id="jc-labour-hrs-badge">0.00 hrs</span></div>
+              <div class="card-body">
+                <p class="scroll-hint">← scroll to see all columns →</p>
+                <div class="dyn-table-wrap">
+                  <table class="dyn-table" id="jc-labour-table">
+                    <thead><tr>
+                      <th style="width:110px">Date</th><th style="width:160px">Classification</th>
+                      <th style="width:130px">Technician</th><th style="width:110px">Location</th>
+                      <th style="width:80px" class="right">Start</th><th style="width:80px" class="right">End</th>
+                      <th style="width:55px" class="right">Hrs</th><th style="width:65px">Type</th>
+                      <th style="width:95px" class="right">Rate (TTD)</th><th style="width:95px" class="right">Amount</th>
+                      <th style="width:28px"></th>
+                    </tr></thead>
+                    <tbody id="jc-labour-body"></tbody>
+                    <tfoot><tr>
+                      <td colspan="6" class="right" style="font-size:11px;">Total Labour:</td>
+                      <td id="jc-labour-hrs-total" class="right" style="font-family:'DM Mono',monospace;font-size:12px;">0.00</td>
+                      <td></td><td></td>
+                      <td id="jc-labour-cost-total" class="right" style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:var(--gold);">$0.00</td>
+                      <td></td>
+                    </tr></tfoot>
+                  </table>
+                </div>
+                <button class="btn-add-row" onclick="jcAddLabourRow()">+ Add Labour Entry</button>
+              </div>
+            </div>
+
+            <!-- 4. Equipment -->
+            <div class="card">
+              <div class="card-header"><span class="card-header-icon">🔧</span><span class="card-header-title">Equipment &amp; Machines Used</span></div>
+              <div class="card-body">
+                <p class="scroll-hint">← scroll to see all columns →</p>
+                <div class="dyn-table-wrap">
+                  <table class="dyn-table" id="jc-equip-table">
+                    <thead><tr>
+                      <th style="width:110px">Date</th><th style="width:180px">Machine / Equipment</th>
+                      <th style="width:100px">Asset No.</th><th style="width:110px">Location</th>
+                      <th style="width:85px" class="right">Setup (hrs)</th><th style="width:85px" class="right">Run (hrs)</th>
+                      <th style="width:105px" class="right">Rate/hr (TTD)</th><th style="width:95px" class="right">Amount</th>
+                      <th style="width:28px"></th>
+                    </tr></thead>
+                    <tbody id="jc-equip-body"></tbody>
+                    <tfoot><tr>
+                      <td colspan="7" class="right" style="font-size:11px;">Total Machine Cost:</td>
+                      <td id="jc-equip-cost-total" class="right" style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:var(--gold);">$0.00</td>
+                      <td></td>
+                    </tr></tfoot>
+                  </table>
+                </div>
+                <button class="btn-add-row" onclick="jcAddEquipRow()">+ Add Machine / Equipment</button>
+              </div>
+            </div>
+
+            <!-- 5. Materials -->
+            <div class="card">
+              <div class="card-header"><span class="card-header-icon">📦</span><span class="card-header-title">Materials &amp; Stock Used</span></div>
+              <div class="card-body">
+                <p class="scroll-hint">← scroll to see all columns →</p>
+                <div class="dyn-table-wrap">
+                  <table class="dyn-table">
+                    <thead><tr>
+                      <th style="width:110px">Date</th><th>Material / Description</th>
+                      <th style="width:110px">Stock Code</th><th style="width:60px">Qty</th>
+                      <th style="width:70px">Unit</th><th style="width:110px" class="right">Unit Cost (TTD)</th>
+                      <th style="width:110px" class="right">Total Cost</th><th style="width:28px"></th>
+                    </tr></thead>
+                    <tbody id="jc-materials-body"></tbody>
+                    <tfoot><tr>
+                      <td colspan="6" class="right" style="font-size:11px;">Total Materials:</td>
+                      <td id="jc-materials-cost-total" class="right" style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:var(--gold);">$0.00</td><td></td>
+                    </tr></tfoot>
+                  </table>
+                </div>
+                <button class="btn-add-row" onclick="jcAddMaterialRow()">+ Add Material</button>
+              </div>
+            </div>
+
+            <!-- 6. Consumables -->
+            <div class="card">
+              <div class="card-header"><span class="card-header-icon">🧪</span><span class="card-header-title">Consumables Used</span></div>
+              <div class="card-body">
+                <p class="scroll-hint">← scroll to see all columns →</p>
+                <div class="dyn-table-wrap">
+                  <table class="dyn-table">
+                    <thead><tr>
+                      <th style="width:110px">Date</th><th>Consumable / Description</th>
+                      <th style="width:140px">Category</th><th style="width:60px">Qty</th>
+                      <th style="width:70px">Unit</th><th style="width:110px" class="right">Unit Cost (TTD)</th>
+                      <th style="width:110px" class="right">Total Cost</th><th style="width:28px"></th>
+                    </tr></thead>
+                    <tbody id="jc-consumables-body"></tbody>
+                    <tfoot><tr>
+                      <td colspan="6" class="right" style="font-size:11px;">Total Consumables:</td>
+                      <td id="jc-consumables-cost-total" class="right" style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:var(--gold);">$0.00</td><td></td>
+                    </tr></tfoot>
+                  </table>
+                </div>
+                <button class="btn-add-row" onclick="jcAddConsumableRow()">+ Add Consumable</button>
+              </div>
+            </div>
+
+            <!-- 7. Sub-contractors -->
+            <div class="card">
+              <div class="card-header"><span class="card-header-icon">🤝</span><span class="card-header-title">Sub-contractors &amp; Outsourced Work</span></div>
+              <div class="card-body">
+                <div class="dyn-table-wrap">
+                  <table class="dyn-table">
+                    <thead><tr>
+                      <th style="width:110px">Date</th><th>Sub-contractor / Supplier</th>
+                      <th>Work / Service Description</th><th style="width:130px">Invoice / Ref No.</th>
+                      <th style="width:110px" class="right">Cost (TTD)</th><th style="width:28px"></th>
+                    </tr></thead>
+                    <tbody id="jc-subs-body"></tbody>
+                    <tfoot><tr>
+                      <td colspan="4" class="right" style="font-size:11px;">Total Sub-contractor Cost:</td>
+                      <td id="jc-subs-cost-total" class="right" style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:var(--gold);">$0.00</td><td></td>
+                    </tr></tfoot>
+                  </table>
+                </div>
+                <button class="btn-add-row" onclick="jcAddSubRow()">+ Add Sub-contractor</button>
+              </div>
+            </div>
+
+            <!-- 8. Costing Summary -->
+            <div class="card">
+              <div class="card-header"><span class="card-header-icon">💰</span><span class="card-header-title">Costing Summary</span></div>
+              <div class="card-body">
+                <div class="cost-summary">
+                  <div>
+                    <div class="cost-breakdown">
+                      <table>
+                        <tr><td>Labour</td><td id="jc-cs-labour">$0.00</td></tr>
+                        <tr><td>Machine / Equipment</td><td id="jc-cs-equip">$0.00</td></tr>
+                        <tr><td>Materials &amp; Stock</td><td id="jc-cs-materials">$0.00</td></tr>
+                        <tr><td>Consumables</td><td id="jc-cs-consumables">$0.00</td></tr>
+                        <tr><td>Sub-contractors</td><td id="jc-cs-subs">$0.00</td></tr>
+                        <tr><td>Other / Miscellaneous</td><td><input type="number" id="jc-cs-misc" style="background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:12px;text-align:right;width:90px;outline:none;padding:2px 4px;" placeholder="0.00" value="0" oninput="jcUpdateCostSummary()"></td></tr>
+                        <tr class="total-row"><td>Total Job Cost</td><td id="jc-cs-total">$0.00</td></tr>
+                      </table>
+                    </div>
+                    <div class="cost-over-warning" id="jc-cost-over">⚠ Job cost exceeds quoted amount!</div>
+                    <div class="cost-near-warning" id="jc-cost-near">⚡ Job cost is approaching quoted amount.</div>
+                  </div>
+                  <div class="cost-meta">
+                    <div class="form-grid grid-2">
+                      <div class="field span-2"><label class="field-label">Quoted Amount (TTD)</label><input type="number" id="jc-f-quoted-2" placeholder="0.00" step="0.01" oninput="jcSyncQuoted(this)"></div>
+                      <div class="field span-2"><label class="field-label">Payment Terms</label>
+                        <select id="jc-f-payment-terms" onchange="jcMarkDirty()">
+                          <option>COD – Cash on Delivery</option><option>50% Deposit, Balance on Completion</option>
+                          <option>Net 30 Days</option><option>Net 15 Days</option><option>Prepaid in Full</option><option>Other</option>
+                        </select>
+                      </div>
+                      <div class="field span-2"><label class="field-label">Internal Notes (Costing)</label><textarea id="jc-f-costing-notes" rows="2" placeholder="Notes on pricing, discounts…" oninput="jcMarkDirty()"></textarea></div>
+                    </div>
+                    <div class="admin-locked" id="jc-admin-cost-section" style="display:none;">
+                      <div class="admin-locked-label">
+                        <span>🔒 Commercial — Admin Only</span>
+                        <button class="btn-unlock" id="jc-cost-unlock-btn" onclick="jcUnlockCostSection()">Unlock</button>
+                      </div>
+                      <div class="admin-locked-fields" id="jc-admin-cost-fields">
+                        <div class="field"><label class="field-label">Margin / Markup (%)</label><input type="number" id="jc-markup-pct" placeholder="0" step="1" oninput="jcUpdateCostSummary()"></div>
+                        <div class="field"><label class="field-label">Selling Price (TTD)</label><input type="number" id="jc-selling-price" placeholder="0.00" step="0.01" readonly style="color:var(--gold);font-weight:600;"></div>
+                        <div class="field span-2"><label class="field-label">Gross Profit (TTD)</label><input type="number" id="jc-gross-profit" placeholder="0.00" readonly style="color:var(--green);font-weight:600;"></div>
+                      </div>
+                      <div class="profit-indicator neutral" id="jc-profit-indicator">— Enter markup to see margin</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 9. QC & Sign-Off -->
+            <div class="card">
+              <div class="card-header"><span class="card-header-icon">✅</span><span class="card-header-title">Quality Check &amp; Sign-Off</span></div>
+              <div class="card-body">
+                <div class="field-label" style="margin-bottom:8px;font-size:11px;">Quality Checklist — click to toggle Pass / Fail</div>
+                <div class="qc-grid" id="jc-qc-grid"></div>
+                <div style="margin-top:14px;">
+                  <div class="form-grid grid-3">
+                    <div class="field"><label class="field-label">Date Completed</label><input type="date" id="jc-f-date-completed" oninput="jcMarkDirty()"></div>
+                    <div class="field"><label class="field-label">Inspected By</label><input type="text" id="jc-f-inspected-by" placeholder="Inspector name" oninput="jcMarkDirty()"></div>
+                    <div class="field"><label class="field-label">Overall Result</label>
+                      <select id="jc-f-qc-result" onchange="jcMarkDirty()">
+                        <option value="">Select…</option><option>Pass — Released to Customer</option>
+                        <option>Conditional Pass — Minor Rework</option><option>Fail — Rework Required</option><option>Scrapped</option>
+                      </select>
+                    </div>
+                    <div class="field span-3"><label class="field-label">QC Notes / Non-Conformances</label><textarea id="jc-f-qc-notes" rows="2" placeholder="Note any defects, rework, deviations…" oninput="jcMarkDirty()"></textarea></div>
+                  </div>
+                </div>
+                <div class="section-divider" style="margin-top:14px;">Associated Reports</div>
+                <div class="dyn-table-wrap"><table class="register-table"><thead><tr>
+                  <th style="width:150px">Report Ref No.</th><th>Report Title</th><th style="width:32px"></th>
+                </tr></thead><tbody id="jc-reports-body"></tbody></table></div>
+                <button class="btn-add-row" onclick="jcAddReportRow()">+ Add Report</button>
+                <div class="section-divider" style="margin-top:18px;">Authorisations</div>
+                <div style="height:8px;"></div>
+                <div class="signoff-grid">
+                  <div class="signoff-box"><div class="signoff-role">Workshop Supervisor</div><div class="signoff-line"><span>Name: _________________</span><span>Date: ___________</span></div></div>
+                  <div class="signoff-box"><div class="signoff-role">Quality Inspector / Foreman</div><div class="signoff-line"><span>Name: _________________</span><span>Date: ___________</span></div></div>
+                  <div class="signoff-box"><div class="signoff-role">Customer Acceptance</div><div class="signoff-line"><span>Name: _________________</span><span>Date: ___________</span></div></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 10. Audit Trail -->
+            <div class="card">
+              <div class="card-header"><span class="card-header-icon">📋</span><span class="card-header-title">Activity Log</span><span class="card-header-badge" id="jc-audit-badge">0 entries</span></div>
+              <div class="card-body">
+                <div class="audit-list" id="jc-audit-list">
+                  <p class="audit-empty">No activity recorded yet for this job.</p>
+                </div>
+              </div>
+            </div>
+
+          </div><!-- end jc-main-wrap -->
+
+          <!-- Action bar -->
+          <div class="jc-action-bar">
+            <button class="btn btn-danger btn-sm" id="jc-delete-btn" onclick="jcDeleteJob()" style="display:none;margin-right:auto;">🗑 Delete Job</button>
+            <button class="btn btn-ghost btn-sm" onclick="jcResetForm()">↺ New / Reset</button>
+            <button class="btn btn-ghost btn-sm" onclick="window.print()">🖨 Print</button>
+            <button class="btn btn-primary btn-sm" onclick="jcSaveJob()">💾 Save</button>
+          </div>
+
+        </div><!-- end jc-form-wrap -->
+
+      </div>
+    </div>
+
+    <!-- ── JOB CONFIG ── -->
+    <div class="page-view" id="view-job-config">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Job Config</div>
+          <div class="page-subtitle">Labour, equipment, materials and QC catalogue</div>
+        </div>
+      </div>
+      <div class="page-body" id="job-config-body"></div>
     </div>
 
   </main>
@@ -4021,6 +4712,21 @@ body {
   </div>
 </div>
 
+<!-- ── JOB CONFIG MODAL ── -->
+<div class="modal-overlay" id="jc-cfg-modal" onclick="if(event.target===this)closeModal('jc-cfg-modal')">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header">
+      <div class="modal-title" id="jc-cfg-modal-title">Edit</div>
+      <button class="modal-close" onclick="closeModal('jc-cfg-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="jc-cfg-modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('jc-cfg-modal')">Cancel</button>
+      <button class="btn btn-primary" id="jc-cfg-save-btn" onclick="jcCfgSave()">Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════════════════════
 //  TERRAN GROUP ERP — Finance Module
@@ -4272,7 +4978,7 @@ function applyRoleNav() {
   const role = currentUser?.role;
   const financeOnly  = ['nav-coa','nav-journal','nav-ap','nav-bank','nav-pl','nav-bs','nav-tb','nav-aged-ap','nav-erp-companies','nav-settings'];
   const adminOnly    = ['nav-vendors'];
-  const salesVisible = ['nav-dashboard','nav-quotations','nav-delivery-notes','nav-ar','nav-aged-ar','nav-clients','nav-sales-leads','nav-pipeline','nav-crm-activities','nav-crm-tasks'];
+  const salesVisible = ['nav-dashboard','nav-quotations','nav-delivery-notes','nav-ar','nav-aged-ar','nav-clients','nav-sales-leads','nav-pipeline','nav-crm-activities','nav-crm-tasks','nav-job-cards'];
 
   if (role === 'sales') {
     document.querySelectorAll('.nav-item[id^="nav-"]').forEach(el => {
@@ -4285,6 +4991,10 @@ function applyRoleNav() {
     });
   }
   // admin and super_admin see everything
+
+  // Workshop: Job Config is admin-only
+  const jobConfigEl = document.getElementById('nav-job-config');
+  if (jobConfigEl) jobConfigEl.style.display = isAdmin() ? '' : 'none';
 
   // Hide Finance > Reports sub-section header if all its items are hidden
   const subSec = document.getElementById('sub-section-finance-reports');
@@ -4493,7 +5203,1481 @@ async function loadViewData(view) {
     case 'vendors':   await loadVendors(); break;
     case 'erp-companies': await loadErpCompanies(); break;
     case 'settings':  await loadSettings(); break;
+    case 'job-cards': await loadJobCards(); break;
+    case 'job-config': await loadJobConfig(); break;
   }
+}
+
+// ── JOB CARDS MODULE ─────────────────────────────────────────────
+let jcCurrentJobId      = null;
+let jcIsLocked          = false;
+let jcIsDirty           = false;
+let jcAdminCostUnlocked = false;
+let jcSearchTimeout     = null;
+let jcDashSortKey       = 'created_at';
+let jcDashSortAsc       = false;
+let jcDashData          = [];
+let jcConfig = { labour:[], equipment:[], tasks:[], materials:[], consumables:[], qcChecklists:[] };
+
+// ── ENTRY POINTS ─────────────────────────────────────────────────
+async function loadJobCards() {
+  await jcLoadConfig();
+  jcOpenDashboard();
+  await jcLoadDashboard();
+}
+// ── JOB CONFIG STATE ─────────────────────────────────────────────
+let jcCfgCurrentTab = 'labour';
+let jcCfgEditingId  = null;
+let jcCfgData = { labour:[], equipment:[], materials:[], consumables:[], tasks:[], qcChecklists:[], employees:[] };
+
+const JC_CFG_TABS = [
+  { id:'labour',      label:'Labour',          table:'config_labour' },
+  { id:'equipment',   label:'Equipment',       table:'config_equipment' },
+  { id:'materials',   label:'Materials',       table:'config_materials' },
+  { id:'consumables', label:'Consumables',     table:'config_consumables' },
+  { id:'tasks',       label:'Tasks',           table:'config_tasks' },
+  { id:'qc',          label:'QC Checklists',   table:'config_qc_checklists' },
+  { id:'employees',   label:'Employees',       table:'employees' },
+];
+
+async function loadJobConfig() {
+  if (!isAdmin()) {
+    document.getElementById('job-config-body').innerHTML = '<div class="empty-state">Admin access required.</div>';
+    return;
+  }
+  const body = document.getElementById('job-config-body');
+  body.innerHTML = `
+    <div style="padding:0 24px 24px;">
+      <div class="tabs" id="jc-cfg-tabs">
+        ${JC_CFG_TABS.map(t => `<button class="tab-btn${t.id===jcCfgCurrentTab?' active':''}" onclick="jcCfgSwitchTab('${t.id}')">${escHTML(t.label)}</button>`).join('')}
+      </div>
+      <div id="jc-cfg-content"></div>
+    </div>`;
+  await jcCfgLoadTab(jcCfgCurrentTab);
+}
+
+function jcCfgSwitchTab(tab) {
+  jcCfgCurrentTab = tab;
+  document.querySelectorAll('#jc-cfg-tabs .tab-btn').forEach(b => {
+    const meta = JC_CFG_TABS.find(t => t.id === tab);
+    b.classList.toggle('active', b.textContent === meta?.label);
+  });
+  jcCfgLoadTab(tab);
+}
+
+async function jcCfgLoadTab(tab) {
+  const wrap = document.getElementById('jc-cfg-content');
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading…</div>';
+  try {
+    const t   = JC_CFG_TABS.find(x => x.id === tab);
+    const qs  = tab === 'employees' ? 'order=name' : 'order=sort_order';
+    const rows = await sbGet(t.table, qs);
+    const key  = tab === 'qc' ? 'qcChecklists' : tab;
+    jcCfgData[key] = rows || [];
+    jcCfgRenderTab(tab, rows || []);
+  } catch(e) {
+    wrap.innerHTML = `<div class="table-empty" style="padding:24px;">Error: ${escHTML(e.message)}</div>`;
+  }
+}
+
+function jcCfgRenderTab(tab, rows) {
+  const wrap = document.getElementById('jc-cfg-content');
+  if (!wrap) return;
+  let head = '', body = '';
+
+  if (tab === 'labour') {
+    head = '<th>Classification</th><th class="right">Workshop Rate</th><th class="right">Onsite Rate</th><th>Sort</th><th>Active</th><th class="right">Actions</th>';
+    body = rows.map(r => `<tr>
+      <td style="font-weight:500;">${escHTML(r.classification||'')}</td>
+      <td class="right mono">${jcFmtTTD(r.workshop_rate_ttd)}</td>
+      <td class="right mono">${jcFmtTTD(r.onsite_rate_ttd)}</td>
+      <td class="mono">${r.sort_order}</td>
+      <td><span class="badge ${r.is_active?'badge-posted':'badge-void'}">${r.is_active?'Active':'Inactive'}</span></td>
+      <td class="right">${jcCfgActions(tab,r.id)}</td></tr>`).join('');
+  } else if (tab === 'equipment') {
+    head = '<th>Name</th><th>Type</th><th>Make / Model</th><th>Shop No</th><th class="right">Workshop Rate</th><th class="right">Onsite Rate</th><th>Active</th><th class="right">Actions</th>';
+    body = rows.map(r => `<tr>
+      <td style="font-weight:500;">${escHTML(r.equipment_name||'')}</td>
+      <td>${escHTML(r.description_type||'')}</td>
+      <td>${[r.make,r.model_no].filter(Boolean).map(x=>escHTML(x)).join(' / ')||'—'}</td>
+      <td class="mono">${escHTML(r.shop_number||'—')}</td>
+      <td class="right mono">${jcFmtTTD(r.workshop_rate_ttd)}</td>
+      <td class="right mono">${jcFmtTTD(r.onsite_rate_ttd)}</td>
+      <td><span class="badge ${r.is_active?'badge-posted':'badge-void'}">${r.is_active?'Active':'Inactive'}</span></td>
+      <td class="right">${jcCfgActions(tab,r.id)}</td></tr>`).join('');
+  } else if (tab === 'materials') {
+    head = '<th>Item Name</th><th>Stock Code</th><th>Unit</th><th class="right">Default Unit Cost</th><th>Active</th><th class="right">Actions</th>';
+    body = rows.map(r => `<tr>
+      <td style="font-weight:500;">${escHTML(r.item_name||'')}</td>
+      <td class="mono">${escHTML(r.stock_code||'—')}</td>
+      <td>${escHTML(r.unit||'—')}</td>
+      <td class="right mono">${jcFmtTTD(r.default_unit_cost_ttd)}</td>
+      <td><span class="badge ${r.is_active?'badge-posted':'badge-void'}">${r.is_active?'Active':'Inactive'}</span></td>
+      <td class="right">${jcCfgActions(tab,r.id)}</td></tr>`).join('');
+  } else if (tab === 'consumables') {
+    head = '<th>Item Name</th><th>Category</th><th>Unit</th><th class="right">Default Unit Cost</th><th>Active</th><th class="right">Actions</th>';
+    body = rows.map(r => `<tr>
+      <td style="font-weight:500;">${escHTML(r.item_name||'')}</td>
+      <td>${escHTML(r.category||'—')}</td>
+      <td>${escHTML(r.unit||'—')}</td>
+      <td class="right mono">${jcFmtTTD(r.default_unit_cost_ttd)}</td>
+      <td><span class="badge ${r.is_active?'badge-posted':'badge-void'}">${r.is_active?'Active':'Inactive'}</span></td>
+      <td class="right">${jcCfgActions(tab,r.id)}</td></tr>`).join('');
+  } else if (tab === 'tasks') {
+    head = '<th>Task Name</th><th>Category</th><th>Sort</th><th>Active</th><th class="right">Actions</th>';
+    body = rows.map(r => `<tr>
+      <td style="font-weight:500;">${escHTML(r.task_name||'')}</td>
+      <td>${escHTML(r.category||'—')}</td>
+      <td class="mono">${r.sort_order}</td>
+      <td><span class="badge ${r.is_active?'badge-posted':'badge-void'}">${r.is_active?'Active':'Inactive'}</span></td>
+      <td class="right">${jcCfgActions(tab,r.id)}</td></tr>`).join('');
+  } else if (tab === 'qc') {
+    head = '<th>Checklist Item</th><th>Job Type</th><th>Sort</th><th>Active</th><th class="right">Actions</th>';
+    body = rows.map(r => `<tr>
+      <td style="font-weight:500;">${escHTML(r.checklist_item||'')}</td>
+      <td>${escHTML(r.job_type||'All')}</td>
+      <td class="mono">${r.sort_order}</td>
+      <td><span class="badge ${r.is_active?'badge-posted':'badge-void'}">${r.is_active?'Active':'Inactive'}</span></td>
+      <td class="right">${jcCfgActions(tab,r.id)}</td></tr>`).join('');
+  } else if (tab === 'employees') {
+    head = '<th>Name</th><th>Classification</th><th>Contact</th><th>Email</th><th class="right">Actions</th>';
+    body = rows.map(r => `<tr>
+      <td style="font-weight:500;">${escHTML(r.name||'')}</td>
+      <td>${escHTML(r.job_classification||'—')}</td>
+      <td class="mono">${escHTML(r.contact_no||'—')}</td>
+      <td>${escHTML(r.email||'—')}</td>
+      <td class="right">${jcCfgActions(tab,r.id)}</td></tr>`).join('');
+  }
+
+  const empty = rows.length ? '' : `<tr><td colspan="10" class="table-empty" style="padding:24px;text-align:center;">No records yet. Click "+ Add" to get started.</td></tr>`;
+  const tabMeta = JC_CFG_TABS.find(t => t.id === tab);
+  const addLabel = `+ Add ${tabMeta?.label.replace(/s$/,'').replace(' Checklist','') || ''}`;
+
+  wrap.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+      <button class="btn btn-primary btn-sm" onclick="jcCfgOpenAdd('${tab}')">${escHTML(addLabel)}</button>
+    </div>
+    <div class="section-card" style="overflow:hidden;">
+      <table class="data-table">
+        <thead><tr>${head}</tr></thead>
+        <tbody>${body||empty}</tbody>
+      </table>
+    </div>`;
+}
+
+function jcCfgActions(tab, id) {
+  return `<button class="btn btn-ghost btn-sm btn-icon" onclick="jcCfgOpenEdit('${tab}','${id}')" title="Edit">✏️</button>
+          <button class="btn btn-ghost btn-sm btn-icon" onclick="jcCfgDelete('${tab}','${id}')" title="Delete">🗑️</button>`;
+}
+
+function jcFmtTTD(v) {
+  return 'TT$ ' + parseFloat(v||0).toLocaleString('en-TT',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+function jcCfgBuildModalBody(tab, r) {
+  r = r || {};
+  const activeField = tab === 'employees' ? '' : `
+    <div class="field" style="display:flex;align-items:center;gap:8px;padding-top:4px;">
+      <input type="checkbox" id="jc-cfg-active" ${r.is_active!==false?'checked':''} style="width:16px;height:16px;accent-color:var(--gold);">
+      <label for="jc-cfg-active" style="font-size:13px;font-weight:500;cursor:pointer;">Active</label>
+    </div>`;
+  const sortField = `
+    <div class="field">
+      <label class="field-label">Sort Order</label>
+      <input type="number" id="jc-cfg-sort" value="${r.sort_order??0}" min="0" style="max-width:80px;">
+    </div>`;
+
+  if (tab === 'labour') return `<div class="form-grid" style="grid-template-columns:1fr 1fr;">
+    <div class="field" style="grid-column:span 2;">
+      <label class="field-label">Classification <span style="color:var(--red)">*</span></label>
+      <input type="text" id="jc-cfg-f1" value="${escHTML(r.classification||'')}" placeholder="e.g. Mechanical Technician">
+    </div>
+    <div class="field">
+      <label class="field-label">Workshop Rate (TTD)</label>
+      <input type="number" id="jc-cfg-f2" value="${r.workshop_rate_ttd??0}" min="0" step="0.01" class="mono">
+    </div>
+    <div class="field">
+      <label class="field-label">Onsite Rate (TTD)</label>
+      <input type="number" id="jc-cfg-f3" value="${r.onsite_rate_ttd??0}" min="0" step="0.01" class="mono">
+    </div>
+    ${sortField}${activeField}
+  </div>`;
+
+  if (tab === 'equipment') return `<div class="form-grid" style="grid-template-columns:1fr 1fr;">
+    <div class="field" style="grid-column:span 2;">
+      <label class="field-label">Equipment Name <span style="color:var(--red)">*</span></label>
+      <input type="text" id="jc-cfg-f1" value="${escHTML(r.equipment_name||'')}" placeholder="e.g. 50T Hydraulic Press">
+    </div>
+    <div class="field">
+      <label class="field-label">Description Type</label>
+      <input type="text" id="jc-cfg-f2" value="${escHTML(r.description_type||'')}" placeholder="e.g. Press">
+    </div>
+    <div class="field">
+      <label class="field-label">Make</label>
+      <input type="text" id="jc-cfg-f3" value="${escHTML(r.make||'')}">
+    </div>
+    <div class="field">
+      <label class="field-label">Model No</label>
+      <input type="text" id="jc-cfg-f4" value="${escHTML(r.model_no||'')}">
+    </div>
+    <div class="field">
+      <label class="field-label">Serial No</label>
+      <input type="text" id="jc-cfg-f5" value="${escHTML(r.serial_no||'')}">
+    </div>
+    <div class="field">
+      <label class="field-label">Shop Number</label>
+      <input type="text" id="jc-cfg-f6" value="${escHTML(r.shop_number||'')}" class="mono">
+    </div>
+    <div class="field">
+      <label class="field-label">Workshop Rate (TTD)</label>
+      <input type="number" id="jc-cfg-f7" value="${r.workshop_rate_ttd??0}" min="0" step="0.01" class="mono">
+    </div>
+    <div class="field">
+      <label class="field-label">Onsite Rate (TTD)</label>
+      <input type="number" id="jc-cfg-f8" value="${r.onsite_rate_ttd??0}" min="0" step="0.01" class="mono">
+    </div>
+    ${sortField}${activeField}
+  </div>`;
+
+  if (tab === 'materials') return `<div class="form-grid" style="grid-template-columns:1fr 1fr;">
+    <div class="field" style="grid-column:span 2;">
+      <label class="field-label">Item Name <span style="color:var(--red)">*</span></label>
+      <input type="text" id="jc-cfg-f1" value="${escHTML(r.item_name||'')}" placeholder="e.g. 10mm Mild Steel Plate">
+    </div>
+    <div class="field">
+      <label class="field-label">Stock Code</label>
+      <input type="text" id="jc-cfg-f2" value="${escHTML(r.stock_code||'')}" class="mono" placeholder="e.g. MS-10">
+    </div>
+    <div class="field">
+      <label class="field-label">Unit</label>
+      <input type="text" id="jc-cfg-f3" value="${escHTML(r.unit||'')}" placeholder="e.g. kg, m, pc">
+    </div>
+    <div class="field">
+      <label class="field-label">Default Unit Cost (TTD)</label>
+      <input type="number" id="jc-cfg-f4" value="${r.default_unit_cost_ttd??0}" min="0" step="0.01" class="mono">
+    </div>
+    ${sortField}${activeField}
+  </div>`;
+
+  if (tab === 'consumables') return `<div class="form-grid" style="grid-template-columns:1fr 1fr;">
+    <div class="field" style="grid-column:span 2;">
+      <label class="field-label">Item Name <span style="color:var(--red)">*</span></label>
+      <input type="text" id="jc-cfg-f1" value="${escHTML(r.item_name||'')}" placeholder="e.g. Welding Rods 3.2mm">
+    </div>
+    <div class="field">
+      <label class="field-label">Category</label>
+      <input type="text" id="jc-cfg-f2" value="${escHTML(r.category||'')}" placeholder="e.g. Welding">
+    </div>
+    <div class="field">
+      <label class="field-label">Unit</label>
+      <input type="text" id="jc-cfg-f3" value="${escHTML(r.unit||'')}" placeholder="e.g. kg, box, pc">
+    </div>
+    <div class="field">
+      <label class="field-label">Default Unit Cost (TTD)</label>
+      <input type="number" id="jc-cfg-f4" value="${r.default_unit_cost_ttd??0}" min="0" step="0.01" class="mono">
+    </div>
+    ${sortField}${activeField}
+  </div>`;
+
+  if (tab === 'tasks') return `<div class="form-grid" style="grid-template-columns:1fr 1fr;">
+    <div class="field" style="grid-column:span 2;">
+      <label class="field-label">Task Name <span style="color:var(--red)">*</span></label>
+      <input type="text" id="jc-cfg-f1" value="${escHTML(r.task_name||'')}" placeholder="e.g. Visual Inspection">
+    </div>
+    <div class="field" style="grid-column:span 2;">
+      <label class="field-label">Category</label>
+      <input type="text" id="jc-cfg-f2" value="${escHTML(r.category||'')}" placeholder="e.g. Inspection, Assembly">
+    </div>
+    ${sortField}${activeField}
+  </div>`;
+
+  if (tab === 'qc') return `<div class="form-grid" style="grid-template-columns:1fr 1fr;">
+    <div class="field" style="grid-column:span 2;">
+      <label class="field-label">Checklist Item <span style="color:var(--red)">*</span></label>
+      <input type="text" id="jc-cfg-f1" value="${escHTML(r.checklist_item||'')}" placeholder="e.g. Dimensional Check">
+    </div>
+    <div class="field" style="grid-column:span 2;">
+      <label class="field-label">Job Type <span style="font-size:10px;color:var(--text-3);">(leave blank for all)</span></label>
+      <input type="text" id="jc-cfg-f2" value="${escHTML(r.job_type||'')}" placeholder="e.g. Fabrication">
+    </div>
+    ${sortField}${activeField}
+  </div>`;
+
+  if (tab === 'employees') return `<div class="form-grid" style="grid-template-columns:1fr 1fr;">
+    <div class="field" style="grid-column:span 2;">
+      <label class="field-label">Full Name <span style="color:var(--red)">*</span></label>
+      <input type="text" id="jc-cfg-f1" value="${escHTML(r.name||'')}" placeholder="First Last">
+    </div>
+    <div class="field">
+      <label class="field-label">Job Classification</label>
+      <input type="text" id="jc-cfg-f2" value="${escHTML(r.job_classification||'')}" placeholder="e.g. Welder">
+    </div>
+    <div class="field">
+      <label class="field-label">Nationality</label>
+      <input type="text" id="jc-cfg-f3" value="${escHTML(r.nationality||'')}">
+    </div>
+    <div class="field">
+      <label class="field-label">Date of Birth</label>
+      <input type="date" id="jc-cfg-f4" value="${r.date_of_birth||''}" class="mono">
+    </div>
+    <div class="field">
+      <label class="field-label">Date of Employment</label>
+      <input type="date" id="jc-cfg-f5" value="${r.date_of_employment||''}" class="mono">
+    </div>
+    <div class="field">
+      <label class="field-label">Contact No</label>
+      <input type="tel" id="jc-cfg-f6" value="${escHTML(r.contact_no||'')}" class="mono">
+    </div>
+    <div class="field" style="grid-column:span 2;">
+      <label class="field-label">Address</label>
+      <input type="text" id="jc-cfg-f7" value="${escHTML(r.address||'')}">
+    </div>
+    <div class="field">
+      <label class="field-label">Email</label>
+      <input type="email" id="jc-cfg-f8" value="${escHTML(r.email||'')}">
+    </div>
+    <div class="field">
+      <label class="field-label">Next of Kin</label>
+      <input type="text" id="jc-cfg-f9" value="${escHTML(r.next_of_kin||'')}">
+    </div>
+    <div class="field">
+      <label class="field-label">Next of Kin Contact</label>
+      <input type="tel" id="jc-cfg-f10" value="${escHTML(r.next_of_kin_contact||'')}" class="mono">
+    </div>
+  </div>`;
+
+  return '';
+}
+
+function jcCfgOpenAdd(tab) {
+  jcCfgEditingId = null;
+  const tabMeta = JC_CFG_TABS.find(t => t.id === tab);
+  document.getElementById('jc-cfg-modal-title').textContent = `Add ${tabMeta?.label.replace(/s$/,'').replace(' Checklist','') || ''}`;
+  document.getElementById('jc-cfg-modal-body').innerHTML = jcCfgBuildModalBody(tab, null);
+  document.getElementById('jc-cfg-save-btn').textContent = 'Save';
+  document.getElementById('jc-cfg-save-btn').disabled = false;
+  document.getElementById('jc-cfg-modal').classList.add('show');
+  setTimeout(() => document.getElementById('jc-cfg-f1')?.focus(), 80);
+}
+
+function jcCfgOpenEdit(tab, id) {
+  const key = tab === 'qc' ? 'qcChecklists' : tab;
+  const r = jcCfgData[key]?.find(x => x.id === id);
+  if (!r) return;
+  jcCfgEditingId = id;
+  const tabMeta = JC_CFG_TABS.find(t => t.id === tab);
+  document.getElementById('jc-cfg-modal-title').textContent = `Edit ${tabMeta?.label.replace(/s$/,'').replace(' Checklist','') || ''}`;
+  document.getElementById('jc-cfg-modal-body').innerHTML = jcCfgBuildModalBody(tab, r);
+  document.getElementById('jc-cfg-save-btn').textContent = 'Update';
+  document.getElementById('jc-cfg-save-btn').disabled = false;
+  document.getElementById('jc-cfg-modal').classList.add('show');
+  setTimeout(() => document.getElementById('jc-cfg-f1')?.focus(), 80);
+}
+
+async function jcCfgSave() {
+  const tab = jcCfgCurrentTab;
+  const t   = JC_CFG_TABS.find(x => x.id === tab);
+  const btn = document.getElementById('jc-cfg-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  const gv  = id => (document.getElementById(id)?.value?.trim() ?? '');
+  const gn  = id => parseFloat(document.getElementById(id)?.value) || 0;
+  const gi  = id => parseInt(document.getElementById(id)?.value) || 0;
+  const gc  = id => document.getElementById(id)?.checked ?? true;
+
+  let record = {};
+  try {
+    if (tab === 'labour') {
+      if (!gv('jc-cfg-f1')) { showToast('Classification is required.', 'warn'); return; }
+      record = { classification:gv('jc-cfg-f1'), workshop_rate_ttd:gn('jc-cfg-f2'), onsite_rate_ttd:gn('jc-cfg-f3'), sort_order:gi('jc-cfg-sort'), is_active:gc('jc-cfg-active') };
+    } else if (tab === 'equipment') {
+      if (!gv('jc-cfg-f1')) { showToast('Equipment name is required.', 'warn'); return; }
+      record = { equipment_name:gv('jc-cfg-f1'), description_type:gv('jc-cfg-f2')||null, make:gv('jc-cfg-f3')||null, model_no:gv('jc-cfg-f4')||null, serial_no:gv('jc-cfg-f5')||null, shop_number:gv('jc-cfg-f6')||null, workshop_rate_ttd:gn('jc-cfg-f7'), onsite_rate_ttd:gn('jc-cfg-f8'), sort_order:gi('jc-cfg-sort'), is_active:gc('jc-cfg-active') };
+    } else if (tab === 'materials') {
+      if (!gv('jc-cfg-f1')) { showToast('Item name is required.', 'warn'); return; }
+      record = { item_name:gv('jc-cfg-f1'), stock_code:gv('jc-cfg-f2')||null, unit:gv('jc-cfg-f3')||null, default_unit_cost_ttd:gn('jc-cfg-f4'), sort_order:gi('jc-cfg-sort'), is_active:gc('jc-cfg-active') };
+    } else if (tab === 'consumables') {
+      if (!gv('jc-cfg-f1')) { showToast('Item name is required.', 'warn'); return; }
+      record = { item_name:gv('jc-cfg-f1'), category:gv('jc-cfg-f2')||null, unit:gv('jc-cfg-f3')||null, default_unit_cost_ttd:gn('jc-cfg-f4'), sort_order:gi('jc-cfg-sort'), is_active:gc('jc-cfg-active') };
+    } else if (tab === 'tasks') {
+      if (!gv('jc-cfg-f1')) { showToast('Task name is required.', 'warn'); return; }
+      record = { task_name:gv('jc-cfg-f1'), category:gv('jc-cfg-f2')||null, sort_order:gi('jc-cfg-sort'), is_active:gc('jc-cfg-active') };
+    } else if (tab === 'qc') {
+      if (!gv('jc-cfg-f1')) { showToast('Checklist item is required.', 'warn'); return; }
+      record = { checklist_item:gv('jc-cfg-f1'), job_type:gv('jc-cfg-f2')||null, sort_order:gi('jc-cfg-sort'), is_active:gc('jc-cfg-active') };
+    } else if (tab === 'employees') {
+      if (!gv('jc-cfg-f1')) { showToast('Name is required.', 'warn'); return; }
+      record = { name:gv('jc-cfg-f1'), job_classification:gv('jc-cfg-f2')||null, nationality:gv('jc-cfg-f3')||null, date_of_birth:gv('jc-cfg-f4')||null, date_of_employment:gv('jc-cfg-f5')||null, contact_no:gv('jc-cfg-f6')||null, address:gv('jc-cfg-f7')||null, email:gv('jc-cfg-f8')||null, next_of_kin:gv('jc-cfg-f9')||null, next_of_kin_contact:gv('jc-cfg-f10')||null, created_by:currentUser.auth_user_id };
+    }
+
+    if (jcCfgEditingId) {
+      await sbPatch(t.table, jcCfgEditingId, record);
+    } else {
+      if (tab !== 'employees') record.submitted_by = currentUser.auth_user_id;
+      await sbPost(t.table, record);
+    }
+    closeModal('jc-cfg-modal');
+    showToast('Saved.', 'success');
+    await jcCfgLoadTab(tab);
+    jcLoadConfig().catch(() => {});
+  } catch(e) {
+    showToast('Save error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = jcCfgEditingId ? 'Update' : 'Save';
+  }
+}
+
+async function jcCfgDelete(tab, id) {
+  const key    = tab === 'qc' ? 'qcChecklists' : tab;
+  const r      = jcCfgData[key]?.find(x => x.id === id);
+  const label  = r ? (r.classification||r.equipment_name||r.item_name||r.task_name||r.checklist_item||r.name||'this record') : 'this record';
+  const ok     = await showConfirm(`Delete "${label}"? This cannot be undone.`, 'Delete Record', 'Delete', true);
+  if (!ok) return;
+  const t = JC_CFG_TABS.find(x => x.id === tab);
+  try {
+    await sbDelete(t.table, id);
+    showToast('Deleted.', 'success');
+    await jcCfgLoadTab(tab);
+    jcLoadConfig().catch(() => {});
+  } catch(e) {
+    showToast('Delete error: ' + e.message, 'error');
+  }
+}
+
+// ── CONFIG ────────────────────────────────────────────────────────
+async function jcLoadConfig() {
+  jcConfig = { labour:[], equipment:[], tasks:[], materials:[], consumables:[], qcChecklists:[] };
+  try {
+    const [labRows, eqRows, matRows, conRows, taskRows, qcRows] = await Promise.all([
+      sbGet('config_labour',       'status=eq.approved&is_active=eq.true&order=sort_order'),
+      sbGet('config_equipment',    'status=eq.approved&is_active=eq.true&order=sort_order'),
+      sbGet('config_materials',    'status=eq.approved&is_active=eq.true&order=sort_order'),
+      sbGet('config_consumables',  'status=eq.approved&is_active=eq.true&order=sort_order'),
+      sbGet('config_tasks',        'status=eq.approved&is_active=eq.true&order=sort_order'),
+      sbGet('config_qc_checklists','status=eq.approved&is_active=eq.true&order=sort_order'),
+    ]);
+    jcConfig.labour      = (labRows ||[]).map(r => ({ classification:r.classification, workshopRate:parseFloat(r.workshop_rate_ttd)||0, onsiteRate:parseFloat(r.onsite_rate_ttd)||0 }));
+    jcConfig.equipment   = (eqRows  ||[]).map(r => ({ name:r.equipment_name, assetNo:r.asset_no||'', workshopRate:parseFloat(r.workshop_rate_ttd)||0, onsiteRate:parseFloat(r.onsite_rate_ttd)||0 }));
+    jcConfig.materials   = (matRows ||[]).map(r => ({ name:r.item_name, unit:r.unit||'', cost:parseFloat(r.default_unit_cost_ttd)||0 }));
+    jcConfig.consumables = (conRows ||[]).map(r => ({ name:r.item_name, unit:r.unit||'', cost:parseFloat(r.default_unit_cost_ttd)||0 }));
+    jcConfig.tasks       = (taskRows||[]).map(r => r.task_name);
+    jcConfig.qcChecklists= (qcRows  ||[]).map(r => ({ item:r.checklist_item, jobType:r.job_type||'All' }));
+    jcRefreshRowDropdowns();
+  } catch(e) { console.error('jcLoadConfig:', e); }
+}
+function jcRefreshRowDropdowns() {
+  const labOpts  = '<option value="">Select…</option>' + jcConfig.labour.map(r => `<option value="${escHtml(r.classification)}">${escHtml(r.classification)}</option>`).join('');
+  const eqOpts   = '<option value="">Select…</option>' + jcConfig.equipment.map(r => `<option value="${escHtml(r.name)}">${escHtml(r.name)}</option>`).join('');
+  const taskOpts = '<option value="">Select task…</option>' + jcConfig.tasks.map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`).join('');
+  const matOpts  = '<option value="">Select…</option>' + jcConfig.materials.map(r => `<option value="${escHtml(r.name)}">${escHtml(r.name)}</option>`).join('');
+  const conOpts  = '<option value="">Select…</option>' + jcConfig.consumables.map(r => `<option value="${escHtml(r.name)}">${escHtml(r.name)}</option>`).join('');
+  document.querySelectorAll('#jc-labour-body tr:not(.jc-task-subrows)').forEach(tr => {
+    const sels = tr.querySelectorAll('select'); if (!sels[0]) return;
+    const cur = sels[0].value; sels[0].innerHTML = labOpts; sels[0].value = cur;
+    tr.querySelectorAll('.jc-task-subrow select').forEach(s => { const c=s.value; s.innerHTML=taskOpts; s.value=c; });
+  });
+  document.querySelectorAll('#jc-equip-body tr:not(.jc-task-subrows)').forEach(tr => {
+    const sels = tr.querySelectorAll('select'); if (!sels[0]) return;
+    const cur = sels[0].value; sels[0].innerHTML = eqOpts; sels[0].value = cur;
+    tr.querySelectorAll('.jc-task-subrow select').forEach(s => { const c=s.value; s.innerHTML=taskOpts; s.value=c; });
+  });
+  document.querySelectorAll('#jc-materials-body tr').forEach(tr => {
+    const sel = tr.querySelector('select'); if (!sel) return;
+    const cur = sel.value; sel.innerHTML = matOpts; sel.value = cur;
+  });
+  document.querySelectorAll('#jc-consumables-body tr').forEach(tr => {
+    const sel = tr.querySelector('select'); if (!sel) return;
+    const cur = sel.value; sel.innerHTML = conOpts; sel.value = cur;
+  });
+}
+
+// ── NAVIGATION ────────────────────────────────────────────────────
+function jcOpenDashboard() {
+  document.getElementById('jc-dashboard').classList.add('active');
+  document.getElementById('jc-form-wrap').classList.remove('active');
+}
+function jcOpenForm() {
+  document.getElementById('jc-dashboard').classList.remove('active');
+  document.getElementById('jc-form-wrap').classList.add('active');
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────────
+async function jcLoadDashboard() {
+  const kpisEl  = document.getElementById('jc-kpis');
+  const cardsEl = document.getElementById('jc-action-cards');
+  const tbodyEl = document.getElementById('jc-dash-tbody');
+  if (kpisEl)  kpisEl.innerHTML  = '';
+  if (cardsEl) cardsEl.innerHTML = '<div class="jc-empty-state">Loading…</div>';
+  if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="9" class="jc-empty-state">Loading…</td></tr>';
+  try {
+    jcDashData = await sbGet('jobs',
+      `company_id=eq.${currentCompany.id}&order=created_at.desc&select=id,job_no,customer,job_type,status,priority,date_received,due_date,description,quoted_ttd,location,updated_at`);
+    jcRenderDash();
+    const badge = document.getElementById('badge-job-cards');
+    if (badge) {
+      const open = jcDashData.filter(j => !['Completed','Invoiced','Closed'].includes(j.status)).length;
+      badge.textContent = open; badge.style.display = open ? '' : 'none';
+    }
+  } catch(e) {
+    if (tbodyEl) tbodyEl.innerHTML = `<tr><td colspan="9" class="jc-empty-state">Error loading jobs: ${escHtml(e.message)}</td></tr>`;
+  }
+}
+function jcRenderDash() {
+  const jobs = jcGetFiltered();
+  jcRenderKPIs(jobs);
+  jcRenderActionCards(jobs);
+  jcRenderDashTable(jobs);
+}
+function jcGetFiltered() {
+  const search  = (document.getElementById('jc-dash-search')?.value || '').toLowerCase();
+  const statusF = document.getElementById('jc-dash-status')?.value  || '';
+  const prioF   = document.getElementById('jc-dash-priority')?.value || '';
+  return jcDashData.filter(j => {
+    if (statusF && j.status   !== statusF) return false;
+    if (prioF   && j.priority !== prioF)   return false;
+    if (search) {
+      const hay = `${j.job_no||''} ${j.customer||''} ${j.description||''} ${j.job_type||''}`.toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+}
+function jcRenderKPIs(jobs) {
+  const today   = new Date().toISOString().slice(0,10);
+  const weekEnd = new Date(Date.now() + 7*86400000).toISOString().slice(0,10);
+  const done    = ['Completed','Invoiced','Closed'];
+  const total   = jobs.length;
+  const inProg  = jobs.filter(j => j.status === 'In Progress').length;
+  const overdue = jobs.filter(j => j.due_date && j.due_date < today && !done.includes(j.status)).length;
+  const dueWeek = jobs.filter(j => j.due_date && j.due_date >= today && j.due_date <= weekEnd && !done.includes(j.status)).length;
+  const revenue = jobs.filter(j => j.status !== 'Closed').reduce((s,j) => s + (parseFloat(j.quoted_ttd)||0), 0);
+  const fmtRev  = revenue >= 1000 ? `TT$${(revenue/1000).toFixed(1)}K` : `TT$${revenue.toFixed(0)}`;
+  const kpisEl = document.getElementById('jc-kpis'); if (!kpisEl) return;
+  kpisEl.innerHTML = [
+    { label:'Total Jobs',    num:total,   sub:'All records',       nc:'' },
+    { label:'In Progress',   num:inProg,  sub:'Active now',        nc:'blue' },
+    { label:'Overdue',       num:overdue, sub:'Past due date',     nc:overdue  ? 'red'   : '' },
+    { label:'Due This Week', num:dueWeek, sub:'Next 7 days',       nc:dueWeek  ? 'amber' : '' },
+    { label:'Pipeline',      num:fmtRev,  sub:'Open quoted value', nc:'' },
+  ].map(k => `<div class="jc-kpi">
+    <div class="jc-kpi-num ${k.nc}">${k.num}</div>
+    <div class="jc-kpi-label">${k.label}</div>
+    <div class="jc-kpi-sub" style="font-size:10px;color:var(--text-3);margin-top:2px;">${k.sub}</div>
+  </div>`).join('');
+}
+function jcRenderActionCards(jobs) {
+  const today = new Date().toISOString().slice(0,10);
+  const in3d  = new Date(Date.now() + 3*86400000).toISOString().slice(0,10);
+  const active = jobs.filter(j => ['In Progress','On Hold'].includes(j.status))
+                     .sort((a,b) => (a.due_date||'9999') < (b.due_date||'9999') ? -1 : 1);
+  const el  = document.getElementById('jc-action-cards');
+  const cnt = document.getElementById('jc-action-count');
+  if (cnt) cnt.textContent = active.length;
+  if (!el) return;
+  if (!active.length) { el.innerHTML = '<div class="jc-empty-state">No active jobs requiring attention.</div>'; return; }
+  const pillMap = { 'In Progress':'progress','On Hold':'hold' };
+  el.innerHTML = active.map(j => {
+    let urgIcon='🟢', dueText='No due date';
+    if (j.due_date) {
+      if      (j.due_date < today) { urgIcon='🔴'; dueText=`Overdue — ${j.due_date}`; }
+      else if (j.due_date===today) { urgIcon='🟡'; dueText='Due Today'; }
+      else if (j.due_date<=in3d)   { urgIcon='🔵'; dueText=`Due ${j.due_date}`; }
+      else                         {               dueText=`Due ${j.due_date}`; }
+    }
+    return `<div class="jc-ac" onclick="jcOpenJob('${j.id}')">
+      <div style="font-size:18px;flex-shrink:0;">${urgIcon}</div>
+      <div style="flex:1;min-width:0;">
+        <div class="jc-ac-jobno">${escHtml(j.job_no)}</div>
+        <div class="jc-ac-customer">${escHtml(j.customer||'—')}</div>
+        <div class="jc-ac-meta">
+          <span class="jc-status-pill ${pillMap[j.status]||''}">${escHtml(j.status)}</span>
+          <span>${escHtml(dueText)}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function jcRenderDashTable(jobs) {
+  const today  = new Date().toISOString().slice(0,10);
+  const sorted = [...jobs].sort((a,b) => {
+    let va=a[jcDashSortKey]||'', vb=b[jcDashSortKey]||'';
+    if (typeof va==='string') va=va.toLowerCase();
+    if (typeof vb==='string') vb=vb.toLowerCase();
+    return jcDashSortAsc ? (va<vb?-1:va>vb?1:0) : (va>vb?-1:va<vb?1:0);
+  });
+  const cnt = document.getElementById('jc-all-count');
+  if (cnt) cnt.textContent = sorted.length;
+  const tbody = document.getElementById('jc-dash-tbody'); if (!tbody) return;
+  if (!sorted.length) { tbody.innerHTML = '<tr><td colspan="9" class="jc-empty-state">No jobs match the current filters.</td></tr>'; return; }
+  const done    = ['Completed','Invoiced','Closed'];
+  const pillMap = { Received:'received','In Progress':'progress','On Hold':'hold',Completed:'completed',Invoiced:'invoiced',Closed:'closed' };
+  const prioColors = { Urgent:'var(--red)',Rush:'var(--amber)',Normal:'',Scheduled:'var(--blue)' };
+  tbody.innerHTML = sorted.map(j => {
+    const isDone    = done.includes(j.status);
+    const isOverdue = j.due_date && j.due_date < today && !isDone;
+    const isToday   = j.due_date === today && !isDone;
+    const rowCls    = isOverdue ? 'jc-dash-row-overdue' : isToday ? 'jc-dash-row-today' : '';
+    const dueCell   = j.due_date
+      ? (isOverdue ? `<span style="color:var(--red);font-weight:700;">⚠ ${j.due_date}</span>`
+        : isToday  ? `<span style="color:var(--amber);font-weight:700;">Today</span>`
+        : j.due_date)
+      : '—';
+    const desc = j.description ? escHtml(j.description).substring(0,55)+(j.description.length>55?'…':'') : '—';
+    return `<tr class="${rowCls}" onclick="jcOpenJob('${j.id}')">
+      <td><span class="dash-jno">${escHtml(j.job_no)}</span></td>
+      <td>${escHtml(j.customer||'—')}</td>
+      <td>${escHtml(j.job_type||'—')}</td>
+      <td><span class="jc-status-pill ${pillMap[j.status]||''}">${escHtml(j.status)}</span></td>
+      <td style="font-size:11px;font-weight:700;${prioColors[j.priority]?'color:'+prioColors[j.priority]:''}">${escHtml(j.priority||'—')}</td>
+      <td style="font-size:11px;">${escHtml(j.location||'—')}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:11px;">${j.date_received||'—'}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:11px;">${dueCell}</td>
+      <td style="color:var(--text-2);">${desc}</td>
+    </tr>`;
+  }).join('');
+}
+function jcDashSort(key) {
+  if (jcDashSortKey===key) jcDashSortAsc=!jcDashSortAsc;
+  else { jcDashSortKey=key; jcDashSortAsc=true; }
+  jcRenderDashTable(jcGetFiltered());
+}
+
+// ── JOB NUMBER ───────────────────────────────────────────────────
+async function jcFetchNewJobNo() {
+  try {
+    const result = await sb('rpc/next_job_no', { method:'POST', body:{} });
+    if (result) return typeof result==='string' ? result : (result[0] || result);
+  } catch(e) {}
+  return 'JC-DRAFT';
+}
+
+// ── NEW JOB ──────────────────────────────────────────────────────
+async function jcNewJob() {
+  if (jcIsDirty) {
+    const ok = await showConfirm('You have unsaved changes. Start a new job card anyway?', 'Unsaved Changes', 'Discard & New');
+    if (!ok) return;
+  }
+  jcResetForm();
+  jcOpenForm();
+  const jobNo = await jcFetchNewJobNo();
+  document.getElementById('jc-job-no-display').textContent = jobNo;
+  document.getElementById('jc-f-date-received').valueAsDate = new Date();
+  jcMarkClean();
+}
+function jcResetForm() {
+  document.querySelectorAll('#jc-form-wrap input:not([readonly]), #jc-form-wrap select, #jc-form-wrap textarea').forEach(el => { el.value = ''; });
+  const miscEl = document.getElementById('jc-cs-misc'); if (miscEl) miscEl.value = '0';
+  ['jc-labour-body','jc-equip-body','jc-materials-body','jc-consumables-body','jc-subs-body','jc-drawings-body','jc-specs-body','jc-reports-body'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.innerHTML = '';
+  });
+  document.querySelectorAll('#jc-status-btns .jc-status-btn').forEach(b => b.classList.remove('active','green','red','blue','dark'));
+  const firstBtn = document.querySelector('#jc-status-btns .jc-status-btn');
+  if (firstBtn) firstBtn.classList.add('active');
+  document.querySelectorAll('.jc-cat-btn').forEach(b => b.classList.remove('active'));
+  const custBtn = document.getElementById('jc-cat-customer'); if (custBtn) custBtn.classList.add('active');
+  jcCurrentJobId = null; jcIsLocked = false; jcAdminCostUnlocked = false;
+  document.getElementById('jc-lock-banner')?.classList.remove('show');
+  document.getElementById('jc-form-wrap')?.classList.remove('jc-readonly');
+  const delBtn = document.getElementById('jc-delete-btn'); if (delBtn) delBtn.style.display = 'none';
+  const adminSec = document.getElementById('jc-admin-cost-section'); if (adminSec) adminSec.style.display = isAdmin() ? '' : 'none';
+  const unlockBtn = document.getElementById('jc-cost-unlock-btn');
+  if (unlockBtn) { unlockBtn.textContent = 'Unlock'; unlockBtn.classList.remove('unlocked'); }
+  const adminFields = document.getElementById('jc-admin-cost-fields'); if (adminFields) adminFields.classList.remove('unlocked');
+  jcBuildQCChecklist('');
+  jcAddLabourRow(); jcAddEquipRow(); jcAddMaterialRow(); jcAddConsumableRow(); jcAddSubRow();
+  jcUpdateCostSummary(); jcClearAuditLog();
+  const lastSaved = document.getElementById('jc-last-saved'); if (lastSaved) lastSaved.textContent = 'Not yet saved';
+  const jobNoEl = document.getElementById('jc-job-no-display'); if (jobNoEl) jobNoEl.textContent = '—';
+}
+
+// ── SAVE ─────────────────────────────────────────────────────────
+async function jcSaveJob() {
+  if (!currentUser) { showToast('Not logged in.', 'warn'); return; }
+  try {
+    showToast('Saving…', 'info');
+    const data = jcCollectFormData();
+    jcCurrentJobId = await jcSaveJobData(data, jcCurrentJobId);
+    const lastSaved = document.getElementById('jc-last-saved');
+    if (lastSaved) lastSaved.textContent = 'Saved ' + new Date().toLocaleString('en-TT');
+    const delBtn = document.getElementById('jc-delete-btn');
+    if (delBtn) delBtn.style.display = isAdmin() ? '' : 'none';
+    jcMarkClean();
+    showToast('✓ Job ' + data.jobNo + ' saved.', 'success');
+    jcAddAuditEntry('save', `Saved by ${currentUser.full_name}`);
+    await jcLoadDashboard();
+  } catch(err) {
+    console.error('jcSaveJob:', err);
+    showToast('✗ Save failed: ' + (err.message || err), 'error');
+  }
+}
+async function jcSaveJobData(data, jobId) {
+  const parse = str => { try { return JSON.parse(str)||[]; } catch(e) { return []; } };
+  const jobRecord = {
+    company_id:      currentCompany.id,
+    job_no:          data.jobNo,
+    job_category:    data.category,
+    job_type:        data.jobType     || null,
+    location:        data.location    || null,
+    status:          data.status,
+    priority:        data.priority,
+    customer:        data.customer    || null,
+    contact:         data.contact     || null,
+    phone:           data.phone       || null,
+    email:           data.email       || null,
+    date_received:   data.dateReceived || null,
+    due_date:        data.dueDate      || null,
+    description:     data.description  || null,
+    part_name:       data.partName     || null,
+    customer_po:     data.custPo       || null,
+    accepted_by:     data.acceptedBy   || null,
+    modified_by:     currentUser.full_name || null,
+    quoted_ttd:      data.quotedTTD ? parseFloat(data.quotedTTD) : null,
+    payment_terms:   data.paymentTerms || null,
+    misc_ttd:        parseFloat(data.misc) || 0,
+    costing_notes:   data.costingNotes || null,
+    jsa_ref:         data.jsaRef       || null,
+    jsa_title:       data.jsaTitle     || null,
+    jsa_date_issued: data.jsaDate      || null,
+    jsa_issued_by:   data.jsaBy        || null,
+    date_completed:  data.dateCompleted || null,
+    inspected_by:    data.inspectedBy   || null,
+    qc_result:       data.qcResult      || null,
+    qc_notes:        data.qcNotes       || null,
+    qc_state:        parse(data.qcState),
+    drawings:        parse(data.drawings),
+    specs:           parse(data.specs),
+    reports:         parse(data.reports),
+    created_by:      currentUser.auth_user_id,
+  };
+  let savedId = jobId;
+  if (savedId) {
+    await sbPatch('jobs', savedId, jobRecord);
+  } else {
+    const rows = await sbPost('jobs', jobRecord);
+    savedId = rows[0].id;
+  }
+  await Promise.all(['labour_entries','equipment_entries','material_entries','consumable_entries','subcontractor_entries']
+    .map(t => sbDeleteWhere(t, `job_id=eq.${savedId}`)));
+  const labour = parse(data.labourDetail);
+  if (labour.length) await sbPost('labour_entries', labour.map((r,i) => ({
+    job_id:savedId, sort_order:i, entry_date:r.date||null, classification:r.classification||null,
+    technician:r.tech||null, location:r.location||'Workshop', start_time:r.start||null, end_time:r.end||null,
+    hours:parseFloat(r.hrs)||0, rate_ttd:parseFloat(r.rate)||0, amount_ttd:parseFloat(r.amount)||0, is_overtime:false, tasks:r.tasks||[]
+  })));
+  const equip = parse(data.equipDetail);
+  if (equip.length) await sbPost('equipment_entries', equip.map((r,i) => ({
+    job_id:savedId, sort_order:i, entry_date:r.date||null, machine_name:r.machine||null,
+    asset_no:r.asset||null, location:r.location||'Workshop', setup_hours:parseFloat(r.setup)||0,
+    run_hours:parseFloat(r.run)||0, rate_ttd:parseFloat(r.rate)||0, amount_ttd:parseFloat(r.amount)||0, tasks:r.tasks||[]
+  })));
+  const mats = parse(data.matsDetail);
+  if (mats.length) await sbPost('material_entries', mats.map((r,i) => ({
+    job_id:savedId, sort_order:i, entry_date:r.date||null, description:r.desc||null, stock_code:r.code||null,
+    quantity:parseFloat(r.qty)||0, unit:r.unit||null, unit_cost_ttd:parseFloat(r.unitCost)||0,
+    total_cost_ttd:(parseFloat(r.qty)||0)*(parseFloat(r.unitCost)||0)
+  })));
+  const cons = parse(data.consDetail);
+  if (cons.length) await sbPost('consumable_entries', cons.map((r,i) => ({
+    job_id:savedId, sort_order:i, entry_date:r.date||null, description:r.desc||null, category:r.cat||null,
+    quantity:parseFloat(r.qty)||0, unit:r.unit||null, unit_cost_ttd:parseFloat(r.unitCost)||0,
+    total_cost_ttd:(parseFloat(r.qty)||0)*(parseFloat(r.unitCost)||0)
+  })));
+  const subs = parse(data.subsDetail);
+  if (subs.length) await sbPost('subcontractor_entries', subs.map((r,i) => ({
+    job_id:savedId, sort_order:i, entry_date:r.date||null, name:r.name||null,
+    service_description:r.service||null, invoice_ref:r.inv||null, cost_ttd:parseFloat(r.cost)||0
+  })));
+  sbPost('job_audit_log', {
+    job_id:savedId, job_no:data.jobNo, user_id:currentUser.auth_user_id,
+    username:currentUser.full_name, action_type:'job_saved',
+    description:`Job ${data.jobNo} saved by ${currentUser.full_name}`
+  }).catch(()=>{});
+  return savedId;
+}
+
+// ── LOAD JOB ─────────────────────────────────────────────────────
+async function jcOpenJob(jobId) {
+  if (jcIsDirty) {
+    const ok = await showConfirm('Load a different job? Unsaved changes will be lost.', 'Unsaved Changes', 'Load Anyway');
+    if (!ok) return;
+  }
+  try {
+    const [jr, lr, er, mr, cr, sr] = await Promise.all([
+      sbGet('jobs',                  `id=eq.${jobId}&limit=1`),
+      sbGet('labour_entries',        `job_id=eq.${jobId}&order=sort_order`),
+      sbGet('equipment_entries',     `job_id=eq.${jobId}&order=sort_order`),
+      sbGet('material_entries',      `job_id=eq.${jobId}&order=sort_order`),
+      sbGet('consumable_entries',    `job_id=eq.${jobId}&order=sort_order`),
+      sbGet('subcontractor_entries', `job_id=eq.${jobId}&order=sort_order`),
+    ]);
+    if (!jr.length) throw new Error('Job not found.');
+    const j = jr[0];
+    jcCurrentJobId = j.id;
+    const row = {
+      'Job No': j.job_no, 'Job Category': j.job_category||'Customer', 'Job Type': j.job_type||'', 'Location': j.location||'',
+      'Status': j.status, 'Priority': j.priority,
+      'Customer': j.customer||'', 'Contact': j.contact||'', 'Phone': j.phone||'', 'Email': j.email||'',
+      'Date Received': j.date_received||'', 'Due Date': j.due_date||'',
+      'Description': j.description||'', 'Part Name': j.part_name||'',
+      'Customer PO': j.customer_po||'', 'Accepted By': j.accepted_by||'', 'Modified By': j.modified_by||'',
+      'Quoted TTD': j.quoted_ttd!=null ? String(j.quoted_ttd) : '',
+      'Quoted TTD 2': j.quoted_ttd!=null ? String(j.quoted_ttd) : '',
+      'Payment Terms': j.payment_terms||'', 'Misc TTD': j.misc_ttd!=null ? String(j.misc_ttd) : '0',
+      'Costing Notes': j.costing_notes||'',
+      'JSA Ref': j.jsa_ref||'', 'JSA Title': j.jsa_title||'',
+      'JSA Date Issued': j.jsa_date_issued||'', 'JSA Issued By': j.jsa_issued_by||'',
+      'Date Completed': j.date_completed||'', 'Inspected By': j.inspected_by||'',
+      'QC Result': j.qc_result||'', 'QC Notes': j.qc_notes||'',
+      'QC State': JSON.stringify(j.qc_state||[]),
+      'Drawings Detail': JSON.stringify(j.drawings||[]),
+      'Specs Detail': JSON.stringify(j.specs||[]),
+      'Reports Detail': JSON.stringify(j.reports||[]),
+      'Last Saved': j.updated_at,
+      'Labour Detail': JSON.stringify((lr||[]).map(r => ({ date:r.entry_date||'', classification:r.classification||'', tech:r.technician||'', location:r.location||'Workshop', start:r.start_time||'', end:r.end_time||'', hrs:String(r.hours||0), rate:String(r.rate_ttd||0), amount:String(r.amount_ttd||0), tasks:r.tasks||[] }))),
+      'Equipment Detail': JSON.stringify((er||[]).map(r => ({ date:r.entry_date||'', machine:r.machine_name||'', asset:r.asset_no||'', location:r.location||'Workshop', setup:String(r.setup_hours||0), run:String(r.run_hours||0), rate:String(r.rate_ttd||0), amount:String(r.amount_ttd||0), tasks:r.tasks||[] }))),
+      'Materials Detail': JSON.stringify((mr||[]).map(r => ({ date:r.entry_date||'', desc:r.description||'', code:r.stock_code||'', qty:String(r.quantity||0), unit:r.unit||'', unitCost:String(r.unit_cost_ttd||0) }))),
+      'Consumables Detail': JSON.stringify((cr||[]).map(r => ({ date:r.entry_date||'', desc:r.description||'', cat:r.category||'', qty:String(r.quantity||0), unit:r.unit||'', unitCost:String(r.unit_cost_ttd||0) }))),
+      'Subs Detail': JSON.stringify((sr||[]).map(r => ({ date:r.entry_date||'', name:r.name||'', service:r.service_description||'', inv:r.invoice_ref||'', cost:String(r.cost_ttd||0) }))),
+    };
+    jcPopulateForm(row);
+    jcOpenForm();
+  } catch(err) {
+    showToast('✗ Failed to load job: ' + (err.message || err), 'error');
+  }
+}
+function jcPopulateForm(row) {
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v||''; };
+  const jobNoEl = document.getElementById('jc-job-no-display'); if (jobNoEl) jobNoEl.textContent = row['Job No']||'—';
+  document.querySelectorAll('#jc-status-btns .jc-status-btn').forEach(btn => {
+    btn.classList.remove('active','green','red','blue','dark');
+    if (btn.textContent.trim() === row['Status']) { btn.classList.add('active'); if (btn.dataset.color) btn.classList.add(btn.dataset.color); }
+  });
+  document.querySelectorAll('.jc-cat-btn').forEach(b => b.classList.remove('active'));
+  const catId = row['Job Category']==='Internal' ? 'jc-cat-internal' : 'jc-cat-customer';
+  document.getElementById(catId)?.classList.add('active');
+  const ps = document.getElementById('jc-priority-select'); if (ps) ps.value = row['Priority']||'Normal';
+  set('jc-f-customer',      row['Customer']);       set('jc-f-contact',       row['Contact']);
+  set('jc-f-phone',         row['Phone']);           set('jc-f-email',         row['Email']);
+  set('jc-f-date-received', row['Date Received']);   set('jc-f-due-date',      row['Due Date']);
+  set('jc-f-description',   row['Description']);     set('jc-f-part-name',     row['Part Name']);
+  set('jc-f-job-type',      row['Job Type']);         set('jc-f-location',      row['Location']);
+  set('jc-f-cust-po',       row['Customer PO']);      set('jc-f-quoted',        row['Quoted TTD']);
+  set('jc-f-quoted-2',      row['Quoted TTD 2']||row['Quoted TTD']);
+  set('jc-f-accepted-by',   row['Accepted By']);      set('jc-f-modified-by',   row['Modified By']);
+  set('jc-f-payment-terms', row['Payment Terms']);    set('jc-f-costing-notes', row['Costing Notes']);
+  set('jc-cs-misc',         row['Misc TTD']||'0');
+  set('jc-f-date-completed',row['Date Completed']);   set('jc-f-inspected-by',  row['Inspected By']);
+  set('jc-f-qc-result',     row['QC Result']);         set('jc-f-qc-notes',      row['QC Notes']);
+  set('jc-f-jsa-ref',       row['JSA Ref']);            set('jc-f-jsa-title',     row['JSA Title']);
+  set('jc-f-jsa-date',      row['JSA Date Issued']);    set('jc-f-jsa-by',        row['JSA Issued By']);
+  const lastSavedEl = document.getElementById('jc-last-saved');
+  if (lastSavedEl && row['Last Saved']) lastSavedEl.textContent = 'Saved ' + new Date(row['Last Saved']).toLocaleString('en-TT');
+  ['jc-labour-body','jc-equip-body','jc-materials-body','jc-consumables-body','jc-subs-body','jc-drawings-body','jc-specs-body','jc-reports-body']
+    .forEach(id => { const el=document.getElementById(id); if (el) el.innerHTML=''; });
+  const parse = str => { try { return JSON.parse(str)||[]; } catch(e) { return []; } };
+  parse(row['Labour Detail']).forEach(d => jcAddLabourRow(d));
+  parse(row['Equipment Detail']).forEach(d => jcAddEquipRow(d));
+  parse(row['Materials Detail']).forEach(d => jcAddMaterialRow(d));
+  parse(row['Consumables Detail']).forEach(d => jcAddConsumableRow(d));
+  parse(row['Subs Detail']).forEach(d => jcAddSubRow(d));
+  parse(row['Drawings Detail']).forEach(d => jcAddDrawingRow(d));
+  parse(row['Specs Detail']).forEach(d => jcAddSpecRow(d));
+  parse(row['Reports Detail']).forEach(d => jcAddReportRow(d));
+  jcOnJobTypeChange();
+  if (row['QC State']) {
+    const qs = parse(row['QC State']);
+    document.querySelectorAll('#jc-qc-grid .qc-item').forEach((item, i) => {
+      const chk = item.querySelector('.qc-check');
+      if (qs[i] && chk) {
+        chk.classList.remove('checked','failed'); chk.textContent='';
+        if (qs[i].state==='pass') { chk.classList.add('checked'); chk.textContent='✓'; }
+        else if (qs[i].state==='fail') { chk.classList.add('failed'); chk.textContent='✗'; }
+      }
+    });
+  }
+  jcSetLocked(['Invoiced','Closed'].includes(row['Status']));
+  jcClearAuditLog();
+  jcAddAuditEntry('save', `Job ${row['Job No']} loaded`);
+  jcUpdateCostSummary();
+  jcMarkClean();
+  const delBtn = document.getElementById('jc-delete-btn'); if (delBtn) delBtn.style.display = isAdmin() ? '' : 'none';
+  const adminSec = document.getElementById('jc-admin-cost-section'); if (adminSec) adminSec.style.display = isAdmin() ? '' : 'none';
+  showToast('✓ Job ' + row['Job No'] + ' loaded.', 'success');
+}
+
+// ── DELETE ────────────────────────────────────────────────────────
+async function jcDeleteJob() {
+  if (!jcCurrentJobId) { showToast('No saved job to delete.', 'warn'); return; }
+  if (!isAdmin()) { showToast('Admin access required to delete jobs.', 'error'); return; }
+  const ok = await showConfirm('Permanently delete this job card? This cannot be undone.', 'Delete Job', 'Delete Job');
+  if (!ok) return;
+  try {
+    const jobNo = document.getElementById('jc-job-no-display').textContent;
+    sbPost('job_audit_log', { job_id:jcCurrentJobId, job_no:jobNo, user_id:currentUser.auth_user_id, username:currentUser.full_name, action_type:'job_deleted', description:`Job ${jobNo} deleted by ${currentUser.full_name}` }).catch(()=>{});
+    await sbDelete('jobs', jcCurrentJobId);
+    jcCurrentJobId = null;
+    showToast('🗑 Job ' + jobNo + ' deleted.', 'success');
+    jcOpenDashboard();
+    await jcLoadDashboard();
+  } catch(err) {
+    showToast('✗ Delete failed: ' + (err.message || err), 'error');
+  }
+}
+
+// ── DUPLICATE ─────────────────────────────────────────────────────
+async function jcDuplicateJob() {
+  if (jcIsDirty) {
+    const ok = await showConfirm('Duplicate without saving current changes?', 'Unsaved Changes', 'Duplicate Anyway', false);
+    if (!ok) return;
+  }
+  const original = jcCollectFormData();
+  const jobNo = await jcFetchNewJobNo();
+  jcResetForm();
+  jcOpenForm();
+  document.getElementById('jc-job-no-display').textContent = jobNo;
+  document.getElementById('jc-f-date-received').valueAsDate = new Date();
+  const set = (id, v) => { const el=document.getElementById(id); if(el) el.value=v||''; };
+  set('jc-f-customer',     original.customer);    set('jc-f-contact',      original.contact);
+  set('jc-f-phone',        original.phone);        set('jc-f-email',        original.email);
+  set('jc-f-description',  original.description);  set('jc-f-part-name',    original.partName);
+  set('jc-f-job-type',     original.jobType);       set('jc-f-accepted-by',  original.acceptedBy);
+  set('jc-f-payment-terms',original.paymentTerms);  set('jc-f-jsa-title',    original.jsaTitle);
+  set('jc-f-jsa-by',       original.jsaBy);
+  const ps = document.getElementById('jc-priority-select'); if (ps && original.priority) ps.value = original.priority;
+  ['jc-labour-body','jc-equip-body','jc-materials-body','jc-consumables-body','jc-subs-body','jc-drawings-body','jc-specs-body','jc-reports-body']
+    .forEach(id => { const el=document.getElementById(id); if(el) el.innerHTML=''; });
+  const parse = str => { try { return JSON.parse(str)||[]; } catch(e) { return []; } };
+  parse(original.labourDetail).forEach(d => jcAddLabourRow(d));
+  parse(original.equipDetail).forEach(d => jcAddEquipRow(d));
+  parse(original.matsDetail).forEach(d => jcAddMaterialRow(d));
+  parse(original.consDetail).forEach(d => jcAddConsumableRow(d));
+  parse(original.subsDetail).forEach(d => jcAddSubRow(d));
+  parse(original.drawings).forEach(d => jcAddDrawingRow(d));
+  parse(original.specs).forEach(d => jcAddSpecRow(d));
+  jcOnJobTypeChange(); jcUpdateCostSummary();
+  jcClearAuditLog(); jcAddAuditEntry('create', `Duplicated from ${original.jobNo}`);
+  jcMarkDirty();
+  showToast('✓ Duplicated as ' + jobNo + '. Review and save.', 'success');
+}
+
+// ── COLLECT FORM DATA ─────────────────────────────────────────────
+function jcCollectFormData() {
+  const get = id => { const el=document.getElementById(id); return el ? el.value : ''; };
+  const getStatus = () => { const b=document.querySelector('#jc-status-btns .jc-status-btn.active'); return b ? b.textContent.trim() : 'Received'; };
+  const getCat    = () => document.getElementById('jc-cat-internal')?.classList.contains('active') ? 'Internal' : 'Customer';
+  const labourDetail = [];
+  document.querySelectorAll('#jc-labour-body tr:not(.jc-task-subrows)').forEach(tr => {
+    const rid = tr.id; if (!rid||!rid.startsWith('jc-lr-')) return;
+    const inputs=tr.querySelectorAll('input'), sels=tr.querySelectorAll('select'), tasks=[];
+    const tc = document.getElementById(rid+'-taskcontainer');
+    if (tc) tc.querySelectorAll('.jc-task-subrow').forEach(d => tasks.push({ task:d.querySelector('select')?.value||'', note:d.querySelector('input')?.value||'' }));
+    labourDetail.push({ date:inputs[0]?.value||'', classification:sels[0]?.value||'', tech:inputs[1]?.value||'', location:sels[1]?.value||'Workshop', start:inputs[2]?.value||'', end:inputs[3]?.value||'', hrs:inputs[4]?.value||'0', rate:document.getElementById(rid+'-rate')?.value||'0', amount:(document.getElementById(rid+'-amount')?.textContent||'$0').replace('$',''), tasks });
+  });
+  const equipDetail = [];
+  document.querySelectorAll('#jc-equip-body tr:not(.jc-task-subrows)').forEach(tr => {
+    const rid = tr.id; if (!rid||!rid.startsWith('jc-er-')) return;
+    const inputs=tr.querySelectorAll('input'), sels=tr.querySelectorAll('select'), tasks=[];
+    const tc = document.getElementById(rid+'-taskcontainer');
+    if (tc) tc.querySelectorAll('.jc-task-subrow').forEach(d => tasks.push({ task:d.querySelector('select')?.value||'', note:d.querySelector('input')?.value||'' }));
+    equipDetail.push({ date:inputs[0]?.value||'', machine:sels[0]?.value||'', asset:inputs[1]?.value||'', location:sels[1]?.value||'Workshop', setup:inputs[2]?.value||'0', run:inputs[3]?.value||'0', rate:document.getElementById(rid+'-rate')?.value||'0', amount:(document.getElementById(rid+'-amount')?.textContent||'$0').replace('$',''), tasks });
+  });
+  const matsDetail = [];
+  document.querySelectorAll('#jc-materials-body tr').forEach(tr => {
+    if (!tr.id) return; const inputs=tr.querySelectorAll('input');
+    matsDetail.push({ date:inputs[0]?.value||'', desc:tr.querySelector('select')?.value||'', code:inputs[1]?.value||'', qty:inputs[2]?.value||'0', unit:document.getElementById(tr.id+'-unit')?.value||'', unitCost:document.getElementById(tr.id+'-cost')?.value||'0' });
+  });
+  const consDetail = [];
+  document.querySelectorAll('#jc-consumables-body tr').forEach(tr => {
+    if (!tr.id) return; const inputs=tr.querySelectorAll('input');
+    consDetail.push({ date:inputs[0]?.value||'', desc:tr.querySelector('select')?.value||'', cat:inputs[1]?.value||'', qty:inputs[2]?.value||'0', unit:document.getElementById(tr.id+'-unit')?.value||'', unitCost:document.getElementById(tr.id+'-cost')?.value||'0' });
+  });
+  const subsDetail = [];
+  document.querySelectorAll('#jc-subs-body tr').forEach(tr => {
+    if (!tr.id) return; const inputs=tr.querySelectorAll('input');
+    subsDetail.push({ date:inputs[0]?.value||'', name:inputs[1]?.value||'', service:inputs[2]?.value||'', inv:inputs[3]?.value||'', cost:document.getElementById(tr.id+'-cost')?.value||'0' });
+  });
+  const drawings = [];
+  document.querySelectorAll('#jc-drawings-body tr').forEach(tr => {
+    if (!tr.id) return; const inputs=tr.querySelectorAll('input');
+    drawings.push({ 'Drawing No':inputs[0]?.value||'', 'Drawing Title':inputs[1]?.value||'', 'Revision No':inputs[2]?.value||'', 'Date':inputs[3]?.value||'', 'Source':tr.querySelector('select')?.value||'Client' });
+  });
+  const specs = [];
+  document.querySelectorAll('#jc-specs-body tr').forEach(tr => {
+    if (!tr.id) return; const inputs=tr.querySelectorAll('input');
+    specs.push({ 'Spec No':inputs[0]?.value||'', 'Spec Title':inputs[1]?.value||'', 'Revision No':inputs[2]?.value||'', 'Date Received':inputs[3]?.value||'', 'Source':inputs[4]?.value||'Client' });
+  });
+  const reports = [];
+  document.querySelectorAll('#jc-reports-body tr').forEach(tr => {
+    if (!tr.id) return; const inputs=tr.querySelectorAll('input');
+    reports.push({ ref:inputs[0]?.value||'', title:inputs[1]?.value||'' });
+  });
+  const qcState = [];
+  document.querySelectorAll('#jc-qc-grid .qc-item').forEach(item => {
+    const chk=item.querySelector('.qc-check'), txt=item.querySelector('.qc-label');
+    if (chk && txt) qcState.push({ item:txt.textContent, state:chk.classList.contains('checked')?'pass':chk.classList.contains('failed')?'fail':'' });
+  });
+  return {
+    jobNo:         document.getElementById('jc-job-no-display')?.textContent||'—',
+    category:      getCat(),
+    jobType:       get('jc-f-job-type'),      location:      get('jc-f-location'),
+    status:        getStatus(),               priority:      get('jc-priority-select'),
+    customer:      get('jc-f-customer'),      contact:       get('jc-f-contact'),
+    phone:         get('jc-f-phone'),         email:         get('jc-f-email'),
+    dateReceived:  get('jc-f-date-received'), dueDate:       get('jc-f-due-date'),
+    description:   get('jc-f-description'),   partName:      get('jc-f-part-name'),
+    custPo:        get('jc-f-cust-po'),        quotedTTD:     get('jc-f-quoted'),
+    acceptedBy:    get('jc-f-accepted-by'),    paymentTerms:  get('jc-f-payment-terms'),
+    misc:          get('jc-cs-misc'),          costingNotes:  get('jc-f-costing-notes'),
+    jsaRef:        get('jc-f-jsa-ref'),        jsaTitle:      get('jc-f-jsa-title'),
+    jsaDate:       get('jc-f-jsa-date'),       jsaBy:         get('jc-f-jsa-by'),
+    dateCompleted: get('jc-f-date-completed'), inspectedBy:   get('jc-f-inspected-by'),
+    qcResult:      get('jc-f-qc-result'),      qcNotes:       get('jc-f-qc-notes'),
+    qcState:       JSON.stringify(qcState),    drawings:      JSON.stringify(drawings),
+    specs:         JSON.stringify(specs),      reports:       JSON.stringify(reports),
+    labourDetail:  JSON.stringify(labourDetail), equipDetail: JSON.stringify(equipDetail),
+    matsDetail:    JSON.stringify(matsDetail),   consDetail:  JSON.stringify(consDetail),
+    subsDetail:    JSON.stringify(subsDetail),
+  };
+}
+
+// ── STATUS ────────────────────────────────────────────────────────
+function jcSetStatus(btn) {
+  document.querySelectorAll('#jc-status-btns .jc-status-btn').forEach(b => b.classList.remove('active','green','red','blue','dark'));
+  btn.classList.add('active');
+  if (btn.dataset.color) btn.classList.add(btn.dataset.color);
+  jcSetLocked(['Invoiced','Closed'].includes(btn.textContent.trim()));
+  jcMarkDirty();
+}
+async function jcConfirmLockStatus(btn, label) {
+  const ok = await showConfirm(`Set status to "${label}"? This will lock the job card.`, `Set Status: ${label}`, `Set ${label}`);
+  if (ok) jcSetStatus(btn);
+}
+function jcSetLocked(lock) {
+  jcIsLocked = lock;
+  document.getElementById('jc-lock-banner')?.classList.toggle('show', lock);
+  if (lock && !jcAdminCostUnlocked) document.getElementById('jc-form-wrap')?.classList.add('jc-readonly');
+  else document.getElementById('jc-form-wrap')?.classList.remove('jc-readonly');
+}
+function jcSetCategory(cat, btn) {
+  document.querySelectorAll('.jc-cat-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (cat==='Internal') { const el=document.getElementById('jc-f-customer'); if (el&&!el.value) el.value='Q2 Machines'; }
+  jcMarkDirty();
+}
+function jcOnJobTypeChange() {
+  jcBuildQCChecklist(document.getElementById('jc-f-job-type')?.value||'');
+  jcMarkDirty();
+}
+
+// ── QC CHECKLIST ──────────────────────────────────────────────────
+function jcBuildQCChecklist(jobType) {
+  const grid = document.getElementById('jc-qc-grid'); if (!grid) return;
+  grid.innerHTML = '';
+  const items = jcConfig.qcChecklists.filter(r => !jobType || r.jobType===jobType || r.jobType==='All').map(r => r.item).filter(Boolean);
+  if (!items.length) { grid.innerHTML = '<p style="color:var(--text-2);font-size:12px;padding:8px 0;grid-column:span 3;">No checklist items for this job type.</p>'; return; }
+  items.forEach(item => {
+    const div = document.createElement('div'); div.className = 'qc-item';
+    const chk = document.createElement('div'); chk.className = 'qc-check';
+    chk.onclick = () => {
+      if (!chk.classList.contains('checked')&&!chk.classList.contains('failed')) { chk.classList.add('checked'); chk.textContent='✓'; }
+      else if (chk.classList.contains('checked')) { chk.classList.remove('checked'); chk.classList.add('failed'); chk.textContent='✗'; }
+      else { chk.classList.remove('failed'); chk.textContent=''; }
+      jcMarkDirty();
+    };
+    const txt = document.createElement('span'); txt.className = 'qc-label'; txt.textContent = item;
+    div.appendChild(chk); div.appendChild(txt);
+    grid.appendChild(div);
+  });
+}
+
+// ── DIRTY / CLEAN ─────────────────────────────────────────────────
+function jcMarkDirty() {
+  jcIsDirty = true;
+  document.getElementById('jc-draft-dot')?.classList.add('show');
+  document.getElementById('jc-unsaved-banner')?.classList.add('show');
+}
+function jcMarkClean() {
+  jcIsDirty = false;
+  document.getElementById('jc-draft-dot')?.classList.remove('show');
+  document.getElementById('jc-unsaved-banner')?.classList.remove('show');
+}
+
+// ── SEARCH ────────────────────────────────────────────────────────
+function jcSearchJobs() { clearTimeout(jcSearchTimeout); jcSearchTimeout = setTimeout(jcDoSearch, 350); }
+async function jcDoSearch() {
+  const q   = document.getElementById('jc-search-input')?.value.trim()||'';
+  const box = document.getElementById('jc-search-results');
+  if (!box) return;
+  if (q.length < 2) { box.style.display='none'; return; }
+  box.style.display = 'block';
+  box.innerHTML = '<div class="jc-search-empty">Searching…</div>';
+  try {
+    const rows = await sbGet('jobs',
+      `company_id=eq.${currentCompany.id}&or=(job_no.ilike.*${q}*,customer.ilike.*${q}*,description.ilike.*${q}*,part_name.ilike.*${q}*)&order=created_at.desc&limit=20&select=id,job_no,customer,status`);
+    if (!rows.length) { box.innerHTML = '<div class="jc-search-empty">No results found.</div>'; return; }
+    box.innerHTML = rows.map(j => `<div class="jc-sri" onmousedown="jcOpenJob('${j.id}')">
+      <span class="jc-sri-jobno">${escHtml(j.job_no)}</span>
+      <span class="jc-sri-customer" style="margin-left:8px;">${escHtml(j.customer||'—')}</span>
+      <span class="jc-sri-meta" style="margin-left:8px;">${escHtml(j.status)}</span>
+    </div>`).join('');
+  } catch(e) { box.innerHTML = '<div class="jc-search-empty">Search error.</div>'; }
+}
+function jcHideSearch() {
+  setTimeout(() => {
+    const b=document.getElementById('jc-search-results'); if (b) b.style.display='none';
+    const i=document.getElementById('jc-search-input'); if (i) i.value='';
+  }, 200);
+}
+
+// ── LABOUR ────────────────────────────────────────────────────────
+function jcAddLabourRow(d) {
+  const tbody = document.getElementById('jc-labour-body'); if (!tbody) return;
+  const rid = 'jc-lr-' + Date.now() + Math.random().toString(36).substr(2,4);
+  const labOpts  = '<option value="">Select…</option>' + jcConfig.labour.map(r => `<option value="${escHtml(r.classification)}">${escHtml(r.classification)}</option>`).join('');
+  const taskOpts = '<option value="">Select task…</option>' + jcConfig.tasks.map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`).join('');
+  const tr = document.createElement('tr'); tr.id = rid;
+  tr.innerHTML = `
+    <td><input type="date" value="${d&&d.date||''}"></td>
+    <td><select onchange="jcOnLabourClassChange(this,'${rid}')">${labOpts}</select></td>
+    <td><input type="text" placeholder="Technician" value="${d&&d.tech||''}"></td>
+    <td><select onchange="jcOnLabourLocChange(this,'${rid}')">
+      <option value="Workshop">Workshop</option><option value="Onsite">Onsite</option><option value="Other">Other</option>
+    </select></td>
+    <td><input type="time" class="num" value="${d&&d.start||''}" onchange="jcCalcLabourHours('${rid}')"></td>
+    <td><input type="time" class="num" value="${d&&d.end||''}" onchange="jcCalcLabourHours('${rid}')"></td>
+    <td><input type="number" class="num" placeholder="0.00" value="${d&&d.hrs||''}" step="0.25" style="width:56px;" oninput="jcUpdateLabourRow('${rid}')"></td>
+    <td><span class="jc-ot-badge" id="${rid}-otbadge" style="display:none;">OT</span><span id="${rid}-otlabel">Reg</span></td>
+    <td><input type="number" class="num" placeholder="0.00" id="${rid}-rate" value="${d&&d.rate||''}" oninput="jcUpdateLabourRow('${rid}')"></td>
+    <td><span class="row-total" id="${rid}-amount">$0.00</span></td>
+    <td><button class="btn-del" onclick="jcRemoveLabourRow('${rid}')">✕</button></td>`;
+  tbody.appendChild(tr);
+  const taskTr = document.createElement('tr'); taskTr.className = 'jc-task-subrows'; taskTr.id = rid+'-tasks';
+  taskTr.innerHTML = `<td colspan="11"><div id="${rid}-taskcontainer"></div><button class="btn-add-task" onclick="jcAddTaskSubRow('${rid}-taskcontainer')">+ Add Task</button></td>`;
+  tbody.appendChild(taskTr);
+  if (d&&d.location) tr.querySelectorAll('select')[1].value = d.location;
+  if (d&&d.classification) { tr.querySelectorAll('select')[0].value=d.classification; jcOnLabourClassChange(tr.querySelectorAll('select')[0],rid); }
+  if (d&&d.tasks) d.tasks.forEach(t => jcAddTaskSubRow(rid+'-taskcontainer', t));
+  jcUpdateLabourRow(rid); jcUpdateLabourTotals();
+}
+function jcAddTaskSubRow(containerId, d) {
+  const c = document.getElementById(containerId); if (!c) return;
+  const taskOpts = '<option value="">Select task…</option>' + jcConfig.tasks.map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`).join('');
+  const div = document.createElement('div'); div.className = 'jc-task-subrow';
+  div.style.cssText = 'display:flex;align-items:center;gap:8px;padding:3px 0;';
+  div.innerHTML = `<span style="font-size:11px;color:var(--text-2);">Task:</span>
+    <select style="min-width:150px;font-size:12px;">${taskOpts}</select>
+    <span style="font-size:11px;color:var(--text-2);">Note:</span>
+    <input type="text" placeholder="Optional note" style="flex:1;font-size:12px;">
+    <button class="btn-del" onclick="this.closest('.jc-task-subrow').remove()" style="font-size:11px;">✕</button>`;
+  if (d) { div.querySelector('select').value=d.task||''; div.querySelector('input').value=d.note||''; }
+  c.appendChild(div);
+}
+function jcOnLabourClassChange(sel, rid) {
+  const cls=sel?.value, tr=document.getElementById(rid); if (!tr) return;
+  const loc = tr.querySelectorAll('select')[1]?.value||'Workshop';
+  const row = jcConfig.labour.find(r => r.classification===cls);
+  const rateEl = document.getElementById(rid+'-rate');
+  if (row && rateEl) rateEl.value = (loc==='Workshop' ? row.workshopRate : row.onsiteRate).toFixed(2);
+  jcUpdateLabourRow(rid);
+}
+function jcOnLabourLocChange(sel, rid) { jcOnLabourClassChange(document.getElementById(rid)?.querySelectorAll('select')[0], rid); }
+function jcCalcLabourHours(rid) {
+  const tr = document.getElementById(rid); if (!tr) return;
+  const times = tr.querySelectorAll('input[type="time"]');
+  const start=times[0].value, end=times[1].value; if (!start||!end) return;
+  const [sh,sm]=start.split(':').map(Number), [eh,em]=end.split(':').map(Number);
+  let hrs=(eh*60+em-sh*60-sm)/60; if (hrs<0) hrs+=24;
+  tr.querySelectorAll('input[type="number"]')[0].value = hrs.toFixed(2);
+  jcUpdateLabourRow(rid);
+}
+function jcUpdateLabourRow(rid) {
+  const tr=document.getElementById(rid); if (!tr) return;
+  const hrs  = parseFloat(tr.querySelectorAll('input[type="number"]')[0]?.value)||0;
+  const rate = parseFloat(document.getElementById(rid+'-rate')?.value)||0;
+  const isOT = hrs>8;
+  const amount = isOT ? (8*rate+(hrs-8)*rate*1.5) : (hrs*rate);
+  const badge=document.getElementById(rid+'-otbadge'), label=document.getElementById(rid+'-otlabel');
+  if (badge) badge.style.display = isOT?'inline':'none';
+  if (label) label.textContent = isOT?'OT':'Reg';
+  tr.classList.toggle('jc-ot-row', isOT);
+  const amtEl=document.getElementById(rid+'-amount'); if (amtEl) amtEl.textContent='$'+amount.toFixed(2);
+  jcUpdateLabourTotals(); jcUpdateCostSummary();
+}
+function jcRemoveLabourRow(rid) {
+  document.getElementById(rid)?.remove(); document.getElementById(rid+'-tasks')?.remove();
+  jcUpdateLabourTotals(); jcUpdateCostSummary();
+}
+function jcUpdateLabourTotals() {
+  let hrs=0, cost=0;
+  document.querySelectorAll('#jc-labour-body tr:not(.jc-task-subrows)').forEach(tr => {
+    const rid=tr.id; if (!rid||!rid.startsWith('jc-lr-')) return;
+    hrs  += parseFloat(tr.querySelectorAll('input[type="number"]')[0]?.value)||0;
+    cost += parseFloat(document.getElementById(rid+'-amount')?.textContent.replace('$',''))||0;
+  });
+  const hEl=document.getElementById('jc-labour-hrs-total'), cEl=document.getElementById('jc-labour-cost-total'), bEl=document.getElementById('jc-labour-hrs-badge');
+  if (hEl) hEl.textContent=hrs.toFixed(2);
+  if (cEl) cEl.textContent='$'+cost.toFixed(2);
+  if (bEl) bEl.textContent=hrs.toFixed(2)+' hrs';
+}
+
+// ── EQUIPMENT ─────────────────────────────────────────────────────
+function jcAddEquipRow(d) {
+  const tbody=document.getElementById('jc-equip-body'); if (!tbody) return;
+  const rid = 'jc-er-'+Date.now()+Math.random().toString(36).substr(2,4);
+  const eqOpts   = '<option value="">Select…</option>'+jcConfig.equipment.map(r => `<option value="${escHtml(r.name)}">${escHtml(r.name)}</option>`).join('');
+  const taskOpts = '<option value="">Select task…</option>'+jcConfig.tasks.map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`).join('');
+  const tr=document.createElement('tr'); tr.id=rid;
+  tr.innerHTML=`
+    <td><input type="date" value="${d&&d.date||''}"></td>
+    <td><select onchange="jcOnEquipChange(this,'${rid}')">${eqOpts}</select></td>
+    <td><input type="text" placeholder="Asset No." value="${d&&d.asset||''}"></td>
+    <td><select onchange="jcOnEquipChange(document.getElementById('${rid}').querySelectorAll('select')[0],'${rid}')">
+      <option value="Workshop">Workshop</option><option value="Onsite">Onsite</option><option value="Other">Other</option>
+    </select></td>
+    <td><input type="number" class="num" placeholder="0.00" value="${d&&d.setup||''}" step="0.25" oninput="jcUpdateEquipRow('${rid}')"></td>
+    <td><input type="number" class="num" placeholder="0.00" value="${d&&d.run||''}" step="0.25" oninput="jcUpdateEquipRow('${rid}')"></td>
+    <td><input type="number" class="num" placeholder="0.00" id="${rid}-rate" value="${d&&d.rate||''}" oninput="jcUpdateEquipRow('${rid}')"></td>
+    <td><span class="row-total" id="${rid}-amount">$0.00</span></td>
+    <td><button class="btn-del" onclick="jcRemoveEquipRow('${rid}')">✕</button></td>`;
+  tbody.appendChild(tr);
+  const taskTr=document.createElement('tr'); taskTr.className='jc-task-subrows'; taskTr.id=rid+'-tasks';
+  taskTr.innerHTML=`<td colspan="9"><div id="${rid}-taskcontainer"></div><button class="btn-add-task" onclick="jcAddTaskSubRow('${rid}-taskcontainer')">+ Add Task</button></td>`;
+  tbody.appendChild(taskTr);
+  if (d&&d.machine) { tr.querySelectorAll('select')[0].value=d.machine; jcOnEquipChange(tr.querySelectorAll('select')[0],rid); }
+  if (d&&d.location) tr.querySelectorAll('select')[1].value=d.location;
+  if (d&&d.tasks) d.tasks.forEach(t => jcAddTaskSubRow(rid+'-taskcontainer',t));
+  jcUpdateEquipRow(rid);
+}
+function jcOnEquipChange(sel, rid) {
+  const tr=document.getElementById(rid); if (!tr) return;
+  const loc=tr.querySelectorAll('select')[1]?.value||'Workshop';
+  const row=jcConfig.equipment.find(r => r.name===sel?.value);
+  const rateEl=document.getElementById(rid+'-rate');
+  if (row&&rateEl) rateEl.value=(loc==='Workshop'?row.workshopRate:row.onsiteRate).toFixed(2);
+  jcUpdateEquipRow(rid);
+}
+function jcUpdateEquipRow(rid) {
+  const tr=document.getElementById(rid); if (!tr) return;
+  const nums=tr.querySelectorAll('input[type="number"]');
+  const amt=((parseFloat(nums[0]?.value)||0)+(parseFloat(nums[1]?.value)||0))*(parseFloat(document.getElementById(rid+'-rate')?.value)||0);
+  const amtEl=document.getElementById(rid+'-amount'); if (amtEl) amtEl.textContent='$'+amt.toFixed(2);
+  jcUpdateEquipTotals(); jcUpdateCostSummary();
+}
+function jcRemoveEquipRow(rid) {
+  document.getElementById(rid)?.remove(); document.getElementById(rid+'-tasks')?.remove();
+  jcUpdateEquipTotals(); jcUpdateCostSummary();
+}
+function jcUpdateEquipTotals() {
+  let total=0;
+  document.querySelectorAll('#jc-equip-body tr:not(.jc-task-subrows)').forEach(tr => {
+    const rid=tr.id; if (!rid||!rid.startsWith('jc-er-')) return;
+    total+=parseFloat(document.getElementById(rid+'-amount')?.textContent.replace('$',''))||0;
+  });
+  const el=document.getElementById('jc-equip-cost-total'); if (el) el.textContent='$'+total.toFixed(2);
+}
+
+// ── MATERIALS ─────────────────────────────────────────────────────
+function jcAddMaterialRow(d) {
+  const tbody=document.getElementById('jc-materials-body'); if (!tbody) return;
+  const rid='jc-mr-'+Date.now()+Math.random().toString(36).substr(2,4);
+  const matOpts='<option value="">Select…</option>'+jcConfig.materials.map(r => `<option value="${escHtml(r.name)}" data-unit="${escHtml(r.unit)}" data-cost="${r.cost}">${escHtml(r.name)}</option>`).join('');
+  const tr=document.createElement('tr'); tr.id=rid;
+  tr.innerHTML=`
+    <td><input type="date" value="${d&&d.date||''}"></td>
+    <td><select onchange="jcOnMaterialChange(this,'${rid}')">${matOpts}</select></td>
+    <td><input type="text" placeholder="Stock code" value="${d&&d.code||''}"></td>
+    <td><input type="number" class="num" placeholder="0" value="${d&&d.qty||''}" step="1" oninput="jcUpdateMaterialRow('${rid}')"></td>
+    <td><input type="text" placeholder="Unit" id="${rid}-unit" value="${d&&d.unit||''}" style="width:60px;"></td>
+    <td><input type="number" class="num" placeholder="0.00" id="${rid}-cost" value="${d&&d.unitCost||''}" oninput="jcUpdateMaterialRow('${rid}')"></td>
+    <td><span class="row-total" id="${rid}-amount">$0.00</span></td>
+    <td><button class="btn-del" onclick="document.getElementById('${rid}').remove();jcUpdateMatTotals();jcUpdateCostSummary();">✕</button></td>`;
+  tbody.appendChild(tr);
+  if (d&&d.desc) tr.querySelector('select').value=d.desc;
+  jcUpdateMaterialRow(rid);
+}
+function jcOnMaterialChange(sel, rid) {
+  const opt=sel.options[sel.selectedIndex];
+  if (opt) { const u=document.getElementById(rid+'-unit'),c=document.getElementById(rid+'-cost'); if(u)u.value=opt.dataset.unit||''; if(c)c.value=parseFloat(opt.dataset.cost||0).toFixed(2); }
+  jcUpdateMaterialRow(rid);
+}
+function jcUpdateMaterialRow(rid) {
+  const tr=document.getElementById(rid); if (!tr) return;
+  const qty=parseFloat(tr.querySelectorAll('input[type="number"]')[0]?.value)||0;
+  const cost=parseFloat(document.getElementById(rid+'-cost')?.value)||0;
+  const el=document.getElementById(rid+'-amount'); if(el) el.textContent='$'+(qty*cost).toFixed(2);
+  jcUpdateMatTotals(); jcUpdateCostSummary();
+}
+function jcUpdateMatTotals() {
+  let total=0;
+  document.querySelectorAll('#jc-materials-body tr').forEach(tr => {
+    if (!tr.id) return; total+=parseFloat(document.getElementById(tr.id+'-amount')?.textContent.replace('$',''))||0;
+  });
+  const el=document.getElementById('jc-materials-cost-total'); if(el) el.textContent='$'+total.toFixed(2);
+}
+
+// ── CONSUMABLES ───────────────────────────────────────────────────
+function jcAddConsumableRow(d) {
+  const tbody=document.getElementById('jc-consumables-body'); if (!tbody) return;
+  const rid='jc-cr-'+Date.now()+Math.random().toString(36).substr(2,4);
+  const conOpts='<option value="">Select…</option>'+jcConfig.consumables.map(r => `<option value="${escHtml(r.name)}" data-unit="${escHtml(r.unit)}" data-cost="${r.cost}">${escHtml(r.name)}</option>`).join('');
+  const tr=document.createElement('tr'); tr.id=rid;
+  tr.innerHTML=`
+    <td><input type="date" value="${d&&d.date||''}"></td>
+    <td><select onchange="jcOnConsumableChange(this,'${rid}')">${conOpts}</select></td>
+    <td><input type="text" placeholder="Category" value="${d&&d.cat||''}"></td>
+    <td><input type="number" class="num" placeholder="0" value="${d&&d.qty||''}" step="1" oninput="jcUpdateConsumableRow('${rid}')"></td>
+    <td><input type="text" placeholder="Unit" id="${rid}-unit" value="${d&&d.unit||''}" style="width:60px;"></td>
+    <td><input type="number" class="num" placeholder="0.00" id="${rid}-cost" value="${d&&d.unitCost||''}" oninput="jcUpdateConsumableRow('${rid}')"></td>
+    <td><span class="row-total" id="${rid}-amount">$0.00</span></td>
+    <td><button class="btn-del" onclick="document.getElementById('${rid}').remove();jcUpdateConTotals();jcUpdateCostSummary();">✕</button></td>`;
+  tbody.appendChild(tr);
+  if (d&&d.desc) tr.querySelector('select').value=d.desc;
+  jcUpdateConsumableRow(rid);
+}
+function jcOnConsumableChange(sel, rid) {
+  const opt=sel.options[sel.selectedIndex];
+  if (opt) { const u=document.getElementById(rid+'-unit'),c=document.getElementById(rid+'-cost'); if(u)u.value=opt.dataset.unit||''; if(c)c.value=parseFloat(opt.dataset.cost||0).toFixed(2); }
+  jcUpdateConsumableRow(rid);
+}
+function jcUpdateConsumableRow(rid) {
+  const tr=document.getElementById(rid); if (!tr) return;
+  const qty=parseFloat(tr.querySelectorAll('input[type="number"]')[0]?.value)||0;
+  const cost=parseFloat(document.getElementById(rid+'-cost')?.value)||0;
+  const el=document.getElementById(rid+'-amount'); if(el) el.textContent='$'+(qty*cost).toFixed(2);
+  jcUpdateConTotals(); jcUpdateCostSummary();
+}
+function jcUpdateConTotals() {
+  let total=0;
+  document.querySelectorAll('#jc-consumables-body tr').forEach(tr => {
+    if (!tr.id) return; total+=parseFloat(document.getElementById(tr.id+'-amount')?.textContent.replace('$',''))||0;
+  });
+  const el=document.getElementById('jc-consumables-cost-total'); if(el) el.textContent='$'+total.toFixed(2);
+}
+
+// ── SUB-CONTRACTORS ───────────────────────────────────────────────
+function jcAddSubRow(d) {
+  const tbody=document.getElementById('jc-subs-body'); if (!tbody) return;
+  const rid='jc-sr-'+Date.now()+Math.random().toString(36).substr(2,4);
+  const tr=document.createElement('tr'); tr.id=rid;
+  tr.innerHTML=`
+    <td><input type="date" value="${d&&d.date||''}"></td>
+    <td><input type="text" placeholder="Sub-contractor / Supplier" value="${d&&d.name||''}"></td>
+    <td><input type="text" placeholder="Service description" value="${d&&d.service||''}"></td>
+    <td><input type="text" placeholder="Invoice / Ref No." value="${d&&d.inv||''}"></td>
+    <td><input type="number" class="num" placeholder="0.00" id="${rid}-cost" value="${d&&d.cost||''}" oninput="jcUpdateSubTotals()"></td>
+    <td><button class="btn-del" onclick="document.getElementById('${rid}').remove();jcUpdateSubTotals();jcUpdateCostSummary();">✕</button></td>`;
+  tbody.appendChild(tr); jcUpdateSubTotals();
+}
+function jcUpdateSubTotals() {
+  let total=0;
+  document.querySelectorAll('#jc-subs-body tr').forEach(tr => {
+    if (!tr.id) return; total+=parseFloat(document.getElementById(tr.id+'-cost')?.value)||0;
+  });
+  const el=document.getElementById('jc-subs-cost-total'); if(el) el.textContent='$'+total.toFixed(2);
+  jcUpdateCostSummary();
+}
+
+// ── DRAWINGS / SPECS / REPORTS ────────────────────────────────────
+function jcAddDrawingRow(d) {
+  const tbody=document.getElementById('jc-drawings-body'); if (!tbody) return;
+  const rid='jc-dr-'+Date.now()+Math.random().toString(36).substr(2,4);
+  const tr=document.createElement('tr'); tr.id=rid;
+  tr.innerHTML=`
+    <td><input type="text" placeholder="DWG-001" value="${d&&d['Drawing No']||''}"></td>
+    <td><input type="text" placeholder="Drawing title" value="${d&&d['Drawing Title']||''}"></td>
+    <td><input type="text" placeholder="Rev A" value="${d&&d['Revision No']||''}"></td>
+    <td><input type="date" value="${d&&d['Date']||''}"></td>
+    <td><select><option value="Client">Client</option><option value="Internal">Internal</option></select></td>
+    <td><button class="btn-del" onclick="document.getElementById('${rid}').remove();">✕</button></td>`;
+  if (d&&d['Source']) tr.querySelector('select').value=d['Source'];
+  tbody.appendChild(tr);
+}
+function jcAddSpecRow(d) {
+  const tbody=document.getElementById('jc-specs-body'); if (!tbody) return;
+  const rid='jc-sp-'+Date.now()+Math.random().toString(36).substr(2,4);
+  const tr=document.createElement('tr'); tr.id=rid;
+  tr.innerHTML=`
+    <td><input type="text" placeholder="SPEC-001" value="${d&&d['Spec No']||''}"></td>
+    <td><input type="text" placeholder="Spec title" value="${d&&d['Spec Title']||''}"></td>
+    <td><input type="text" placeholder="Rev 1" value="${d&&d['Revision No']||''}"></td>
+    <td><input type="date" value="${d&&d['Date Received']||''}"></td>
+    <td><input type="text" placeholder="Client" value="${d&&d['Source']||'Client'}" style="width:80px;"></td>
+    <td><button class="btn-del" onclick="document.getElementById('${rid}').remove();">✕</button></td>`;
+  tbody.appendChild(tr);
+}
+function jcAddReportRow(d) {
+  const tbody=document.getElementById('jc-reports-body'); if (!tbody) return;
+  const rid='jc-rr-'+Date.now()+Math.random().toString(36).substr(2,4);
+  const tr=document.createElement('tr'); tr.id=rid;
+  tr.innerHTML=`
+    <td><input type="text" placeholder="RPT-0001" value="${d&&d.ref||''}"></td>
+    <td><input type="text" placeholder="Report title" value="${d&&d.title||''}"></td>
+    <td><button class="btn-del" onclick="document.getElementById('${rid}').remove();">✕</button></td>`;
+  tbody.appendChild(tr);
+}
+
+// ── COSTING SUMMARY ───────────────────────────────────────────────
+function jcSyncQuoted(src) {
+  const otherId = src.id==='jc-f-quoted' ? 'jc-f-quoted-2' : 'jc-f-quoted';
+  const other = document.getElementById(otherId); if (other) other.value = src.value;
+  jcUpdateCostSummary();
+}
+function jcUpdateCostSummary() {
+  const getNum = id => parseFloat(document.getElementById(id)?.textContent.replace('$',''))||0;
+  const labour=getNum('jc-labour-cost-total'), equip=getNum('jc-equip-cost-total'),
+        mats  =getNum('jc-materials-cost-total'), cons=getNum('jc-consumables-cost-total'),
+        subs  =getNum('jc-subs-cost-total'), misc=parseFloat(document.getElementById('jc-cs-misc')?.value)||0;
+  const total = labour+equip+mats+cons+subs+misc;
+  const setText=(id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v; };
+  setText('jc-cs-labour','$'+labour.toFixed(2)); setText('jc-cs-equip','$'+equip.toFixed(2));
+  setText('jc-cs-materials','$'+mats.toFixed(2)); setText('jc-cs-consumables','$'+cons.toFixed(2));
+  setText('jc-cs-subs','$'+subs.toFixed(2));      setText('jc-cs-total','$'+total.toFixed(2));
+  const markup  = parseFloat(document.getElementById('jc-markup-pct')?.value)||0;
+  const selling = total*(1+markup/100), profit=selling-total;
+  const spEl=document.getElementById('jc-selling-price'), gpEl=document.getElementById('jc-gross-profit');
+  if (spEl) spEl.value=selling.toFixed(2); if (gpEl) gpEl.value=profit.toFixed(2);
+  const pi=document.getElementById('jc-profit-indicator');
+  if (pi) {
+    if (markup<=0)    { pi.className='profit-indicator neutral'; pi.textContent='— Enter markup to see margin'; }
+    else if (markup>=20){ pi.className='profit-indicator healthy'; pi.textContent=`✓ Healthy: ${markup}% markup — $${profit.toFixed(2)} profit`; }
+    else if (markup>=10){ pi.className='profit-indicator warn';    pi.textContent=`⚡ Low: ${markup}% markup — $${profit.toFixed(2)} profit`; }
+    else               { pi.className='profit-indicator danger';  pi.textContent=`⚠ Very low: ${markup}% markup`; }
+  }
+  const quoted=parseFloat(document.getElementById('jc-f-quoted-2')?.value)||0;
+  const overEl=document.getElementById('jc-cost-over'), nearEl=document.getElementById('jc-cost-near');
+  if (overEl&&nearEl) {
+    if (quoted>0&&total>quoted) { overEl.classList.add('show'); nearEl.classList.remove('show'); overEl.textContent=`⚠ Job cost ($${total.toFixed(2)}) exceeds quoted ($${quoted.toFixed(2)}) by $${(total-quoted).toFixed(2)}!`; }
+    else if (quoted>0&&total>=quoted*0.85) { nearEl.classList.add('show'); overEl.classList.remove('show'); nearEl.textContent=`⚡ Job cost is ${Math.round((total/quoted)*100)}% of quoted amount.`; }
+    else { overEl.classList.remove('show'); nearEl.classList.remove('show'); }
+  }
+}
+function jcUnlockCostSection() {
+  if (!isAdmin()) { showToast('Admin access required.', 'error'); return; }
+  jcAdminCostUnlocked = true;
+  document.getElementById('jc-admin-cost-fields')?.classList.add('unlocked');
+  const btn=document.getElementById('jc-cost-unlock-btn');
+  if (btn) { btn.textContent='Unlocked ✓'; btn.classList.add('unlocked'); }
+  showToast('Admin cost section unlocked.', 'success');
+}
+
+// ── AUDIT LOG ─────────────────────────────────────────────────────
+function jcClearAuditLog() {
+  const list=document.getElementById('jc-audit-list'), badge=document.getElementById('jc-audit-badge');
+  if (list) list.innerHTML='<p class="audit-empty">No activity recorded yet for this job.</p>';
+  if (badge) badge.textContent='0 entries';
+}
+function jcAddAuditEntry(type, description) {
+  const list=document.getElementById('jc-audit-list'); if (!list) return;
+  const icons={save:'💾',create:'✨',edit:'✏️',delete:'🗑️',comment:'💬'};
+  const time=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  const row=document.createElement('div'); row.className='audit-entry';
+  row.innerHTML=`<span style="flex-shrink:0;">${icons[type]||'📌'}</span><span style="flex:1;color:var(--text);">${escHtml(description)}</span><span style="flex-shrink:0;color:var(--text-2);">${time}</span>`;
+  if (list.querySelector('.audit-empty')) list.innerHTML='';
+  list.prepend(row);
+  const badge=document.getElementById('jc-audit-badge');
+  if (badge) badge.textContent=list.querySelectorAll('.audit-entry').length+' entries';
 }
 
 // ── DASHBOARD ────────────────────────────────────────────────────
@@ -4582,7 +6766,23 @@ async function loadDashboard() {
     // Quote conversion (rolling 30 days)
     loadDashConversion();
 
-    // ── Zone 3: Recent Activity ────────────────────────────────────
+    // ── Zone 3: Workshop ──────────────────────────────────────────
+    sbGet('jobs', `company_id=eq.${coId}&status=not.in.(Completed,Invoiced,Closed)&select=id,due_date`)
+      .then(openJobs => {
+        const overdue = openJobs.filter(j => j.due_date && j.due_date < today);
+        const week    = openJobs.filter(j => j.due_date && j.due_date >= today && j.due_date <= in7str);
+        document.getElementById('dash-jc-open').textContent    = openJobs.length;
+        document.getElementById('dash-jc-open-sub').textContent = openJobs.length === 1 ? '1 active job' : `${openJobs.length} active jobs`;
+        document.getElementById('dash-jc-overdue').textContent  = overdue.length || '—';
+        document.getElementById('dash-jc-week').textContent     = week.length    || '—';
+        const overdueCard = document.getElementById('dash-jc-overdue')?.closest('.stat-card');
+        if (overdueCard) overdueCard.style.borderColor = overdue.length ? 'var(--red)' : '';
+      }).catch(() => {});
+    sbGet('jobs', `company_id=eq.${coId}&status=eq.Completed&date_completed=gte.${mFrom}&select=id`)
+      .then(rows => { document.getElementById('dash-jc-completed').textContent = rows.length || '—'; })
+      .catch(() => {});
+
+    // ── Zone 4: Recent Activity ────────────────────────────────────
     await loadRecentActivity();
 
   } catch(e) { showToast('Dashboard load error: ' + e.message, 'error'); }
