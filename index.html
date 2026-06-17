@@ -5668,11 +5668,11 @@ async function jcLoadConfig() {
   } catch(e) { console.error('jcLoadConfig:', e); }
 }
 function jcRefreshRowDropdowns() {
-  const labOpts  = '<option value="">Select…</option>' + jcConfig.labour.map(r => `<option value="${escHtml(r.classification)}">${escHtml(r.classification)}</option>`).join('');
-  const eqOpts   = '<option value="">Select…</option>' + jcConfig.equipment.map(r => `<option value="${escHtml(r.name)}">${escHtml(r.name)}</option>`).join('');
-  const taskOpts = '<option value="">Select task…</option>' + jcConfig.tasks.map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`).join('');
-  const matOpts  = '<option value="">Select…</option>' + jcConfig.materials.map(r => `<option value="${escHtml(r.name)}">${escHtml(r.name)}</option>`).join('');
-  const conOpts  = '<option value="">Select…</option>' + jcConfig.consumables.map(r => `<option value="${escHtml(r.name)}">${escHtml(r.name)}</option>`).join('');
+  const labOpts  = '<option value="">Select…</option>' + jcConfig.labour.map(r => `<option value="${escHTML(r.classification)}">${escHTML(r.classification)}</option>`).join('');
+  const eqOpts   = '<option value="">Select…</option>' + jcConfig.equipment.map(r => `<option value="${escHTML(r.name)}">${escHTML(r.name)}</option>`).join('');
+  const taskOpts = '<option value="">Select task…</option>' + jcConfig.tasks.map(t => `<option value="${escHTML(t)}">${escHTML(t)}</option>`).join('');
+  const matOpts  = '<option value="">Select…</option>' + jcConfig.materials.map(r => `<option value="${escHTML(r.name)}">${escHTML(r.name)}</option>`).join('');
+  const conOpts  = '<option value="">Select…</option>' + jcConfig.consumables.map(r => `<option value="${escHTML(r.name)}">${escHTML(r.name)}</option>`).join('');
   document.querySelectorAll('#jc-labour-body tr:not(.jc-task-subrows)').forEach(tr => {
     const sels = tr.querySelectorAll('select'); if (!sels[0]) return;
     const cur = sels[0].value; sels[0].innerHTML = labOpts; sels[0].value = cur;
@@ -5721,7 +5721,7 @@ async function jcLoadDashboard() {
       badge.textContent = open; badge.style.display = open ? '' : 'none';
     }
   } catch(e) {
-    if (tbodyEl) tbodyEl.innerHTML = `<tr><td colspan="9" class="jc-empty-state">Error loading jobs: ${escHtml(e.message)}</td></tr>`;
+    if (tbodyEl) tbodyEl.innerHTML = `<tr><td colspan="9" class="jc-empty-state">Error loading jobs: ${escHTML(e.message)}</td></tr>`;
   }
 }
 function jcRenderDash() {
@@ -5789,11 +5789,11 @@ function jcRenderActionCards(jobs) {
     return `<div class="jc-ac" onclick="jcOpenJob('${j.id}')">
       <div style="font-size:18px;flex-shrink:0;">${urgIcon}</div>
       <div style="flex:1;min-width:0;">
-        <div class="jc-ac-jobno">${escHtml(j.job_no)}</div>
-        <div class="jc-ac-customer">${escHtml(j.customer||'—')}</div>
+        <div class="jc-ac-jobno">${escHTML(j.job_no)}</div>
+        <div class="jc-ac-customer">${escHTML(j.customer||'—')}</div>
         <div class="jc-ac-meta">
-          <span class="jc-status-pill ${pillMap[j.status]||''}">${escHtml(j.status)}</span>
-          <span>${escHtml(dueText)}</span>
+          <span class="jc-status-pill ${pillMap[j.status]||''}">${escHTML(j.status)}</span>
+          <span>${escHTML(dueText)}</span>
         </div>
       </div>
     </div>`;
@@ -5824,14 +5824,14 @@ function jcRenderDashTable(jobs) {
         : isToday  ? `<span style="color:var(--amber);font-weight:700;">Today</span>`
         : j.due_date)
       : '—';
-    const desc = j.description ? escHtml(j.description).substring(0,55)+(j.description.length>55?'…':'') : '—';
+    const desc = j.description ? escHTML(j.description).substring(0,55)+(j.description.length>55?'…':'') : '—';
     return `<tr class="${rowCls}" onclick="jcOpenJob('${j.id}')">
-      <td><span class="dash-jno">${escHtml(j.job_no)}</span></td>
-      <td>${escHtml(j.customer||'—')}</td>
-      <td>${escHtml(j.job_type||'—')}</td>
-      <td><span class="jc-status-pill ${pillMap[j.status]||''}">${escHtml(j.status)}</span></td>
-      <td style="font-size:11px;font-weight:700;${prioColors[j.priority]?'color:'+prioColors[j.priority]:''}">${escHtml(j.priority||'—')}</td>
-      <td style="font-size:11px;">${escHtml(j.location||'—')}</td>
+      <td><span class="dash-jno">${escHTML(j.job_no)}</span></td>
+      <td>${escHTML(j.customer||'—')}</td>
+      <td>${escHTML(j.job_type||'—')}</td>
+      <td><span class="jc-status-pill ${pillMap[j.status]||''}">${escHTML(j.status)}</span></td>
+      <td style="font-size:11px;font-weight:700;${prioColors[j.priority]?'color:'+prioColors[j.priority]:''}">${escHTML(j.priority||'—')}</td>
+      <td style="font-size:11px;">${escHTML(j.location||'—')}</td>
       <td style="font-family:'DM Mono',monospace;font-size:11px;">${j.date_received||'—'}</td>
       <td style="font-family:'DM Mono',monospace;font-size:11px;">${dueCell}</td>
       <td style="color:var(--text-2);">${desc}</td>
@@ -6318,9 +6318,9 @@ async function jcDoSearch() {
       `company_id=eq.${currentCompany.id}&or=(job_no.ilike.*${q}*,customer.ilike.*${q}*,description.ilike.*${q}*,part_name.ilike.*${q}*)&order=created_at.desc&limit=20&select=id,job_no,customer,status`);
     if (!rows.length) { box.innerHTML = '<div class="jc-search-empty">No results found.</div>'; return; }
     box.innerHTML = rows.map(j => `<div class="jc-sri" onmousedown="jcOpenJob('${j.id}')">
-      <span class="jc-sri-jobno">${escHtml(j.job_no)}</span>
-      <span class="jc-sri-customer" style="margin-left:8px;">${escHtml(j.customer||'—')}</span>
-      <span class="jc-sri-meta" style="margin-left:8px;">${escHtml(j.status)}</span>
+      <span class="jc-sri-jobno">${escHTML(j.job_no)}</span>
+      <span class="jc-sri-customer" style="margin-left:8px;">${escHTML(j.customer||'—')}</span>
+      <span class="jc-sri-meta" style="margin-left:8px;">${escHTML(j.status)}</span>
     </div>`).join('');
   } catch(e) { box.innerHTML = '<div class="jc-search-empty">Search error.</div>'; }
 }
@@ -6335,8 +6335,8 @@ function jcHideSearch() {
 function jcAddLabourRow(d) {
   const tbody = document.getElementById('jc-labour-body'); if (!tbody) return;
   const rid = 'jc-lr-' + Date.now() + Math.random().toString(36).substr(2,4);
-  const labOpts  = '<option value="">Select…</option>' + jcConfig.labour.map(r => `<option value="${escHtml(r.classification)}">${escHtml(r.classification)}</option>`).join('');
-  const taskOpts = '<option value="">Select task…</option>' + jcConfig.tasks.map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`).join('');
+  const labOpts  = '<option value="">Select…</option>' + jcConfig.labour.map(r => `<option value="${escHTML(r.classification)}">${escHTML(r.classification)}</option>`).join('');
+  const taskOpts = '<option value="">Select task…</option>' + jcConfig.tasks.map(t => `<option value="${escHTML(t)}">${escHTML(t)}</option>`).join('');
   const tr = document.createElement('tr'); tr.id = rid;
   tr.innerHTML = `
     <td><input type="date" value="${d&&d.date||''}"></td>
@@ -6363,7 +6363,7 @@ function jcAddLabourRow(d) {
 }
 function jcAddTaskSubRow(containerId, d) {
   const c = document.getElementById(containerId); if (!c) return;
-  const taskOpts = '<option value="">Select task…</option>' + jcConfig.tasks.map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`).join('');
+  const taskOpts = '<option value="">Select task…</option>' + jcConfig.tasks.map(t => `<option value="${escHTML(t)}">${escHTML(t)}</option>`).join('');
   const div = document.createElement('div'); div.className = 'jc-task-subrow';
   div.style.cssText = 'display:flex;align-items:center;gap:8px;padding:3px 0;';
   div.innerHTML = `<span style="font-size:11px;color:var(--text-2);">Task:</span>
@@ -6426,8 +6426,8 @@ function jcUpdateLabourTotals() {
 function jcAddEquipRow(d) {
   const tbody=document.getElementById('jc-equip-body'); if (!tbody) return;
   const rid = 'jc-er-'+Date.now()+Math.random().toString(36).substr(2,4);
-  const eqOpts   = '<option value="">Select…</option>'+jcConfig.equipment.map(r => `<option value="${escHtml(r.name)}">${escHtml(r.name)}</option>`).join('');
-  const taskOpts = '<option value="">Select task…</option>'+jcConfig.tasks.map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`).join('');
+  const eqOpts   = '<option value="">Select…</option>'+jcConfig.equipment.map(r => `<option value="${escHTML(r.name)}">${escHTML(r.name)}</option>`).join('');
+  const taskOpts = '<option value="">Select task…</option>'+jcConfig.tasks.map(t => `<option value="${escHTML(t)}">${escHTML(t)}</option>`).join('');
   const tr=document.createElement('tr'); tr.id=rid;
   tr.innerHTML=`
     <td><input type="date" value="${d&&d.date||''}"></td>
@@ -6482,7 +6482,7 @@ function jcUpdateEquipTotals() {
 function jcAddMaterialRow(d) {
   const tbody=document.getElementById('jc-materials-body'); if (!tbody) return;
   const rid='jc-mr-'+Date.now()+Math.random().toString(36).substr(2,4);
-  const matOpts='<option value="">Select…</option>'+jcConfig.materials.map(r => `<option value="${escHtml(r.name)}" data-unit="${escHtml(r.unit)}" data-cost="${r.cost}">${escHtml(r.name)}</option>`).join('');
+  const matOpts='<option value="">Select…</option>'+jcConfig.materials.map(r => `<option value="${escHTML(r.name)}" data-unit="${escHTML(r.unit)}" data-cost="${r.cost}">${escHTML(r.name)}</option>`).join('');
   const tr=document.createElement('tr'); tr.id=rid;
   tr.innerHTML=`
     <td><input type="date" value="${d&&d.date||''}"></td>
@@ -6521,7 +6521,7 @@ function jcUpdateMatTotals() {
 function jcAddConsumableRow(d) {
   const tbody=document.getElementById('jc-consumables-body'); if (!tbody) return;
   const rid='jc-cr-'+Date.now()+Math.random().toString(36).substr(2,4);
-  const conOpts='<option value="">Select…</option>'+jcConfig.consumables.map(r => `<option value="${escHtml(r.name)}" data-unit="${escHtml(r.unit)}" data-cost="${r.cost}">${escHtml(r.name)}</option>`).join('');
+  const conOpts='<option value="">Select…</option>'+jcConfig.consumables.map(r => `<option value="${escHTML(r.name)}" data-unit="${escHTML(r.unit)}" data-cost="${r.cost}">${escHTML(r.name)}</option>`).join('');
   const tr=document.createElement('tr'); tr.id=rid;
   tr.innerHTML=`
     <td><input type="date" value="${d&&d.date||''}"></td>
@@ -6673,7 +6673,7 @@ function jcAddAuditEntry(type, description) {
   const icons={save:'💾',create:'✨',edit:'✏️',delete:'🗑️',comment:'💬'};
   const time=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
   const row=document.createElement('div'); row.className='audit-entry';
-  row.innerHTML=`<span style="flex-shrink:0;">${icons[type]||'📌'}</span><span style="flex:1;color:var(--text);">${escHtml(description)}</span><span style="flex-shrink:0;color:var(--text-2);">${time}</span>`;
+  row.innerHTML=`<span style="flex-shrink:0;">${icons[type]||'📌'}</span><span style="flex:1;color:var(--text);">${escHTML(description)}</span><span style="flex-shrink:0;color:var(--text-2);">${time}</span>`;
   if (list.querySelector('.audit-empty')) list.innerHTML='';
   list.prepend(row);
   const badge=document.getElementById('jc-audit-badge');
