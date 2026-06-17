@@ -1463,9 +1463,9 @@ body {
 .jc-priority-pill.rush   { background:var(--amber-bg); color:var(--amber); }
 .jc-priority-pill.normal { background:var(--bg-4);     color:var(--text-3); }
 
-/* Remove page-body padding for job cards so the toolbar/statusbar go edge-to-edge */
-#view-job-cards .page-body { padding:0; display:flex; flex-direction:column; }
-#view-job-cards .jc-main-wrap { flex:1; }
+/* Remove page-body padding for work orders so the toolbar/statusbar go edge-to-edge */
+#view-job-cards .page-body, #view-work-orders .page-body { padding:0; display:flex; flex-direction:column; }
+#view-job-cards .jc-main-wrap, #view-work-orders .jc-main-wrap { flex:1; }
 
 /* JC extras */
 .jc-kpi-num.red   { color:var(--red); }
@@ -1511,6 +1511,21 @@ body {
     </div>
     <button class="login-btn" onclick="doLogin()" id="login-btn">Sign In</button>
     <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<!-- ── FORCE PASSWORD CHANGE OVERLAY ── -->
+<div class="login-overlay hidden" id="change-pw-overlay" style="z-index:801;">
+  <div class="login-card">
+    <div class="login-logo">🔐</div>
+    <div class="login-title">Set New Password</div>
+    <div class="login-sub">Your administrator requires you to change your password before continuing.</div>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-top:20px;">
+      <input type="password" id="cpw-new" class="field-input" placeholder="New password (min. 8 chars)" style="padding:12px 14px;">
+      <input type="password" id="cpw-confirm" class="field-input" placeholder="Confirm new password" style="padding:12px 14px;">
+      <div id="cpw-error" style="color:var(--red);font-size:12px;min-height:14px;"></div>
+      <button class="login-btn" id="cpw-btn" onclick="doChangePassword()">Set Password</button>
+    </div>
   </div>
 </div>
 
@@ -1583,6 +1598,7 @@ body {
         <span class="nav-toggle" id="toggle-finance">&#8722;</span>
       </div>
       <div class="nav-section-body" id="section-body-finance">
+        <div style="font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);padding:8px 12px 4px 12px;">Transactions</div>
         <div class="nav-item" onclick="navigate('ar')" id="nav-ar">
           <span class="nav-item-icon"><img src="assets/Acc Receivables Icon.svg" style="width:18px;height:18px;vertical-align:middle;"></span> Accounts Receivable
           <span class="nav-badge" id="badge-ar">0</span>
@@ -1594,6 +1610,9 @@ body {
         <div class="nav-item" onclick="navigate('ap')" id="nav-ap">
           <span class="nav-item-icon"><img src="assets/Acc Payables Icon.svg" style="width:18px;height:18px;vertical-align:middle;"></span> Accounts Payable
           <span class="nav-badge" id="badge-ap">0</span>
+        </div>
+        <div class="nav-item" onclick="navigate('vendors')" id="nav-vendors">
+          <span class="nav-item-icon">🏭</span> Vendors
         </div>
         <div class="nav-item" onclick="navigate('bank')" id="nav-bank">
           <span class="nav-item-icon">🏦</span> Bank & Cash
@@ -1644,6 +1663,9 @@ body {
             <span class="nav-sub-toggle" id="toggle-sales-crm">&#8722;</span>
           </div>
           <div class="nav-sub-body" id="sub-body-sales-crm">
+            <div class="nav-item sub-item" onclick="navigate('sales-leads')" id="nav-sales-leads">
+              <span class="nav-item-icon">👥</span> Sales Leads
+            </div>
             <div class="nav-item sub-item" onclick="navigate('pipeline')" id="nav-pipeline">
               <span class="nav-item-icon">🎯</span> Pipeline
             </div>
@@ -1655,28 +1677,31 @@ body {
             </div>
           </div>
         </div>
-        <div class="nav-item" onclick="navigate('sales-leads')" id="nav-sales-leads">
-          <span class="nav-item-icon">👥</span> Sales Leads
-        </div>
         <div class="nav-item" onclick="navigate('quotations')" id="nav-quotations">
           <span class="nav-item-icon">📝</span> Quotations
           <span class="nav-badge" id="badge-quotations">0</span>
         </div>
-        <div class="nav-item" onclick="navigate('delivery-notes')" id="nav-delivery-notes">
-          <span class="nav-item-icon">🚚</span> Delivery Notes
-          <span class="nav-badge" id="badge-delivery-notes">0</span>
+        <div class="nav-item" onclick="navigate('clients')" id="nav-clients">
+          <span class="nav-item-icon">👤</span> Clients
         </div>
       </div>
     </div>
-    <div class="sidebar-section" data-section="workshop">
-      <div class="sidebar-section-header" onclick="toggleNavSection('workshop')">
-        <div class="sidebar-section-label">Workshop</div>
-        <span class="nav-toggle" id="toggle-workshop">&#8722;</span>
+    <div class="sidebar-section" data-section="operations">
+      <div class="sidebar-section-header" onclick="toggleNavSection('operations')">
+        <div class="sidebar-section-label">Operations</div>
+        <span class="nav-toggle" id="toggle-operations">&#8722;</span>
       </div>
-      <div class="nav-section-body" id="section-body-workshop">
-        <div class="nav-item" onclick="navigate('job-cards')" id="nav-job-cards">
-          <span class="nav-item-icon">🔧</span> Job Cards
-          <span class="nav-badge" id="badge-job-cards" style="display:none;">0</span>
+      <div class="nav-section-body" id="section-body-operations">
+        <div class="nav-item" onclick="navigate('work-orders')" id="nav-work-orders">
+          <span class="nav-item-icon">🔧</span> Work Orders
+          <span class="nav-badge" id="badge-work-orders" style="display:none;">0</span>
+        </div>
+        <div class="nav-item" onclick="navigate('job-costing')" id="nav-job-costing">
+          <span class="nav-item-icon">💰</span> Job Costing
+        </div>
+        <div class="nav-item" onclick="navigate('delivery-notes')" id="nav-delivery-notes">
+          <span class="nav-item-icon">🚚</span> Delivery Notes
+          <span class="nav-badge" id="badge-delivery-notes">0</span>
         </div>
         <div class="nav-item" id="nav-job-config" onclick="navigate('job-config')" style="display:none;">
           <span class="nav-item-icon">⚙️</span> Job Config
@@ -1689,14 +1714,11 @@ body {
         <span class="nav-toggle" id="toggle-setup">&#8722;</span>
       </div>
       <div class="nav-section-body" id="section-body-setup">
-        <div class="nav-item" onclick="navigate('clients')" id="nav-clients">
-          <span class="nav-item-icon">👤</span> Clients
+        <div class="nav-item" onclick="navigate('companies')" id="nav-companies">
+          <span class="nav-item-icon">🏢</span> Companies
         </div>
-        <div class="nav-item" onclick="navigate('vendors')" id="nav-vendors">
-          <span class="nav-item-icon">🏭</span> Vendors
-        </div>
-        <div class="nav-item" onclick="navigate('erp-companies')" id="nav-erp-companies">
-          <span class="nav-item-icon">🏢</span> ERP Companies
+        <div class="nav-item" onclick="navigate('user-management')" id="nav-user-management">
+          <span class="nav-item-icon">👥</span> User Management
         </div>
         <div class="nav-item" onclick="navigate('settings')" id="nav-settings">
           <span class="nav-item-icon">⚙️</span> Settings
@@ -1781,28 +1803,51 @@ body {
           <div class="stat-card accent"><div class="stat-label">Revenue This Month</div><div class="stat-value" id="stat-revenue">—</div><div class="stat-sub" id="stat-revenue-sub">vs last month</div></div>
         </div>
 
-        <!-- Zone 3: Workshop -->
-        <div style="margin-bottom:8px;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);">Workshop</div>
+        <!-- Zone 3: Operations -->
+        <div style="margin-bottom:8px;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);">Operations</div>
         <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px;">
-          <div class="stat-card" onclick="navigate('job-cards')" style="cursor:pointer;">
+          <div class="stat-card" onclick="navigate('work-orders')" style="cursor:pointer;">
             <div class="stat-label">Open Jobs</div>
             <div class="stat-value" id="dash-jc-open">—</div>
             <div class="stat-sub" id="dash-jc-open-sub">Active</div>
           </div>
-          <div class="stat-card negative" onclick="navigate('job-cards')" style="cursor:pointer;">
+          <div class="stat-card negative" onclick="navigate('work-orders')" style="cursor:pointer;">
             <div class="stat-label">Overdue</div>
             <div class="stat-value" id="dash-jc-overdue">—</div>
             <div class="stat-sub">Past due date</div>
           </div>
-          <div class="stat-card accent" onclick="navigate('job-cards')" style="cursor:pointer;">
+          <div class="stat-card accent" onclick="navigate('work-orders')" style="cursor:pointer;">
             <div class="stat-label">Due This Week</div>
             <div class="stat-value" id="dash-jc-week">—</div>
             <div class="stat-sub">Next 7 days</div>
           </div>
-          <div class="stat-card positive" onclick="navigate('job-cards')" style="cursor:pointer;">
+          <div class="stat-card positive" onclick="navigate('work-orders')" style="cursor:pointer;">
             <div class="stat-label">Completed This Month</div>
             <div class="stat-value" id="dash-jc-completed">—</div>
             <div class="stat-sub">This month</div>
+          </div>
+        </div>
+
+        <!-- Zone 3b: Exchange Rates -->
+        <div style="margin-bottom:8px;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);">Exchange Rates</div>
+        <div id="dash-forex-zone" style="margin-bottom:24px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+          <div class="stat-card" id="dash-fx-ttd-usd">
+            <div class="stat-label">TTD / USD</div>
+            <div class="stat-value" id="dash-fx-val-ttd-usd" style="font-size:20px;">—</div>
+            <div class="stat-sub" id="dash-fx-sub-ttd-usd">—</div>
+          </div>
+          <div class="stat-card" id="dash-fx-usd-ttd">
+            <div class="stat-label">USD / TTD</div>
+            <div class="stat-value" id="dash-fx-val-usd-ttd" style="font-size:20px;">—</div>
+            <div class="stat-sub" id="dash-fx-sub-usd-ttd">—</div>
+          </div>
+          <div class="stat-card" id="dash-fx-gyd-usd">
+            <div class="stat-label">GYD / USD</div>
+            <div class="stat-value" id="dash-fx-val-gyd-usd" style="font-size:20px;">—</div>
+            <div class="stat-sub" id="dash-fx-sub-gyd-usd" style="display:flex;align-items:center;justify-content:space-between;">
+              <span id="dash-fx-date">—</span>
+              <button class="btn btn-ghost" style="padding:2px 8px;font-size:10px;" onclick="refreshForexRates()">↻ Refresh</button>
+            </div>
           </div>
         </div>
 
@@ -2570,12 +2615,12 @@ body {
       </div>
     </div>
 
-    <!-- ── JOB CARDS ── -->
-    <div class="page-view" id="view-job-cards">
+    <!-- ── WORK ORDERS ── -->
+    <div class="page-view" id="view-work-orders">
       <div class="page-header">
         <div>
-          <div class="page-title">Job Cards</div>
-          <div class="page-subtitle" id="job-cards-subtitle">Q2 Machines workshop jobs</div>
+          <div class="page-title">Work Orders</div>
+          <div class="page-subtitle" id="work-orders-subtitle">Q2 Machines workshop jobs</div>
         </div>
         <div class="page-actions">
           <button class="btn btn-outline btn-sm" onclick="jcOpenDashboard()">Dashboard</button>
@@ -2990,6 +3035,105 @@ body {
 
       </div>
     </div>
+
+    <div class="page-view" id="view-job-costing"></div>
+    <div class="page-view" id="view-user-management">
+  <div class="page-header">
+    <div>
+      <div class="page-title">User Management</div>
+      <div class="page-subtitle" id="um-subtitle">Manage ERP users and access</div>
+    </div>
+    <div class="page-header-actions">
+      <button class="btn btn-primary" onclick="openCreateUserModal()">+ Add User</button>
+    </div>
+  </div>
+  <div class="page-body">
+    <div class="section-card">
+      <div class="section-card-header">
+        <div class="section-card-title">Users</div>
+        <input type="search" id="um-search" class="field-input" placeholder="Search users…" style="width:220px;" oninput="umFilterUsers(this.value)">
+      </div>
+      <div class="table-wrap">
+        <table class="data-table" id="um-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Role</th>
+              <th>Modules</th>
+              <th>Company</th>
+              <th>Last Login</th>
+              <th>Status</th>
+              <th class="right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="um-tbody">
+            <tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create User Modal -->
+  <div class="modal" id="um-modal" style="display:none;">
+    <div class="modal-content" style="max-width:520px;">
+      <div class="modal-header">
+        <div class="modal-title">Add User</div>
+        <button class="btn btn-ghost" onclick="closeUserModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field-group">
+          <label class="field-label">Full Name *</label>
+          <input type="text" id="um-name" class="field-input" placeholder="Jane Smith">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Email *</label>
+          <input type="email" id="um-email" class="field-input" placeholder="jane@example.com">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Temporary Password *</label>
+          <input type="password" id="um-password" class="field-input" placeholder="Min. 8 characters">
+          <div style="font-size:11px;color:var(--text-3);margin-top:4px;">User will be prompted to change this on first login.</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="field-group">
+            <label class="field-label">Role *</label>
+            <select id="um-role" class="field-input" onchange="umRoleChanged()">
+              <option value="user">User</option>
+              <option value="sales">Sales</option>
+              <option value="admin">Admin</option>
+              <option value="super_admin">Super Admin</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Company *</label>
+            <select id="um-company" class="field-input"></select>
+          </div>
+        </div>
+        <div id="um-modules-section" class="field-group">
+          <label class="field-label">Module Access</label>
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:8px;">Applies to non-admin roles. Admins have full access.</div>
+          <div style="display:flex;gap:16px;">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+              <input type="checkbox" id="um-mod-finance" checked> Finance
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+              <input type="checkbox" id="um-mod-sales" checked> Sales
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+              <input type="checkbox" id="um-mod-operations" checked> Operations
+            </label>
+          </div>
+        </div>
+        <div id="um-error" style="color:var(--red);font-size:12px;min-height:16px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeUserModal()">Cancel</button>
+        <button class="btn btn-primary" id="um-save-btn" onclick="saveNewUser()">Create User</button>
+      </div>
+    </div>
+  </div>
+</div>
 
     <!-- ── JOB CONFIG ── -->
     <div class="page-view" id="view-job-config">
@@ -4928,6 +5072,10 @@ async function doLogin() {
     currentUser = profiles[0];
     sbPatchWhere('erp_users', `auth_user_id=eq.${uid}`, { last_login: nowISO() }).catch(() => {});
     document.getElementById('login-overlay').classList.add('hidden');
+    if (currentUser.force_password_change) {
+      showChangePasswordScreen();
+      return;
+    }
     await initApp();
   } catch(e) {
     errEl.textContent = e.message || 'Login failed.';
@@ -4943,6 +5091,42 @@ async function doLogout() {
   document.getElementById('login-email').value = '';
   document.getElementById('login-pw').value    = '';
   document.getElementById('login-error').textContent = '';
+}
+
+function showChangePasswordScreen() {
+  document.getElementById('login-overlay').classList.add('hidden');
+  document.getElementById('change-pw-overlay').classList.remove('hidden');
+}
+
+async function doChangePassword() {
+  const newPw  = document.getElementById('cpw-new').value;
+  const confPw = document.getElementById('cpw-confirm').value;
+  const errEl  = document.getElementById('cpw-error');
+  const btn    = document.getElementById('cpw-btn');
+  errEl.textContent = '';
+  if (newPw.length < 8)      { errEl.textContent = 'Password must be at least 8 characters.'; return; }
+  if (newPw !== confPw)      { errEl.textContent = 'Passwords do not match.'; return; }
+  btn.textContent = 'Saving…'; btn.disabled = true;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      method: 'PUT',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${_accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ password: newPw })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || data.error_description || 'Failed to update password.');
+    await sbPatchWhere('erp_users', `auth_user_id=eq.${currentUser.auth_user_id}`, { force_password_change: false });
+    currentUser.force_password_change = false;
+    document.getElementById('change-pw-overlay').classList.add('hidden');
+    showToast('Password updated. Welcome!', 'success');
+    await initApp();
+  } catch(e) {
+    errEl.textContent = e.message;
+  } finally { btn.textContent = 'Set Password'; btn.disabled = false; }
 }
 
 function togglePw() {
@@ -4961,6 +5145,10 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (profiles.length) {
         currentUser = profiles[0];
         document.getElementById('login-overlay').classList.add('hidden');
+        if (currentUser.force_password_change) {
+          showChangePasswordScreen();
+          return;
+        }
         await initApp();
         return;
       }
@@ -4995,9 +5183,9 @@ async function initApp() {
 
 function applyRoleNav() {
   const role = currentUser?.role;
-  const financeOnly  = ['nav-coa','nav-journal','nav-ap','nav-bank','nav-pl','nav-bs','nav-tb','nav-aged-ap','nav-erp-companies','nav-settings'];
-  const adminOnly    = ['nav-vendors'];
-  const salesVisible = ['nav-dashboard','nav-quotations','nav-delivery-notes','nav-ar','nav-aged-ar','nav-clients','nav-sales-leads','nav-pipeline','nav-crm-activities','nav-crm-tasks','nav-job-cards'];
+  const financeOnly  = ['nav-coa','nav-journal','nav-ap','nav-bank','nav-pl','nav-bs','nav-tb','nav-aged-ap','nav-companies','nav-settings'];
+  const adminOnly    = ['nav-user-management'];
+  const salesVisible = ['nav-dashboard','nav-quotations','nav-ar','nav-aged-ar','nav-clients','nav-sales-leads','nav-pipeline','nav-crm-activities','nav-crm-tasks'];
 
   if (role === 'sales') {
     document.querySelectorAll('.nav-item[id^="nav-"]').forEach(el => {
@@ -5008,12 +5196,20 @@ function applyRoleNav() {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
     });
+    adminOnly.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
   }
   // admin and super_admin see everything
 
-  // Workshop: Job Config is admin-only
+  // Operations: Job Config is admin-only
   const jobConfigEl = document.getElementById('nav-job-config');
   if (jobConfigEl) jobConfigEl.style.display = isAdmin() ? '' : 'none';
+
+  // User Management is admin-only
+  const userMgmtEl = document.getElementById('nav-user-management');
+  if (userMgmtEl && !isAdmin()) userMgmtEl.style.display = 'none';
 
   // Hide Finance > Reports sub-section header if all its items are hidden
   const subSec = document.getElementById('sub-section-finance-reports');
@@ -5021,6 +5217,19 @@ function applyRoleNav() {
     const anyVisible = Array.from(subSec.querySelectorAll('.nav-item'))
                            .some(el => el.style.display !== 'none');
     subSec.style.display = anyVisible ? '' : 'none';
+  }
+
+  // Module-based section visibility (non-admin users only)
+  if (!isAdmin()) {
+    const sectionMap = {
+      finance:    currentUser?.module_finance,
+      sales:      currentUser?.module_sales,
+      operations: currentUser?.module_operations,
+    };
+    Object.entries(sectionMap).forEach(([section, allowed]) => {
+      const el = document.querySelector(`.sidebar-section[data-section="${section}"]`);
+      if (el) el.style.display = (allowed === false) ? 'none' : '';
+    });
   }
 }
 
@@ -5122,15 +5331,18 @@ function updateCompanyContext() {
 const VIEW_SECTIONS = {
   coa: ['finance'], journal: ['finance'], ar: ['finance'],
   'credit-notes': ['finance'], ap: ['finance'], bank: ['finance'],
+  vendors: ['finance'],
   'aged-ar':  ['finance', 'finance-reports'],
   'aged-ap':  ['finance', 'finance-reports'],
   pl:         ['finance', 'finance-reports'],
   bs:         ['finance', 'finance-reports'],
   tb:         ['finance', 'finance-reports'],
   cf:         ['finance', 'finance-reports'],
-  quotations: ['sales'], 'delivery-notes': ['sales'], 'sales-leads': ['sales'],
+  quotations: ['sales'], clients: ['sales'],
+  'sales-leads': ['sales', 'sales-crm'],
   pipeline: ['sales','sales-crm'], 'crm-activities': ['sales','sales-crm'], 'crm-tasks': ['sales','sales-crm'],
-  clients: ['setup'], vendors: ['setup'], 'erp-companies': ['setup'], settings: ['setup']
+  'work-orders': ['operations'], 'job-costing': ['operations'], 'delivery-notes': ['operations'], 'job-config': ['operations'],
+  companies: ['setup'], 'user-management': ['setup'], settings: ['setup']
 };
 
 function getNavState() {
@@ -5177,6 +5389,21 @@ function restoreNavState() {
 
 // ── NAVIGATION ───────────────────────────────────────────────────
 function navigate(view) {
+  // Module access guard — redirect to dashboard if user lacks module access
+  if (!isAdmin() && currentUser) {
+    const moduleGuard = {
+      finance:    ['coa','journal','ar','credit-notes','ap','vendors','bank','pl','bs','tb','cf','aged-ar','aged-ap'],
+      sales:      ['sales-leads','pipeline','crm-activities','crm-tasks','quotations','clients'],
+      operations: ['work-orders','job-costing','delivery-notes','job-config']
+    };
+    for (const [mod, views] of Object.entries(moduleGuard)) {
+      if (views.includes(view) && currentUser[`module_${mod}`] === false) {
+        view = 'dashboard';
+        break;
+      }
+    }
+  }
+
   document.querySelectorAll('.page-view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('view-' + view)?.classList.add('active');
@@ -5220,11 +5447,183 @@ async function loadViewData(view) {
     case 'crm-tasks':      await loadCRMTasks(); break;
     case 'clients':   await loadClients(); break;
     case 'vendors':   await loadVendors(); break;
-    case 'erp-companies': await loadErpCompanies(); break;
+    case 'erp-companies': await loadErpCompanies(); break; // alias (legacy)
+    case 'companies': await loadErpCompanies(); break;
     case 'settings':  await loadSettings(); break;
-    case 'job-cards': await loadJobCards(); break;
+    case 'job-cards': await loadJobCards(); break; // alias (legacy)
+    case 'work-orders': await loadJobCards(); break;
+    case 'job-costing': renderJobCostingPlaceholder(); break;
+    case 'user-management': await loadUserManagement(); break;
     case 'job-config': await loadJobConfig(); break;
   }
+}
+
+let _umAllUsers = [];
+
+async function loadUserManagement() {
+  if (!isAdmin()) { showToast('Admin access required.', 'error'); return; }
+  const tbody = document.getElementById('um-tbody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;"><div class="loading-spinner" style="margin:0 auto;"></div></td></tr>';
+
+  try {
+    const query = isSuperAdmin()
+      ? 'order=full_name'
+      : `company_id=eq.${currentCompany.id}&order=full_name`;
+    _umAllUsers = await sbGet('erp_users', query);
+
+    // Populate company dropdown
+    const coSel = document.getElementById('um-company');
+    if (coSel) {
+      coSel.innerHTML = companies.map(c => `<option value="${escHTML(c.id)}">${escHTML(c.trading_name || c.name)}</option>`).join('');
+    }
+
+    const sub = document.getElementById('um-subtitle');
+    if (sub) sub.textContent = `${_umAllUsers.length} user${_umAllUsers.length !== 1 ? 's' : ''} · ${currentCompany.trading_name || currentCompany.name}`;
+
+    umRenderTable(_umAllUsers);
+  } catch(e) {
+    showToast('Failed to load users: ' + e.message, 'error');
+  }
+}
+
+function umFilterUsers(q) {
+  const f = q.toLowerCase();
+  const filtered = _umAllUsers.filter(u =>
+    (u.full_name || '').toLowerCase().includes(f) ||
+    (u.role || '').toLowerCase().includes(f)
+  );
+  umRenderTable(filtered);
+}
+
+function umRenderTable(users) {
+  const tbody = document.getElementById('um-tbody');
+  if (!tbody) return;
+  if (!users.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">No users found.</td></tr>';
+    return;
+  }
+
+  const roleColors = { super_admin: 'var(--gold)', admin: 'var(--blue)', sales: 'var(--green)', user: 'var(--text-2)' };
+  const roleLabels = { super_admin: 'Super Admin', admin: 'Admin', sales: 'Sales', user: 'User' };
+
+  tbody.innerHTML = users.map(u => {
+    const co = companies.find(c => c.id === u.company_id);
+    const coName = co ? (co.trading_name || co.name) : '—';
+    const lastLogin = u.last_login ? new Date(u.last_login).toLocaleDateString() : 'Never';
+    const roleBadge = `<span style="font-size:11px;font-weight:600;color:${roleColors[u.role]||'var(--text-2)'};background:${roleColors[u.role]||'var(--text-2)'}18;border:1px solid ${roleColors[u.role]||'var(--text-2)'}33;border-radius:4px;padding:2px 7px;">${roleLabels[u.role]||u.role}</span>`;
+    const isAdminRole = u.role === 'admin' || u.role === 'super_admin';
+    const modules = isAdminRole
+      ? '<span style="color:var(--text-3);font-size:11px;">All</span>'
+      : [u.module_finance && 'Finance', u.module_sales && 'Sales', u.module_operations && 'Operations'].filter(Boolean).join(', ') || '<span style="color:var(--red);font-size:11px;">None</span>';
+    const statusDot = u.is_active
+      ? `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--green);">● Active</span>`
+      : `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-3);">● Inactive</span>`;
+    const isSelf = currentUser && u.auth_user_id === currentUser.auth_user_id;
+    const actions = isSelf ? `<span style="font-size:11px;color:var(--text-3);">Current</span>` : `
+      <button class="btn btn-ghost" style="padding:3px 8px;font-size:11px;" onclick="toggleUserActive('${u.auth_user_id}',${u.is_active})">${u.is_active ? 'Deactivate' : 'Activate'}</button>
+      <button class="btn btn-ghost" style="padding:3px 8px;font-size:11px;color:var(--red);" onclick="removeUser('${u.auth_user_id}','${escHTML(u.full_name||'this user')}')">Remove</button>
+    `;
+    return `<tr>
+      <td style="font-weight:500;">${escHTML(u.full_name || '—')}</td>
+      <td>${roleBadge}</td>
+      <td style="font-size:12px;color:var(--text-2);">${modules}</td>
+      <td style="font-size:12px;color:var(--text-2);">${escHTML(coName)}</td>
+      <td style="font-size:12px;color:var(--text-2);">${lastLogin}</td>
+      <td>${statusDot}</td>
+      <td class="right" style="white-space:nowrap;">${actions}</td>
+    </tr>`;
+  }).join('');
+}
+
+function openCreateUserModal() {
+  if (!isAdmin()) return;
+  document.getElementById('um-name').value = '';
+  document.getElementById('um-email').value = '';
+  document.getElementById('um-password').value = '';
+  document.getElementById('um-role').value = 'user';
+  document.getElementById('um-mod-finance').checked = true;
+  document.getElementById('um-mod-sales').checked = true;
+  document.getElementById('um-mod-operations').checked = true;
+  document.getElementById('um-error').textContent = '';
+  umRoleChanged();
+  document.getElementById('um-modal').style.display = 'flex';
+}
+
+function closeUserModal() {
+  document.getElementById('um-modal').style.display = 'none';
+}
+
+function umRoleChanged() {
+  const role = document.getElementById('um-role')?.value;
+  const modSec = document.getElementById('um-modules-section');
+  if (modSec) modSec.style.opacity = (role === 'admin' || role === 'super_admin') ? '0.4' : '1';
+}
+
+async function saveNewUser() {
+  const name     = document.getElementById('um-name').value.trim();
+  const email    = document.getElementById('um-email').value.trim().toLowerCase();
+  const password = document.getElementById('um-password').value;
+  const role     = document.getElementById('um-role').value;
+  const company_id = document.getElementById('um-company').value;
+  const errEl    = document.getElementById('um-error');
+  const saveBtn  = document.getElementById('um-save-btn');
+
+  errEl.textContent = '';
+  if (!name || !email || !password) { errEl.textContent = 'Name, email and password are required.'; return; }
+  if (password.length < 8) { errEl.textContent = 'Password must be at least 8 characters.'; return; }
+
+  const module_finance    = document.getElementById('um-mod-finance').checked;
+  const module_sales      = document.getElementById('um-mod-sales').checked;
+  const module_operations = document.getElementById('um-mod-operations').checked;
+
+  saveBtn.textContent = 'Creating…'; saveBtn.disabled = true;
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/create-erp-user`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${_accessToken}`,
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_KEY,
+      },
+      body: JSON.stringify({ name, email, password, role, company_id, module_finance, module_sales, module_operations })
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || 'Failed to create user.');
+    showToast(`User "${name}" created successfully.`, 'success');
+    closeUserModal();
+    await loadUserManagement();
+  } catch(e) {
+    errEl.textContent = e.message;
+  } finally {
+    saveBtn.textContent = 'Create User'; saveBtn.disabled = false;
+  }
+}
+
+async function toggleUserActive(authUserId, currentlyActive) {
+  const action = currentlyActive ? 'Deactivate' : 'Activate';
+  const ok = await showConfirm(`${action} this user?`, `${action} User`, action);
+  if (!ok) return;
+  try {
+    await sbPatchWhere('erp_users', `auth_user_id=eq.${authUserId}`, { is_active: !currentlyActive });
+    showToast(`User ${action.toLowerCase()}d.`, 'success');
+    await loadUserManagement();
+  } catch(e) { showToast('Failed: ' + e.message, 'error'); }
+}
+
+async function removeUser(authUserId, name) {
+  const ok = await showConfirm(`Permanently remove "${name}" from this ERP? This cannot be undone.`, 'Remove User', 'Remove');
+  if (!ok) return;
+  try {
+    await sbDeleteWhere('erp_users', `auth_user_id=eq.${authUserId}`);
+    showToast(`User "${name}" removed.`, 'success');
+    await loadUserManagement();
+  } catch(e) { showToast('Failed: ' + e.message, 'error'); }
+}
+
+function renderJobCostingPlaceholder() {
+  const view = document.getElementById('view-job-costing');
+  if (view) view.innerHTML = '<div class="page-header"><div class="page-title">Job Costing</div><div class="page-subtitle">Coming soon</div></div><div class="page-body"><p style="color:var(--text-2);padding:24px;">Job Costing module is under development.</p></div>';
 }
 
 // ── JOB CARDS MODULE ─────────────────────────────────────────────
@@ -5734,7 +6133,7 @@ async function jcLoadDashboard() {
     jcDashData = await sbGet('jobs',
       `company_id=eq.${currentCompany.id}&order=created_at.desc&select=id,job_no,customer,job_type,status,priority,date_received,due_date,description,quoted_ttd,location,updated_at`);
     jcRenderDash();
-    const badge = document.getElementById('badge-job-cards');
+    const badge = document.getElementById('badge-work-orders') || document.getElementById('badge-job-cards');
     if (badge) {
       const open = jcDashData.filter(j => !['Completed','Invoiced','Closed'].includes(j.status)).length;
       badge.textContent = open; badge.style.display = open ? '' : 'none';
@@ -5875,7 +6274,7 @@ async function jcFetchNewJobNo() {
 // ── NEW JOB ──────────────────────────────────────────────────────
 async function jcNewJob() {
   if (jcIsDirty) {
-    const ok = await showConfirm('You have unsaved changes. Start a new job card anyway?', 'Unsaved Changes', 'Discard & New');
+    const ok = await showConfirm('You have unsaved changes. Start a new work order anyway?', 'Unsaved Changes', 'Discard & New');
     if (!ok) return;
   }
   jcResetForm();
@@ -6130,7 +6529,7 @@ function jcPopulateForm(row) {
 async function jcDeleteJob() {
   if (!jcCurrentJobId) { showToast('No saved job to delete.', 'warn'); return; }
   if (!isAdmin()) { showToast('Admin access required to delete jobs.', 'error'); return; }
-  const ok = await showConfirm('Permanently delete this job card? This cannot be undone.', 'Delete Job', 'Delete Job');
+  const ok = await showConfirm('Permanently delete this work order? This cannot be undone.', 'Delete Job', 'Delete Job');
   if (!ok) return;
   try {
     const jobNo = document.getElementById('jc-job-no-display').textContent;
@@ -6270,7 +6669,7 @@ function jcSetStatus(btn) {
   jcMarkDirty();
 }
 async function jcConfirmLockStatus(btn, label) {
-  const ok = await showConfirm(`Set status to "${label}"? This will lock the job card.`, `Set Status: ${label}`, `Set ${label}`);
+  const ok = await showConfirm(`Set status to "${label}"? This will lock the work order.`, `Set Status: ${label}`, `Set ${label}`);
   if (ok) jcSetStatus(btn);
 }
 function jcSetLocked(lock) {
@@ -6803,6 +7202,9 @@ async function loadDashboard() {
 
     // ── Zone 4: Recent Activity ────────────────────────────────────
     await loadRecentActivity();
+
+    // ── Zone 3b: Exchange Rates ────────────────────────────────────
+    await renderDashForex();
 
   } catch(e) { showToast('Dashboard load error: ' + e.message, 'error'); }
 }
@@ -11391,6 +11793,41 @@ function openExRateModal() {
   fetchAndSaveRates().then(() => {
     if (currentView === 'settings') loadSettings();
   });
+}
+
+async function renderDashForex() {
+  try {
+    // Get effective date from DB for the "last updated" label
+    const latest = await sbGet('exchange_rates', 'order=effective_date.desc&limit=1');
+    const dateLabel = latest.length ? new Date(latest[0].effective_date).toLocaleDateString() : '—';
+
+    const pairs = [
+      { key: 'ttd-usd', from: 'TTD', to: 'USD', valId: 'dash-fx-val-ttd-usd', subId: 'dash-fx-sub-ttd-usd' },
+      { key: 'usd-ttd', from: 'USD', to: 'TTD', valId: 'dash-fx-val-usd-ttd', subId: 'dash-fx-sub-usd-ttd' },
+      { key: 'gyd-usd', from: 'GYD', to: 'USD', valId: 'dash-fx-val-gyd-usd', subId: null },
+    ];
+
+    pairs.forEach(({ from, to, valId, subId }) => {
+      const rate = getRate(from, to);
+      const valEl = document.getElementById(valId);
+      if (valEl) valEl.textContent = rate != null ? rate.toFixed(4) : '—';
+      if (subId) {
+        const subEl = document.getElementById(subId);
+        if (subEl) subEl.textContent = `1 ${from} = ${rate != null ? rate.toFixed(4) : '—'} ${to}`;
+      }
+    });
+
+    const dateEl = document.getElementById('dash-fx-date');
+    if (dateEl) dateEl.textContent = `Updated ${dateLabel}`;
+  } catch(e) {
+    console.warn('Forex widget error:', e.message);
+  }
+}
+
+async function refreshForexRates() {
+  await fetchAndSaveRates();
+  await loadExchangeRates();
+  await renderDashForex();
 }
 
 // Update base_currency in company modal
