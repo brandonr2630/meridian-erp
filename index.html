@@ -3112,17 +3112,51 @@ body {
         </div>
         <div id="um-modules-section" class="field-group">
           <label class="field-label">Module Access</label>
-          <div style="font-size:11px;color:var(--text-3);margin-bottom:8px;">Applies to non-admin roles. Admins have full access.</div>
-          <div style="display:flex;gap:16px;">
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
-              <input type="checkbox" id="um-mod-finance" checked> Finance
-            </label>
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
-              <input type="checkbox" id="um-mod-sales" checked> Sales
-            </label>
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
-              <input type="checkbox" id="um-mod-operations" checked> Operations
-            </label>
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:10px;">Applies to non-admin roles. Admins have full access.</div>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <!-- Finance -->
+            <div>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;">
+                <input type="checkbox" id="um-mod-finance" checked onchange="umModuleToggle('finance')"> Finance
+              </label>
+              <div id="um-mod-finance-children" style="margin-left:20px;margin-top:6px;display:flex;flex-direction:column;gap:5px;">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
+                  <input type="checkbox" id="um-mod-finance-ar" checked> AR &amp; Credit Notes
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
+                  <input type="checkbox" id="um-mod-finance-ap" checked> AP &amp; Vendors
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
+                  <input type="checkbox" id="um-mod-finance-bank" checked> Bank &amp; Cash
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
+                  <input type="checkbox" id="um-mod-finance-ledger" checked> Ledger (Journal Entries, CoA)
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
+                  <input type="checkbox" id="um-mod-finance-reports" checked> Reports (P&amp;L, Balance Sheet, etc.)
+                </label>
+              </div>
+            </div>
+            <!-- Sales -->
+            <div>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;">
+                <input type="checkbox" id="um-mod-sales" checked onchange="umModuleToggle('sales')"> Sales
+              </label>
+              <div id="um-mod-sales-children" style="margin-left:20px;margin-top:6px;display:flex;flex-direction:column;gap:5px;">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
+                  <input type="checkbox" id="um-mod-sales-crm" checked> CRM (Leads, Pipeline, Activities, Tasks)
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
+                  <input type="checkbox" id="um-mod-sales-orders" checked> Orders (Quotations, Clients)
+                </label>
+              </div>
+            </div>
+            <!-- Operations -->
+            <div>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;">
+                <input type="checkbox" id="um-mod-operations" checked> Operations
+              </label>
+            </div>
           </div>
         </div>
         <div id="um-error" style="color:var(--red);font-size:12px;min-height:16px;"></div>
@@ -3130,6 +3164,86 @@ body {
       <div class="modal-footer">
         <button class="btn btn-outline" onclick="closeUserModal()">Cancel</button>
         <button class="btn btn-primary" id="um-save-btn" onclick="saveNewUser()">Create User</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Permissions Modal -->
+  <div class="modal" id="um-edit-modal" style="display:none;">
+    <div class="modal-content" style="max-width:520px;">
+      <div class="modal-header">
+        <div class="modal-title">Edit Permissions</div>
+        <button class="btn btn-ghost" onclick="closeEditPermissionsModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="um-edit-user-name" style="font-size:13px;font-weight:600;color:var(--text-1);margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border);"></div>
+        <input type="hidden" id="um-edit-auth-id">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+          <div class="field-group" style="margin-bottom:0;">
+            <label class="field-label">Role</label>
+            <select id="um-edit-role" class="field-input" onchange="umEditRoleChanged()">
+              <option value="user">User</option>
+              <option value="sales">Sales</option>
+              <option value="admin">Admin</option>
+              <option value="super_admin">Super Admin</option>
+            </select>
+          </div>
+          <div class="field-group" style="margin-bottom:0;">
+            <label class="field-label">Company</label>
+            <select id="um-edit-company" class="field-input"></select>
+          </div>
+        </div>
+        <div id="um-edit-modules-section" class="field-group">
+          <label class="field-label">Module Access</label>
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:10px;">Applies to non-admin roles. Admins have full access.</div>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;">
+                <input type="checkbox" id="um-edit-mod-finance" onchange="umEditModuleToggle('finance')"> Finance
+              </label>
+              <div id="um-edit-mod-finance-children" style="margin-left:20px;margin-top:6px;display:flex;flex-direction:column;gap:5px;">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
+                  <input type="checkbox" id="um-edit-mod-finance-ar"> AR &amp; Credit Notes
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
+                  <input type="checkbox" id="um-edit-mod-finance-ap"> AP &amp; Vendors
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
+                  <input type="checkbox" id="um-edit-mod-finance-bank"> Bank &amp; Cash
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
+                  <input type="checkbox" id="um-edit-mod-finance-ledger"> Ledger (Journal Entries, CoA)
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
+                  <input type="checkbox" id="um-edit-mod-finance-reports"> Reports (P&amp;L, Balance Sheet, etc.)
+                </label>
+              </div>
+            </div>
+            <div>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;">
+                <input type="checkbox" id="um-edit-mod-sales" onchange="umEditModuleToggle('sales')"> Sales
+              </label>
+              <div id="um-edit-mod-sales-children" style="margin-left:20px;margin-top:6px;display:flex;flex-direction:column;gap:5px;">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
+                  <input type="checkbox" id="um-edit-mod-sales-crm"> CRM (Leads, Pipeline, Activities, Tasks)
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
+                  <input type="checkbox" id="um-edit-mod-sales-orders"> Orders (Quotations, Clients)
+                </label>
+              </div>
+            </div>
+            <div>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;">
+                <input type="checkbox" id="um-edit-mod-operations"> Operations
+              </label>
+            </div>
+          </div>
+        </div>
+        <div id="um-edit-error" style="color:var(--red);font-size:12px;min-height:16px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeEditPermissionsModal()">Cancel</button>
+        <button class="btn btn-primary" id="um-edit-save-btn" onclick="saveEditPermissions()">Save Changes</button>
       </div>
     </div>
   </div>
@@ -5221,15 +5335,61 @@ function applyRoleNav() {
 
   // Module-based section visibility (non-admin users only)
   if (!isAdmin()) {
+    const u = currentUser;
     const sectionMap = {
-      finance:    currentUser?.module_finance,
-      sales:      currentUser?.module_sales,
-      operations: currentUser?.module_operations,
+      finance:    u?.module_finance,
+      sales:      u?.module_sales,
+      operations: u?.module_operations,
     };
     Object.entries(sectionMap).forEach(([section, allowed]) => {
       const el = document.querySelector(`.sidebar-section[data-section="${section}"]`);
       if (el) el.style.display = (allowed === false) ? 'none' : '';
     });
+
+    // Sub-module: Finance individual nav items
+    if (u?.module_finance !== false) {
+      const finMap = {
+        'nav-ar':             u?.module_finance_ar      !== false,
+        'nav-credit-notes':   u?.module_finance_ar      !== false,
+        'nav-ap':             u?.module_finance_ap      !== false,
+        'nav-vendors':        u?.module_finance_ap      !== false,
+        'nav-bank':           u?.module_finance_bank    !== false,
+        'nav-journal':        u?.module_finance_ledger  !== false,
+        'nav-coa':            u?.module_finance_ledger  !== false,
+        'nav-aged-ar':        u?.module_finance_reports !== false,
+        'nav-aged-ap':        u?.module_finance_reports !== false,
+        'nav-pl':             u?.module_finance_reports !== false,
+        'nav-bs':             u?.module_finance_reports !== false,
+        'nav-tb':             u?.module_finance_reports !== false,
+        'nav-cf':             u?.module_finance_reports !== false,
+      };
+      Object.entries(finMap).forEach(([id, visible]) => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = visible ? '' : 'none';
+      });
+      // Hide Reports sub-section header if all report items are hidden
+      const reportsSec = document.getElementById('sub-section-finance-reports');
+      if (reportsSec) reportsSec.style.display = (u?.module_finance_reports !== false) ? '' : 'none';
+    }
+
+    // Sub-module: Sales individual nav items
+    if (u?.module_sales !== false) {
+      const salMap = {
+        'nav-sales-leads':      u?.module_sales_crm    !== false,
+        'nav-pipeline':         u?.module_sales_crm    !== false,
+        'nav-crm-activities':   u?.module_sales_crm    !== false,
+        'nav-crm-tasks':        u?.module_sales_crm    !== false,
+        'nav-quotations':       u?.module_sales_orders !== false,
+        'nav-clients':          u?.module_sales_orders !== false,
+      };
+      Object.entries(salMap).forEach(([id, visible]) => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = visible ? '' : 'none';
+      });
+      // Hide CRM sub-section header if all CRM items are hidden
+      const crmSec = document.getElementById('sub-section-sales-crm');
+      if (crmSec) crmSec.style.display = (u?.module_sales_crm !== false) ? '' : 'none';
+    }
   }
 }
 
@@ -5391,15 +5551,28 @@ function restoreNavState() {
 function navigate(view) {
   // Module access guard — redirect to dashboard if user lacks module access
   if (!isAdmin() && currentUser) {
+    const u = currentUser;
     const moduleGuard = {
       finance:    ['coa','journal','ar','credit-notes','ap','vendors','bank','pl','bs','tb','cf','aged-ar','aged-ap'],
       sales:      ['sales-leads','pipeline','crm-activities','crm-tasks','quotations','clients'],
-      operations: ['work-orders','job-costing','delivery-notes','job-config']
+      operations: ['work-orders','job-costing','delivery-notes','job-config'],
     };
     for (const [mod, views] of Object.entries(moduleGuard)) {
-      if (views.includes(view) && currentUser[`module_${mod}`] === false) {
-        view = 'dashboard';
-        break;
+      if (views.includes(view) && u[`module_${mod}`] === false) { view = 'dashboard'; break; }
+    }
+    // Sub-module guards (only checked when parent module is enabled)
+    if (view !== 'dashboard') {
+      const subGuard = [
+        [['ar','credit-notes'],              u.module_finance_ar      === false],
+        [['ap','vendors'],                   u.module_finance_ap      === false],
+        [['bank'],                           u.module_finance_bank    === false],
+        [['coa','journal'],                  u.module_finance_ledger  === false],
+        [['pl','bs','tb','cf','aged-ar','aged-ap'], u.module_finance_reports === false],
+        [['sales-leads','pipeline','crm-activities','crm-tasks'], u.module_sales_crm    === false],
+        [['quotations','clients'],           u.module_sales_orders    === false],
+      ];
+      for (const [views, blocked] of subGuard) {
+        if (blocked && views.includes(view)) { view = 'dashboard'; break; }
       }
     }
   }
@@ -5514,12 +5687,13 @@ function umRenderTable(users) {
     const isAdminRole = u.role === 'admin' || u.role === 'super_admin';
     const modules = isAdminRole
       ? '<span style="color:var(--text-3);font-size:11px;">All</span>'
-      : [u.module_finance && 'Finance', u.module_sales && 'Sales', u.module_operations && 'Operations'].filter(Boolean).join(', ') || '<span style="color:var(--red);font-size:11px;">None</span>';
+      : umFormatModules(u);
     const statusDot = u.is_active
       ? `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--green);">● Active</span>`
       : `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-3);">● Inactive</span>`;
     const isSelf = currentUser && u.auth_user_id === currentUser.auth_user_id;
     const actions = isSelf ? `<span style="font-size:11px;color:var(--text-3);">Current</span>` : `
+      <button class="btn btn-ghost" style="padding:3px 8px;font-size:11px;" onclick="openEditPermissionsModal('${u.auth_user_id}')">Edit</button>
       <button class="btn btn-ghost" style="padding:3px 8px;font-size:11px;" onclick="toggleUserActive('${u.auth_user_id}',${u.is_active})">${u.is_active ? 'Deactivate' : 'Activate'}</button>
       <button class="btn btn-ghost" style="padding:3px 8px;font-size:11px;color:var(--red);" onclick="removeUser('${u.auth_user_id}','${escHTML(u.full_name||'this user')}')">Remove</button>
     `;
@@ -5541,9 +5715,16 @@ function openCreateUserModal() {
   document.getElementById('um-email').value = '';
   document.getElementById('um-password').value = '';
   document.getElementById('um-role').value = 'user';
-  document.getElementById('um-mod-finance').checked = true;
-  document.getElementById('um-mod-sales').checked = true;
-  document.getElementById('um-mod-operations').checked = true;
+  ['finance','sales','operations'].forEach(m => {
+    const el = document.getElementById(`um-mod-${m}`);
+    if (el) el.checked = true;
+  });
+  ['finance-ar','finance-ap','finance-bank','finance-ledger','finance-reports','sales-crm','sales-orders'].forEach(m => {
+    const el = document.getElementById(`um-mod-${m}`);
+    if (el) { el.checked = true; el.disabled = false; }
+  });
+  umModuleToggle('finance');
+  umModuleToggle('sales');
   document.getElementById('um-error').textContent = '';
   umRoleChanged();
   document.getElementById('um-modal').style.display = 'flex';
@@ -5551,6 +5732,138 @@ function openCreateUserModal() {
 
 function closeUserModal() {
   document.getElementById('um-modal').style.display = 'none';
+}
+
+function umModuleToggle(mod) {
+  const parentChecked = document.getElementById(`um-mod-${mod}`).checked;
+  const children = document.getElementById(`um-mod-${mod}-children`);
+  if (!children) return;
+  children.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.disabled = !parentChecked;
+    if (!parentChecked) cb.checked = false;
+    else cb.checked = true;
+  });
+}
+
+function umEditModuleToggle(mod) {
+  const parentChecked = document.getElementById(`um-edit-mod-${mod}`).checked;
+  const children = document.getElementById(`um-edit-mod-${mod}-children`);
+  if (!children) return;
+  children.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.disabled = !parentChecked;
+    if (!parentChecked) cb.checked = false;
+  });
+}
+
+function umFormatModules(u) {
+  const parts = [];
+  if (u.module_finance) {
+    const subs = [
+      u.module_finance_ar      !== false && 'AR',
+      u.module_finance_ap      !== false && 'AP',
+      u.module_finance_bank    !== false && 'Bank',
+      u.module_finance_ledger  !== false && 'Ledger',
+      u.module_finance_reports !== false && 'Reports',
+    ].filter(Boolean);
+    const allSubs = subs.length === 5;
+    parts.push(allSubs ? 'Finance' : `Finance (${subs.join(', ')})`);
+  }
+  if (u.module_sales) {
+    const subs = [
+      u.module_sales_crm    !== false && 'CRM',
+      u.module_sales_orders !== false && 'Orders',
+    ].filter(Boolean);
+    const allSubs = subs.length === 2;
+    parts.push(allSubs ? 'Sales' : `Sales (${subs.join(', ')})`);
+  }
+  if (u.module_operations) parts.push('Operations');
+  return parts.length
+    ? `<span style="font-size:12px;">${parts.join(' · ')}</span>`
+    : '<span style="color:var(--red);font-size:11px;">None</span>';
+}
+
+function openEditPermissionsModal(authUserId) {
+  const u = _umAllUsers.find(x => x.auth_user_id === authUserId);
+  if (!u) return;
+
+  document.getElementById('um-edit-auth-id').value = authUserId;
+  document.getElementById('um-edit-user-name').textContent = u.full_name || u.email || 'User';
+  document.getElementById('um-edit-role').value = u.role || 'user';
+  document.getElementById('um-edit-error').textContent = '';
+
+  // Populate company dropdown
+  const coSel = document.getElementById('um-edit-company');
+  coSel.innerHTML = companies.map(c => `<option value="${escHTML(c.id)}">${escHTML(c.trading_name || c.name)}</option>`).join('');
+  coSel.value = u.company_id || '';
+
+  // Module parent flags
+  document.getElementById('um-edit-mod-finance').checked    = u.module_finance    !== false;
+  document.getElementById('um-edit-mod-sales').checked      = u.module_sales      !== false;
+  document.getElementById('um-edit-mod-operations').checked = u.module_operations !== false;
+
+  // Finance sub-flags
+  const finChildren = document.getElementById('um-edit-mod-finance-children');
+  const finEnabled  = u.module_finance !== false;
+  finChildren.querySelectorAll('input').forEach(cb => cb.disabled = !finEnabled);
+  document.getElementById('um-edit-mod-finance-ar').checked      = u.module_finance_ar      !== false;
+  document.getElementById('um-edit-mod-finance-ap').checked      = u.module_finance_ap      !== false;
+  document.getElementById('um-edit-mod-finance-bank').checked    = u.module_finance_bank    !== false;
+  document.getElementById('um-edit-mod-finance-ledger').checked  = u.module_finance_ledger  !== false;
+  document.getElementById('um-edit-mod-finance-reports').checked = u.module_finance_reports !== false;
+
+  // Sales sub-flags
+  const salChildren = document.getElementById('um-edit-mod-sales-children');
+  const salEnabled  = u.module_sales !== false;
+  salChildren.querySelectorAll('input').forEach(cb => cb.disabled = !salEnabled);
+  document.getElementById('um-edit-mod-sales-crm').checked    = u.module_sales_crm    !== false;
+  document.getElementById('um-edit-mod-sales-orders').checked = u.module_sales_orders !== false;
+
+  umEditRoleChanged();
+  document.getElementById('um-edit-modal').style.display = 'flex';
+}
+
+function closeEditPermissionsModal() {
+  document.getElementById('um-edit-modal').style.display = 'none';
+}
+
+function umEditRoleChanged() {
+  const role = document.getElementById('um-edit-role')?.value;
+  const modSec = document.getElementById('um-edit-modules-section');
+  if (modSec) modSec.style.opacity = (role === 'admin' || role === 'super_admin') ? '0.4' : '1';
+}
+
+async function saveEditPermissions() {
+  const authUserId = document.getElementById('um-edit-auth-id').value;
+  const role       = document.getElementById('um-edit-role').value;
+  const company_id = document.getElementById('um-edit-company').value;
+  const errEl      = document.getElementById('um-edit-error');
+  const saveBtn    = document.getElementById('um-edit-save-btn');
+  errEl.textContent = '';
+  saveBtn.textContent = 'Saving…'; saveBtn.disabled = true;
+
+  try {
+    await sbPatchWhere('erp_users', `auth_user_id=eq.${authUserId}`, {
+      role,
+      company_id,
+      module_finance:          document.getElementById('um-edit-mod-finance').checked,
+      module_sales:            document.getElementById('um-edit-mod-sales').checked,
+      module_operations:       document.getElementById('um-edit-mod-operations').checked,
+      module_finance_ar:       document.getElementById('um-edit-mod-finance-ar').checked,
+      module_finance_ap:       document.getElementById('um-edit-mod-finance-ap').checked,
+      module_finance_bank:     document.getElementById('um-edit-mod-finance-bank').checked,
+      module_finance_ledger:   document.getElementById('um-edit-mod-finance-ledger').checked,
+      module_finance_reports:  document.getElementById('um-edit-mod-finance-reports').checked,
+      module_sales_crm:        document.getElementById('um-edit-mod-sales-crm').checked,
+      module_sales_orders:     document.getElementById('um-edit-mod-sales-orders').checked,
+    });
+    showToast('Permissions updated.', 'success');
+    closeEditPermissionsModal();
+    await loadUserManagement();
+  } catch(e) {
+    errEl.textContent = e.message;
+  } finally {
+    saveBtn.textContent = 'Save Changes'; saveBtn.disabled = false;
+  }
 }
 
 function umRoleChanged() {
@@ -5575,6 +5888,13 @@ async function saveNewUser() {
   const module_finance    = document.getElementById('um-mod-finance').checked;
   const module_sales      = document.getElementById('um-mod-sales').checked;
   const module_operations = document.getElementById('um-mod-operations').checked;
+  const module_finance_ar      = document.getElementById('um-mod-finance-ar').checked;
+  const module_finance_ap      = document.getElementById('um-mod-finance-ap').checked;
+  const module_finance_bank    = document.getElementById('um-mod-finance-bank').checked;
+  const module_finance_ledger  = document.getElementById('um-mod-finance-ledger').checked;
+  const module_finance_reports = document.getElementById('um-mod-finance-reports').checked;
+  const module_sales_crm       = document.getElementById('um-mod-sales-crm').checked;
+  const module_sales_orders    = document.getElementById('um-mod-sales-orders').checked;
 
   saveBtn.textContent = 'Creating…'; saveBtn.disabled = true;
 
@@ -5586,7 +5906,13 @@ async function saveNewUser() {
         'Content-Type': 'application/json',
         'apikey': SUPABASE_KEY,
       },
-      body: JSON.stringify({ name, email, password, role, company_id, module_finance, module_sales, module_operations })
+      body: JSON.stringify({
+        name, email, password, role, company_id,
+        module_finance, module_sales, module_operations,
+        module_finance_ar, module_finance_ap, module_finance_bank,
+        module_finance_ledger, module_finance_reports,
+        module_sales_crm, module_sales_orders,
+      })
     });
     const data = await res.json();
     if (!res.ok || data.error) throw new Error(data.error || 'Failed to create user.');

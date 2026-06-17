@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-17 · Session 22*
+*Last updated: 2026-06-17 · Session 24*
 
 ---
 
@@ -12,6 +12,67 @@
 | GitHub repo | `brandonr2630/meridian-erp` |
 | Deploy | Push to `master` via PR → GitHub Actions → GreenGeeks cPanel auto-deploys |
 | Deploy workflow | `.github/workflows/deploy.yml` → cPanel Fileman API (`chi203.greengeeks.net`) |
+
+---
+
+## Session 24 — Sub-module permissions & Edit Permissions flow
+
+**Date:** 2026-06-17
+**Branch / PR:** [PR #66](https://github.com/brandonr2630/meridian-erp/pull/66)
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| Sub-module permissions | 7 new boolean columns on `erp_users` | `module_finance_ar`, `module_finance_ap`, `module_finance_bank`, `module_finance_ledger`, `module_finance_reports`, `module_sales_crm`, `module_sales_orders` — all default `true`. Applied via Supabase MCP migration. |
+| Hierarchical module checkboxes | Create User modal redesigned | Finance and Sales parent checkboxes now expand to sub-checkboxes. Unchecking a parent disables and clears its children. Sub-items: Finance → AR & Credit Notes / AP & Vendors / Bank & Cash / Ledger / Reports; Sales → CRM / Orders. |
+| Edit Permissions modal | New flow for existing users | "Edit" button added to each user row. Opens a modal with Role, Company, and the full hierarchical module tree pre-populated from the user's current flags. Saves via `sbPatchWhere` directly to `erp_users`. |
+| `applyRoleNav()` | Per-nav-item visibility | Sub-flags now hide individual nav items within enabled modules (e.g. `module_finance_bank=false` hides `nav-bank`). Reports sub-section header hidden when `module_finance_reports=false`; CRM sub-section header hidden when `module_sales_crm=false`. |
+| `navigate()` guard | Sub-flag route blocking | Sub-module guard added below the module-level guard. Blocked views redirect to dashboard. |
+| `umFormatModules()` | Modules column shows sub-access | Table column now shows e.g. `Finance (AR, Bank) · Sales` instead of just `Finance · Sales` when partial access is granted. |
+| Edge Function v2 | Accepts and stores all 7 new flags | `create-erp-user` updated and redeployed (version 2). |
+
+### Architecture notes
+
+- **Sub-flags are only enforced when the parent module is enabled.** If `module_finance=false`, all finance sub-flags are irrelevant (entire section is hidden). Sub-flags only narrow access within an enabled module.
+- **Existing users** get all sub-flags defaulting to `true` via SQL `DEFAULT true`, so no access regression for users created before this session.
+- **Edit Permissions** PATCHes `erp_users` directly with the caller's user token — RLS on `erp_users` allows admins to update any row in their company.
+
+### Outstanding
+
+- **Job Costing module** — placeholder nav item in place; full build not yet scheduled
+- **voidVendorPayment() untested** — carried over from Session 22
+
+---
+
+## Session 23 — Nav restructure, User Management, module access control, forex widget
+
+**Date:** 2026-06-17
+**Branch / PR:** [PR #65](https://github.com/brandonr2630/meridian-erp/pull/65)
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| Navigation restructured | Full sidebar reorganisation | Finance: added "Transactions" sub-label, Vendors moved in from Setup. Sales: Sales Leads moved into CRM sub-section as first item, Clients moved in from Setup, Delivery Notes moved out. Workshop → **Operations**: renamed throughout; Job Cards → **Work Orders** (all UI labels updated, internal function names unchanged). Delivery Notes moved to Operations. Operations gains Job Costing placeholder. Setup: ERP Companies → **Companies**, Clients/Vendors removed, User Management added. |
+| User Management | New admin-only view under Setup | View all users (name, role, module access, company, last login, status). Create user via Edge Function (name, email, temp password, role, module flags). Deactivate/reactivate and remove with confirmation. Module checkboxes dimmed for admin/super_admin roles (they have full access regardless). |
+| Module-based access control | New permission layer on top of roles | `erp_users` gains `module_finance`, `module_sales`, `module_operations` boolean columns (default `true`). Non-admin users only see the sidebar sections their profile permits. Navigation guard in `navigate()` redirects restricted views to dashboard. Admins bypass module flags entirely. |
+| Force password change | First-login password intercept | `erp_users` gains `force_password_change` boolean (default `false`). New users created with this flag set. `doLogin()` and session-restore both check the flag and show a change-password screen before `initApp()`. Supabase `PUT /auth/v1/user` updates the password; flag cleared in `erp_users` on success. |
+| Forex rates widget | Dashboard Zone 3b | Three rate cards (TTD/USD, USD/TTD, GYD/USD) rendered below the Operations stats zone. Feeds from existing `exchangeRates` object and `exchange_rates` table. Shows effective date and a Refresh button (`refreshForexRates()` → `fetchAndSaveRates()` → re-render). |
+| Supabase Edge Function | `create-erp-user` deployed | Validates caller is admin/super_admin using their JWT, creates Supabase auth user via service role, inserts `erp_users` profile. Cleans up auth user if profile insert fails. Service role key never touches the browser. |
+| SQL migration | 4 columns added to `erp_users` | `module_finance`, `module_sales`, `module_operations` (boolean, default true); `force_password_change` (boolean, default false). Applied via Supabase MCP. |
+
+### Architecture notes
+
+- **Module vs role:** roles determine what a user can *do* (post, void, finance); module flags determine what sections they can *see*. Admins see everything regardless of flags.
+- **Edge Function:** deployed at `fcagxvjxfqqkmuposmcb/functions/v1/create-erp-user`. Called from `saveNewUser()` with the user's bearer token (`_accessToken`). `verify_jwt: false` — the function validates the caller manually to support CORS preflight.
+- **Route aliases:** `'job-cards'` and `'erp-companies'` kept as legacy aliases in `loadViewData()` to handle any cached/bookmarked routes.
+- **Job Costing:** nav item added under Operations; view is a placeholder ("Coming soon"). Full module not yet built.
+
+### Outstanding
+
+- **Job Costing module** — placeholder nav item in place; full build not yet scheduled
+- **voidVendorPayment() untested** — carried over from Session 22
 
 ---
 

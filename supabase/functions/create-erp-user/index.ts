@@ -4,7 +4,10 @@
 //
 // Expected request body (JSON):
 //   { name, email, password, role, company_id,
-//     module_finance, module_sales, module_operations }
+//     module_finance, module_sales, module_operations,
+//     module_finance_ar, module_finance_ap, module_finance_bank,
+//     module_finance_ledger, module_finance_reports,
+//     module_sales_crm, module_sales_orders }
 //
 // Required env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY
 
@@ -50,6 +53,13 @@ Deno.serve(async (req: Request) => {
     module_finance: boolean;
     module_sales: boolean;
     module_operations: boolean;
+    module_finance_ar: boolean;
+    module_finance_ap: boolean;
+    module_finance_bank: boolean;
+    module_finance_ledger: boolean;
+    module_finance_reports: boolean;
+    module_sales_crm: boolean;
+    module_sales_orders: boolean;
   };
 
   try {
@@ -58,7 +68,13 @@ Deno.serve(async (req: Request) => {
     return corsResponse(JSON.stringify({ error: "Invalid JSON body" }), 400);
   }
 
-  const { name, email, password, role, company_id, module_finance, module_sales, module_operations } = body;
+  const {
+    name, email, password, role, company_id,
+    module_finance, module_sales, module_operations,
+    module_finance_ar, module_finance_ap, module_finance_bank,
+    module_finance_ledger, module_finance_reports,
+    module_sales_crm, module_sales_orders,
+  } = body;
 
   if (!name || !email || !password || !role || !company_id) {
     return corsResponse(JSON.stringify({ error: "Missing required fields: name, email, password, role, company_id" }), 400);
@@ -144,9 +160,16 @@ Deno.serve(async (req: Request) => {
       full_name: name,
       role,
       company_id,
-      module_finance: module_finance ?? true,
-      module_sales: module_sales ?? true,
-      module_operations: module_operations ?? true,
+      module_finance:          module_finance          ?? true,
+      module_sales:            module_sales            ?? true,
+      module_operations:       module_operations       ?? true,
+      module_finance_ar:       module_finance_ar       ?? true,
+      module_finance_ap:       module_finance_ap       ?? true,
+      module_finance_bank:     module_finance_bank     ?? true,
+      module_finance_ledger:   module_finance_ledger   ?? true,
+      module_finance_reports:  module_finance_reports  ?? true,
+      module_sales_crm:        module_sales_crm        ?? true,
+      module_sales_orders:     module_sales_orders     ?? true,
       is_active: true,
       force_password_change: true,
     }),
