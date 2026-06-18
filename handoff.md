@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-17 · Session 24*
+*Last updated: 2026-06-18 · Session 25*
 
 ---
 
@@ -12,6 +12,45 @@
 | GitHub repo | `brandonr2630/meridian-erp` |
 | Deploy | Push to `master` via PR → GitHub Actions → GreenGeeks cPanel auto-deploys |
 | Deploy workflow | `.github/workflows/deploy.yml` → cPanel Fileman API (`chi203.greengeeks.net`) |
+
+---
+
+## Session 25 — Labour table redesign in Work Orders
+
+**Date:** 2026-06-18
+**Branch / PR:** [PR #67](https://github.com/brandonr2630/meridian-erp/pull/67)
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| Employee column | Replaces free-text Technician field | Dropdown populated from `employees` table (Job Config); `jcConfig.employees` added to config load |
+| Classification | Now autofill (read-only display) | Autofills from employee's `job_classification` on selection; hidden `<input type="hidden">` holds value for collect |
+| Tasks column | New inline column | Modal multi-select from `config_tasks`; button shows count ("2 tasks") with gold border when populated; replaces the old "Add Task" sub-row pattern under each labour entry |
+| Start / End | Now true time pickers | Were already `type="time"` but Hrs calculation now rounds to nearest **whole number** (was 2 decimal places) |
+| Hrs | Auto-calculate | Derived from End−Start difference; user can still override manually |
+| Type | Unchanged | Reg/OT auto-detected at >8 hrs |
+| Rate | Autofills on employee/location change | Workshop vs Onsite rate from `config_labour`; re-fires on Location dropdown change |
+| Date sort | Sort dropdown on Date column header | Click opens "↓ Newest First / ↑ Oldest First" menu; default `desc`; icon updates to reflect state |
+| Add Labour Entry | Moved above table | Button sits above the table; new rows prepend to `<tbody>` (newest at top); matches default sort direction |
+| Data collect | ID-based selectors | `jcCollectFormData` now uses element IDs (`${rid}-date`, `${rid}-emp`, etc.) instead of fragile positional `querySelectorAll` |
+| Save path | `technician` column | `r.employee \|\| r.tech` — backward compatible with rows created before this session |
+| Load path | `Labour Detail` JSON | `tech:` key renamed to `employee:` in the DB→form mapping |
+| Sort on load | `jcSortLabour(jcLabourSortDir)` | Called in `jcPopulateForm` and `jcDuplicateJob` after rows are added, ensuring saved jobs always open sorted newest-first |
+
+### Architecture notes
+
+- **`jcConfig.employees`** loaded alongside other config in `jcLoadConfig()` via `sbGet('employees','order=name')`. Carries `{ name, classification }`.
+- **Classification chain:** Employee select → `jcOnLabourEmpChange(rid)` → `jcSetLabourClassification(rid, cls)` → looks up rate in `jcConfig.labour` → fills `${rid}-rate`.
+- **Location change** fires `jcOnLabourLocChange2(rid)` → reads hidden classification value → `jcSetLabourClassification` → recalculates rate.
+- **Tasks modal** is dynamically appended to `<body>` as `#jc-tasks-modal-overlay`; saves JSON to `data-tasks` attribute on the tasks button cell.
+- **`jcAddTaskSubRow`** is still present and unchanged — still used by Equipment rows which retain the sub-row task pattern.
+- **Backward compat:** old `tech` field in stored Labour Detail falls through to `r.employee||r.tech` on save. On load, `r.technician` (DB column) maps to `employee` key; the employee dropdown is set to that string value (may not match if name changed).
+
+### Outstanding
+
+- **Job Costing module** — placeholder nav item in place; full build not yet scheduled
+- **voidVendorPayment() untested** — carried over from Session 22
 
 ---
 
