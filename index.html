@@ -1493,15 +1493,13 @@ body {
 .jc-sort-dropdown div:hover { background:var(--bg-hover); }
 .jc-sort-dropdown div.active { color:var(--gold); font-weight:600; }
 .jc-cls-display { font-size:12px; color:var(--text-2); font-style:italic; white-space:nowrap; }
-.btn-task-picker { background:transparent; border:1px dashed var(--border-2); border-radius:4px; padding:3px 8px; font-size:11px; color:var(--text-2); cursor:pointer; white-space:nowrap; transition:all .15s; }
-.btn-task-picker:hover { border-color:var(--gold); color:var(--gold); }
-.btn-task-picker.has-tasks { border-color:var(--gold); color:var(--gold); border-style:solid; }
-.jc-task-modal-list { max-height:340px; overflow-y:auto; }
-.jc-task-pick-row { padding:8px 0; border-bottom:1px solid var(--border); display:flex; flex-direction:column; gap:4px; }
-.jc-task-pick-row:last-child { border-bottom:none; }
-.jc-task-pick-label { display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; }
-.jc-task-pick-label input[type=checkbox] { width:15px; height:15px; accent-color:var(--gold); flex-shrink:0; }
-.jc-task-pick-note { margin-left:23px; font-size:12px; }
+.jc-tasks-cell { min-width:140px; }
+.jc-task-chip-area { display:flex; flex-wrap:wrap; gap:3px; margin-bottom:3px; min-height:4px; }
+.jc-task-chip { display:inline-flex; align-items:center; gap:3px; background:var(--gold-bg); border:1px solid var(--gold-border); border-radius:10px; padding:2px 7px 2px 8px; font-size:11px; color:var(--text-1); white-space:nowrap; }
+.jc-chip-del { background:none; border:none; cursor:pointer; color:var(--text-3); font-size:13px; line-height:1; padding:0 0 0 2px; }
+.jc-chip-del:hover { color:var(--red); }
+.jc-task-dd { font-size:11px; border:1px dashed var(--border-2); border-radius:4px; padding:2px 4px; color:var(--text-2); background:var(--bg-card); cursor:pointer; max-width:120px; }
+.jc-task-dd:focus { outline:none; border-color:var(--gold); }
 </style>
 </head>
 <body>
@@ -6445,6 +6443,7 @@ function jcRefreshRowDropdowns() {
     const rid = tr.id; if (!rid || !rid.startsWith('jc-lr-')) return;
     const empSel = document.getElementById(rid+'-emp'); if (!empSel) return;
     const cur = empSel.value; empSel.innerHTML = empOpts; empSel.value = cur;
+    jcRefreshTaskDropdown(rid);
   });
   document.querySelectorAll('#jc-equip-body tr:not(.jc-task-subrows)').forEach(tr => {
     const sels = tr.querySelectorAll('select'); if (!sels[0]) return;
@@ -6941,7 +6940,7 @@ function jcCollectFormData() {
   document.querySelectorAll('#jc-labour-body tr').forEach(tr => {
     const rid = tr.id; if (!rid || !rid.startsWith('jc-lr-')) return;
     let tasks = [];
-    try { tasks = JSON.parse(document.getElementById(rid+'-tasks-btn')?.dataset.tasks || '[]'); } catch(e) {}
+    try { tasks = JSON.parse(document.getElementById(rid+'-tasks-data')?.value || '[]'); } catch(e) {}
     labourDetail.push({
       date:           document.getElementById(rid+'-date')?.value || '',
       employee:       document.getElementById(rid+'-emp')?.value || '',
@@ -7119,7 +7118,6 @@ function jcAddLabourRow(d) {
   const rid = 'jc-lr-' + Date.now() + Math.random().toString(36).substr(2,4);
   const empOpts = '<option value="">Select…</option>' + jcConfig.employees.map(e => `<option value="${escHTML(e.name)}">${escHTML(e.name)}</option>`).join('');
   const tasks = (d && d.tasks && d.tasks.length) ? d.tasks : [];
-  const tasksJson = escHTML(JSON.stringify(tasks));
   const clsDisplay = escHTML(d && d.classification || '—');
   const clsVal = escHTML(d && d.classification || '');
   const hrsVal = d && d.hrs ? String(Math.round(parseFloat(d.hrs))) : '';
@@ -7128,7 +7126,11 @@ function jcAddLabourRow(d) {
     <td><input type="date" id="${rid}-date" value="${d&&d.date||''}"></td>
     <td><select id="${rid}-emp" onchange="jcOnLabourEmpChange('${rid}')">${empOpts}</select></td>
     <td><span class="jc-cls-display" id="${rid}-cls">${clsDisplay}</span><input type="hidden" id="${rid}-cls-val" value="${clsVal}"></td>
-    <td><button class="btn-task-picker${tasks.length?' has-tasks':''}" id="${rid}-tasks-btn" onclick="jcOpenTasksModal('${rid}')" data-tasks="${tasksJson}"><span id="${rid}-tasks-count">${jcTaskCount(tasks)}</span></button></td>
+    <td class="jc-tasks-cell">
+      <div class="jc-task-chip-area" id="${rid}-chip-area"></div>
+      <select class="jc-task-dd" id="${rid}-task-dd" onchange="jcPickTask('${rid}')"><option value="">+ task…</option></select>
+      <input type="hidden" id="${rid}-tasks-data" value="${escHTML(JSON.stringify(tasks))}">
+    </td>
     <td><select id="${rid}-loc" onchange="jcOnLabourLocChange2('${rid}')">
       <option value="Workshop">Workshop</option><option value="Onsite">Onsite</option><option value="Other">Other</option>
     </select></td>
@@ -7151,6 +7153,8 @@ function jcAddLabourRow(d) {
   } else if (empName) {
     jcOnLabourEmpChange(rid);
   }
+  jcSetTaskChips(rid, tasks);
+  jcRefreshTaskDropdown(rid);
   jcUpdateLabourRow(rid); jcUpdateLabourTotals();
 }
 function jcOnLabourEmpChange(rid) {
@@ -7242,68 +7246,50 @@ function jcSortLabour(dir) {
   rows.forEach(tr => tbody.appendChild(tr));
   document.getElementById('jc-labour-sort-menu')?.remove();
 }
-// ── LABOUR TASKS MODAL ────────────────────────────────────────────
-function jcTaskCount(tasks) {
-  if (!tasks || !tasks.length) return 'No tasks';
-  return tasks.length === 1 ? '1 task' : tasks.length + ' tasks';
-}
-function jcOpenTasksModal(rid) {
-  document.getElementById('jc-tasks-modal-overlay')?.remove();
-  const btn = document.getElementById(rid+'-tasks-btn');
-  let currentTasks = [];
-  try { currentTasks = JSON.parse(btn?.dataset.tasks || '[]'); } catch(e) {}
-  if (!jcConfig.tasks.length) {
-    showToast('No tasks configured. Add tasks in Job Config first.', 'info'); return;
-  }
-  const taskItems = jcConfig.tasks.map(task => {
-    const existing = currentTasks.find(t => t.task === task);
-    const checked = existing ? 'checked' : '';
-    const note = existing ? escHTML(existing.note||'') : '';
-    return `<div class="jc-task-pick-row">
-      <label class="jc-task-pick-label">
-        <input type="checkbox" value="${escHTML(task)}" ${checked} onchange="jcToggleTaskNote(this)">
-        <span>${escHTML(task)}</span>
-      </label>
-      <input type="text" class="jc-task-pick-note" placeholder="Optional note" value="${note}" style="${checked?'':'display:none;'}">
-    </div>`;
-  }).join('');
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay'; overlay.id = 'jc-tasks-modal-overlay';
-  overlay.innerHTML = `<div class="modal" style="max-width:460px;">
-    <div class="modal-header">
-      <h3 class="modal-title">Select Tasks</h3>
-      <button class="modal-close" onclick="document.getElementById('jc-tasks-modal-overlay').remove()">✕</button>
-    </div>
-    <div class="modal-body"><div class="jc-task-modal-list">${taskItems}</div></div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="document.getElementById('jc-tasks-modal-overlay').remove()">Cancel</button>
-      <button class="btn btn-primary" onclick="jcSaveTasksModal('${rid}')">Save</button>
-    </div>
-  </div>`;
-  document.body.appendChild(overlay);
-}
-function jcToggleTaskNote(cb) {
-  const note = cb.closest('.jc-task-pick-row')?.querySelector('.jc-task-pick-note');
-  if (!note) return;
-  note.style.display = cb.checked ? '' : 'none';
-  if (!cb.checked) note.value = '';
-}
-function jcSaveTasksModal(rid) {
-  const overlay = document.getElementById('jc-tasks-modal-overlay'); if (!overlay) return;
-  const tasks = [];
-  overlay.querySelectorAll('.jc-task-pick-row').forEach(row => {
-    const cb = row.querySelector('input[type="checkbox"]');
-    if (cb && cb.checked) tasks.push({ task:cb.value, note:row.querySelector('.jc-task-pick-note')?.value||'' });
-  });
-  const btn = document.getElementById(rid+'-tasks-btn');
-  if (btn) {
-    btn.dataset.tasks = JSON.stringify(tasks);
-    btn.className = 'btn-task-picker' + (tasks.length ? ' has-tasks' : '');
-    const countEl = document.getElementById(rid+'-tasks-count');
-    if (countEl) countEl.textContent = jcTaskCount(tasks);
-  }
-  overlay.remove();
+// ── LABOUR TASKS — inline chip multi-select ───────────────────────
+function jcPickTask(rid) {
+  const sel = document.getElementById(rid+'-task-dd');
+  const task = sel?.value; if (!task) return;
+  sel.value = '';
+  const hiddenEl = document.getElementById(rid+'-tasks-data');
+  let tasks = [];
+  try { tasks = JSON.parse(hiddenEl?.value || '[]'); } catch(e) {}
+  if (tasks.find(t => t.task === task)) return;
+  tasks.push({ task, note:'' });
+  if (hiddenEl) hiddenEl.value = JSON.stringify(tasks);
+  jcSetTaskChips(rid, tasks);
+  jcRefreshTaskDropdown(rid);
   jcMarkDirty();
+}
+function jcRemoveTaskChip(btn) {
+  const chip = btn.closest('.jc-task-chip');
+  if (!chip) return;
+  const rid  = chip.dataset.rid;
+  const task = chip.dataset.task;
+  const hiddenEl = document.getElementById(rid+'-tasks-data');
+  let tasks = [];
+  try { tasks = JSON.parse(hiddenEl?.value || '[]'); } catch(e) {}
+  tasks = tasks.filter(t => t.task !== task);
+  if (hiddenEl) hiddenEl.value = JSON.stringify(tasks);
+  jcSetTaskChips(rid, tasks);
+  jcRefreshTaskDropdown(rid);
+  jcMarkDirty();
+}
+function jcSetTaskChips(rid, tasks) {
+  const area = document.getElementById(rid+'-chip-area'); if (!area) return;
+  area.innerHTML = (tasks||[]).map(t =>
+    `<span class="jc-task-chip" data-rid="${rid}" data-task="${escHTML(t.task)}">${escHTML(t.task)}<button class="jc-chip-del" onclick="jcRemoveTaskChip(this)" title="Remove">×</button></span>`
+  ).join('');
+}
+function jcRefreshTaskDropdown(rid) {
+  const sel = document.getElementById(rid+'-task-dd'); if (!sel) return;
+  let current = [];
+  try { current = JSON.parse(document.getElementById(rid+'-tasks-data')?.value || '[]'); } catch(e) {}
+  const used = new Set(current.map(t => t.task));
+  const available = jcConfig.tasks.filter(t => !used.has(t));
+  sel.innerHTML = `<option value="">${available.length ? '+ task…' : '(all added)'}</option>` +
+    available.map(t => `<option value="${escHTML(t)}">${escHTML(t)}</option>`).join('');
+  sel.disabled = !available.length;
 }
 
 // ── EQUIPMENT ─────────────────────────────────────────────────────
