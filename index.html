@@ -1483,6 +1483,25 @@ body {
 .jc-search-empty { padding:12px 14px; font-size:12px; color:var(--text-3); text-align:center; }
 .btn-add-task { background:transparent; border:1px dashed var(--border); border-radius:var(--radius); color:var(--text-3); padding:2px 8px; font-size:11px; cursor:pointer; margin:4px 0; transition:all .15s; }
 .btn-add-task:hover { border-color:var(--gold); color:var(--gold); }
+/* Labour table — sort / employee / task picker */
+.jc-labour-add-row { margin-bottom:8px; }
+.jc-sort-th { cursor:pointer; user-select:none; white-space:nowrap; }
+.jc-sort-th:hover { color:var(--gold); }
+.jc-sort-icon { font-size:10px; margin-left:3px; opacity:.6; }
+.jc-sort-dropdown { position:fixed; z-index:var(--z-dropdown); background:var(--bg-card); border:1px solid var(--border); border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,.18); padding:4px 0; min-width:150px; }
+.jc-sort-dropdown div { padding:7px 14px; cursor:pointer; font-size:13px; display:flex; align-items:center; gap:6px; }
+.jc-sort-dropdown div:hover { background:var(--bg-hover); }
+.jc-sort-dropdown div.active { color:var(--gold); font-weight:600; }
+.jc-cls-display { font-size:12px; color:var(--text-2); font-style:italic; white-space:nowrap; }
+.btn-task-picker { background:transparent; border:1px dashed var(--border-2); border-radius:4px; padding:3px 8px; font-size:11px; color:var(--text-2); cursor:pointer; white-space:nowrap; transition:all .15s; }
+.btn-task-picker:hover { border-color:var(--gold); color:var(--gold); }
+.btn-task-picker.has-tasks { border-color:var(--gold); color:var(--gold); border-style:solid; }
+.jc-task-modal-list { max-height:340px; overflow-y:auto; }
+.jc-task-pick-row { padding:8px 0; border-bottom:1px solid var(--border); display:flex; flex-direction:column; gap:4px; }
+.jc-task-pick-row:last-child { border-bottom:none; }
+.jc-task-pick-label { display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; }
+.jc-task-pick-label input[type=checkbox] { width:15px; height:15px; accent-color:var(--gold); flex-shrink:0; }
+.jc-task-pick-note { margin-left:23px; font-size:12px; }
 </style>
 </head>
 <body>
@@ -2809,11 +2828,15 @@ body {
               <div class="card-header"><span class="card-header-icon">🕐</span><span class="card-header-title">Labour &amp; Time Tracking</span><span class="card-header-badge" id="jc-labour-hrs-badge">0.00 hrs</span></div>
               <div class="card-body">
                 <p class="scroll-hint">← scroll to see all columns →</p>
+                <button class="btn-add-row jc-labour-add-row" onclick="jcAddLabourRow()">+ Add Labour Entry</button>
                 <div class="dyn-table-wrap">
                   <table class="dyn-table" id="jc-labour-table">
                     <thead><tr>
-                      <th style="width:110px">Date</th><th style="width:160px">Classification</th>
-                      <th style="width:130px">Technician</th><th style="width:110px">Location</th>
+                      <th style="width:110px" class="jc-sort-th" onclick="jcOpenLabourSort(event)">Date <span class="jc-sort-icon" id="jc-labour-sort-icon">↓</span></th>
+                      <th style="width:150px">Employee</th>
+                      <th style="width:140px">Classification</th>
+                      <th style="width:110px">Tasks</th>
+                      <th style="width:110px">Location</th>
                       <th style="width:80px" class="right">Start</th><th style="width:80px" class="right">End</th>
                       <th style="width:55px" class="right">Hrs</th><th style="width:65px">Type</th>
                       <th style="width:95px" class="right">Rate (TTD)</th><th style="width:95px" class="right">Amount</th>
@@ -2821,7 +2844,7 @@ body {
                     </tr></thead>
                     <tbody id="jc-labour-body"></tbody>
                     <tfoot><tr>
-                      <td colspan="6" class="right" style="font-size:11px;">Total Labour:</td>
+                      <td colspan="7" class="right" style="font-size:11px;">Total Labour:</td>
                       <td id="jc-labour-hrs-total" class="right" style="font-family:'DM Mono',monospace;font-size:12px;">0.00</td>
                       <td></td><td></td>
                       <td id="jc-labour-cost-total" class="right" style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:var(--gold);">$0.00</td>
@@ -2829,7 +2852,6 @@ body {
                     </tr></tfoot>
                   </table>
                 </div>
-                <button class="btn-add-row" onclick="jcAddLabourRow()">+ Add Labour Entry</button>
               </div>
             </div>
 
@@ -5961,7 +5983,7 @@ let jcSearchTimeout     = null;
 let jcDashSortKey       = 'created_at';
 let jcDashSortAsc       = false;
 let jcDashData          = [];
-let jcConfig = { labour:[], equipment:[], tasks:[], materials:[], consumables:[], qcChecklists:[] };
+let jcConfig = { labour:[], equipment:[], tasks:[], materials:[], consumables:[], qcChecklists:[], employees:[] };
 
 // ── ENTRY POINTS ─────────────────────────────────────────────────
 async function loadJobCards() {
@@ -6392,15 +6414,16 @@ async function jcCfgDelete(tab, id) {
 
 // ── CONFIG ────────────────────────────────────────────────────────
 async function jcLoadConfig() {
-  jcConfig = { labour:[], equipment:[], tasks:[], materials:[], consumables:[], qcChecklists:[] };
+  jcConfig = { labour:[], equipment:[], tasks:[], materials:[], consumables:[], qcChecklists:[], employees:[] };
   try {
-    const [labRows, eqRows, matRows, conRows, taskRows, qcRows] = await Promise.all([
+    const [labRows, eqRows, matRows, conRows, taskRows, qcRows, empRows] = await Promise.all([
       sbGet('config_labour',       'status=eq.approved&is_active=eq.true&order=sort_order'),
       sbGet('config_equipment',    'status=eq.approved&is_active=eq.true&order=sort_order'),
       sbGet('config_materials',    'status=eq.approved&is_active=eq.true&order=sort_order'),
       sbGet('config_consumables',  'status=eq.approved&is_active=eq.true&order=sort_order'),
       sbGet('config_tasks',        'status=eq.approved&is_active=eq.true&order=sort_order'),
       sbGet('config_qc_checklists','status=eq.approved&is_active=eq.true&order=sort_order'),
+      sbGet('employees',           'order=name'),
     ]);
     jcConfig.labour      = (labRows ||[]).map(r => ({ classification:r.classification, workshopRate:parseFloat(r.workshop_rate_ttd)||0, onsiteRate:parseFloat(r.onsite_rate_ttd)||0 }));
     jcConfig.equipment   = (eqRows  ||[]).map(r => ({ name:r.equipment_name, assetNo:r.asset_no||'', workshopRate:parseFloat(r.workshop_rate_ttd)||0, onsiteRate:parseFloat(r.onsite_rate_ttd)||0 }));
@@ -6408,19 +6431,20 @@ async function jcLoadConfig() {
     jcConfig.consumables = (conRows ||[]).map(r => ({ name:r.item_name, unit:r.unit||'', cost:parseFloat(r.default_unit_cost_ttd)||0 }));
     jcConfig.tasks       = (taskRows||[]).map(r => r.task_name);
     jcConfig.qcChecklists= (qcRows  ||[]).map(r => ({ item:r.checklist_item, jobType:r.job_type||'All' }));
+    jcConfig.employees   = (empRows ||[]).map(r => ({ name:r.name, classification:r.job_classification||'' }));
     jcRefreshRowDropdowns();
   } catch(e) { console.error('jcLoadConfig:', e); }
 }
 function jcRefreshRowDropdowns() {
-  const labOpts  = '<option value="">Select…</option>' + jcConfig.labour.map(r => `<option value="${escHTML(r.classification)}">${escHTML(r.classification)}</option>`).join('');
+  const empOpts  = '<option value="">Select…</option>' + jcConfig.employees.map(e => `<option value="${escHTML(e.name)}">${escHTML(e.name)}</option>`).join('');
   const eqOpts   = '<option value="">Select…</option>' + jcConfig.equipment.map(r => `<option value="${escHTML(r.name)}">${escHTML(r.name)}</option>`).join('');
   const taskOpts = '<option value="">Select task…</option>' + jcConfig.tasks.map(t => `<option value="${escHTML(t)}">${escHTML(t)}</option>`).join('');
   const matOpts  = '<option value="">Select…</option>' + jcConfig.materials.map(r => `<option value="${escHTML(r.name)}">${escHTML(r.name)}</option>`).join('');
   const conOpts  = '<option value="">Select…</option>' + jcConfig.consumables.map(r => `<option value="${escHTML(r.name)}">${escHTML(r.name)}</option>`).join('');
-  document.querySelectorAll('#jc-labour-body tr:not(.jc-task-subrows)').forEach(tr => {
-    const sels = tr.querySelectorAll('select'); if (!sels[0]) return;
-    const cur = sels[0].value; sels[0].innerHTML = labOpts; sels[0].value = cur;
-    tr.querySelectorAll('.jc-task-subrow select').forEach(s => { const c=s.value; s.innerHTML=taskOpts; s.value=c; });
+  document.querySelectorAll('#jc-labour-body tr').forEach(tr => {
+    const rid = tr.id; if (!rid || !rid.startsWith('jc-lr-')) return;
+    const empSel = document.getElementById(rid+'-emp'); if (!empSel) return;
+    const cur = empSel.value; empSel.innerHTML = empOpts; empSel.value = cur;
   });
   document.querySelectorAll('#jc-equip-body tr:not(.jc-task-subrows)').forEach(tr => {
     const sels = tr.querySelectorAll('select'); if (!sels[0]) return;
@@ -6707,7 +6731,7 @@ async function jcSaveJobData(data, jobId) {
   const labour = parse(data.labourDetail);
   if (labour.length) await sbPost('labour_entries', labour.map((r,i) => ({
     job_id:savedId, sort_order:i, entry_date:r.date||null, classification:r.classification||null,
-    technician:r.tech||null, location:r.location||'Workshop', start_time:r.start||null, end_time:r.end||null,
+    technician:r.employee||r.tech||null, location:r.location||'Workshop', start_time:r.start||null, end_time:r.end||null,
     hours:parseFloat(r.hrs)||0, rate_ttd:parseFloat(r.rate)||0, amount_ttd:parseFloat(r.amount)||0, is_overtime:false, tasks:r.tasks||[]
   })));
   const equip = parse(data.equipDetail);
@@ -6779,7 +6803,7 @@ async function jcOpenJob(jobId) {
       'Specs Detail': JSON.stringify(j.specs||[]),
       'Reports Detail': JSON.stringify(j.reports||[]),
       'Last Saved': j.updated_at,
-      'Labour Detail': JSON.stringify((lr||[]).map(r => ({ date:r.entry_date||'', classification:r.classification||'', tech:r.technician||'', location:r.location||'Workshop', start:r.start_time||'', end:r.end_time||'', hrs:String(r.hours||0), rate:String(r.rate_ttd||0), amount:String(r.amount_ttd||0), tasks:r.tasks||[] }))),
+      'Labour Detail': JSON.stringify((lr||[]).map(r => ({ date:r.entry_date||'', employee:r.technician||'', classification:r.classification||'', location:r.location||'Workshop', start:r.start_time||'', end:r.end_time||'', hrs:String(r.hours||0), rate:String(r.rate_ttd||0), amount:String(r.amount_ttd||0), tasks:r.tasks||[] }))),
       'Equipment Detail': JSON.stringify((er||[]).map(r => ({ date:r.entry_date||'', machine:r.machine_name||'', asset:r.asset_no||'', location:r.location||'Workshop', setup:String(r.setup_hours||0), run:String(r.run_hours||0), rate:String(r.rate_ttd||0), amount:String(r.amount_ttd||0), tasks:r.tasks||[] }))),
       'Materials Detail': JSON.stringify((mr||[]).map(r => ({ date:r.entry_date||'', desc:r.description||'', code:r.stock_code||'', qty:String(r.quantity||0), unit:r.unit||'', unitCost:String(r.unit_cost_ttd||0) }))),
       'Consumables Detail': JSON.stringify((cr||[]).map(r => ({ date:r.entry_date||'', desc:r.description||'', cat:r.category||'', qty:String(r.quantity||0), unit:r.unit||'', unitCost:String(r.unit_cost_ttd||0) }))),
@@ -6822,6 +6846,7 @@ function jcPopulateForm(row) {
     .forEach(id => { const el=document.getElementById(id); if (el) el.innerHTML=''; });
   const parse = str => { try { return JSON.parse(str)||[]; } catch(e) { return []; } };
   parse(row['Labour Detail']).forEach(d => jcAddLabourRow(d));
+  jcSortLabour(jcLabourSortDir);
   parse(row['Equipment Detail']).forEach(d => jcAddEquipRow(d));
   parse(row['Materials Detail']).forEach(d => jcAddMaterialRow(d));
   parse(row['Consumables Detail']).forEach(d => jcAddConsumableRow(d));
@@ -6894,6 +6919,7 @@ async function jcDuplicateJob() {
     .forEach(id => { const el=document.getElementById(id); if(el) el.innerHTML=''; });
   const parse = str => { try { return JSON.parse(str)||[]; } catch(e) { return []; } };
   parse(original.labourDetail).forEach(d => jcAddLabourRow(d));
+  jcSortLabour(jcLabourSortDir);
   parse(original.equipDetail).forEach(d => jcAddEquipRow(d));
   parse(original.matsDetail).forEach(d => jcAddMaterialRow(d));
   parse(original.consDetail).forEach(d => jcAddConsumableRow(d));
@@ -6912,12 +6938,22 @@ function jcCollectFormData() {
   const getStatus = () => { const b=document.querySelector('#jc-status-btns .jc-status-btn.active'); return b ? b.textContent.trim() : 'Received'; };
   const getCat    = () => document.getElementById('jc-cat-internal')?.classList.contains('active') ? 'Internal' : 'Customer';
   const labourDetail = [];
-  document.querySelectorAll('#jc-labour-body tr:not(.jc-task-subrows)').forEach(tr => {
-    const rid = tr.id; if (!rid||!rid.startsWith('jc-lr-')) return;
-    const inputs=tr.querySelectorAll('input'), sels=tr.querySelectorAll('select'), tasks=[];
-    const tc = document.getElementById(rid+'-taskcontainer');
-    if (tc) tc.querySelectorAll('.jc-task-subrow').forEach(d => tasks.push({ task:d.querySelector('select')?.value||'', note:d.querySelector('input')?.value||'' }));
-    labourDetail.push({ date:inputs[0]?.value||'', classification:sels[0]?.value||'', tech:inputs[1]?.value||'', location:sels[1]?.value||'Workshop', start:inputs[2]?.value||'', end:inputs[3]?.value||'', hrs:inputs[4]?.value||'0', rate:document.getElementById(rid+'-rate')?.value||'0', amount:(document.getElementById(rid+'-amount')?.textContent||'$0').replace('$',''), tasks });
+  document.querySelectorAll('#jc-labour-body tr').forEach(tr => {
+    const rid = tr.id; if (!rid || !rid.startsWith('jc-lr-')) return;
+    let tasks = [];
+    try { tasks = JSON.parse(document.getElementById(rid+'-tasks-btn')?.dataset.tasks || '[]'); } catch(e) {}
+    labourDetail.push({
+      date:           document.getElementById(rid+'-date')?.value || '',
+      employee:       document.getElementById(rid+'-emp')?.value || '',
+      classification: document.getElementById(rid+'-cls-val')?.value || '',
+      location:       document.getElementById(rid+'-loc')?.value || 'Workshop',
+      start:          document.getElementById(rid+'-start')?.value || '',
+      end:            document.getElementById(rid+'-end')?.value || '',
+      hrs:            document.getElementById(rid+'-hrs')?.value || '0',
+      rate:           document.getElementById(rid+'-rate')?.value || '0',
+      amount:         (document.getElementById(rid+'-amount')?.textContent || '$0').replace('$',''),
+      tasks,
+    });
   });
   const equipDetail = [];
   document.querySelectorAll('#jc-equip-body tr:not(.jc-task-subrows)').forEach(tr => {
@@ -7076,94 +7112,198 @@ function jcHideSearch() {
 }
 
 // ── LABOUR ────────────────────────────────────────────────────────
+let jcLabourSortDir = 'desc';
+
 function jcAddLabourRow(d) {
   const tbody = document.getElementById('jc-labour-body'); if (!tbody) return;
   const rid = 'jc-lr-' + Date.now() + Math.random().toString(36).substr(2,4);
-  const labOpts  = '<option value="">Select…</option>' + jcConfig.labour.map(r => `<option value="${escHTML(r.classification)}">${escHTML(r.classification)}</option>`).join('');
-  const taskOpts = '<option value="">Select task…</option>' + jcConfig.tasks.map(t => `<option value="${escHTML(t)}">${escHTML(t)}</option>`).join('');
+  const empOpts = '<option value="">Select…</option>' + jcConfig.employees.map(e => `<option value="${escHTML(e.name)}">${escHTML(e.name)}</option>`).join('');
+  const tasks = (d && d.tasks && d.tasks.length) ? d.tasks : [];
+  const tasksJson = escHTML(JSON.stringify(tasks));
+  const clsDisplay = escHTML(d && d.classification || '—');
+  const clsVal = escHTML(d && d.classification || '');
+  const hrsVal = d && d.hrs ? String(Math.round(parseFloat(d.hrs))) : '';
   const tr = document.createElement('tr'); tr.id = rid;
   tr.innerHTML = `
-    <td><input type="date" value="${d&&d.date||''}"></td>
-    <td><select onchange="jcOnLabourClassChange(this,'${rid}')">${labOpts}</select></td>
-    <td><input type="text" placeholder="Technician" value="${d&&d.tech||''}"></td>
-    <td><select onchange="jcOnLabourLocChange(this,'${rid}')">
+    <td><input type="date" id="${rid}-date" value="${d&&d.date||''}"></td>
+    <td><select id="${rid}-emp" onchange="jcOnLabourEmpChange('${rid}')">${empOpts}</select></td>
+    <td><span class="jc-cls-display" id="${rid}-cls">${clsDisplay}</span><input type="hidden" id="${rid}-cls-val" value="${clsVal}"></td>
+    <td><button class="btn-task-picker${tasks.length?' has-tasks':''}" id="${rid}-tasks-btn" onclick="jcOpenTasksModal('${rid}')" data-tasks="${tasksJson}"><span id="${rid}-tasks-count">${jcTaskCount(tasks)}</span></button></td>
+    <td><select id="${rid}-loc" onchange="jcOnLabourLocChange2('${rid}')">
       <option value="Workshop">Workshop</option><option value="Onsite">Onsite</option><option value="Other">Other</option>
     </select></td>
-    <td><input type="time" class="num" value="${d&&d.start||''}" onchange="jcCalcLabourHours('${rid}')"></td>
-    <td><input type="time" class="num" value="${d&&d.end||''}" onchange="jcCalcLabourHours('${rid}')"></td>
-    <td><input type="number" class="num" placeholder="0.00" value="${d&&d.hrs||''}" step="0.25" style="width:56px;" oninput="jcUpdateLabourRow('${rid}')"></td>
+    <td><input type="time" id="${rid}-start" class="num" value="${d&&d.start||''}" onchange="jcCalcLabourHours('${rid}')"></td>
+    <td><input type="time" id="${rid}-end" class="num" value="${d&&d.end||''}" onchange="jcCalcLabourHours('${rid}')"></td>
+    <td><input type="number" id="${rid}-hrs" class="num" placeholder="0" value="${hrsVal}" step="1" style="width:52px;" oninput="jcUpdateLabourRow('${rid}')"></td>
     <td><span class="jc-ot-badge" id="${rid}-otbadge" style="display:none;">OT</span><span id="${rid}-otlabel">Reg</span></td>
     <td><input type="number" class="num" placeholder="0.00" id="${rid}-rate" value="${d&&d.rate||''}" oninput="jcUpdateLabourRow('${rid}')"></td>
     <td><span class="row-total" id="${rid}-amount">$0.00</span></td>
     <td><button class="btn-del" onclick="jcRemoveLabourRow('${rid}')">✕</button></td>`;
-  tbody.appendChild(tr);
-  const taskTr = document.createElement('tr'); taskTr.className = 'jc-task-subrows'; taskTr.id = rid+'-tasks';
-  taskTr.innerHTML = `<td colspan="11"><div id="${rid}-taskcontainer"></div><button class="btn-add-task" onclick="jcAddTaskSubRow('${rid}-taskcontainer')">+ Add Task</button></td>`;
-  tbody.appendChild(taskTr);
-  if (d&&d.location) tr.querySelectorAll('select')[1].value = d.location;
-  if (d&&d.classification) { tr.querySelectorAll('select')[0].value=d.classification; jcOnLabourClassChange(tr.querySelectorAll('select')[0],rid); }
-  if (d&&d.tasks) d.tasks.forEach(t => jcAddTaskSubRow(rid+'-taskcontainer', t));
+  tbody.insertBefore(tr, tbody.firstChild);
+  if (d && d.location) document.getElementById(rid+'-loc').value = d.location;
+  const empName = (d && (d.employee || d.tech)) || '';
+  if (empName) {
+    const empSel = document.getElementById(rid+'-emp');
+    if (empSel) empSel.value = empName;
+  }
+  if (d && d.classification) {
+    jcSetLabourClassification(rid, d.classification);
+  } else if (empName) {
+    jcOnLabourEmpChange(rid);
+  }
   jcUpdateLabourRow(rid); jcUpdateLabourTotals();
 }
-function jcAddTaskSubRow(containerId, d) {
-  const c = document.getElementById(containerId); if (!c) return;
-  const taskOpts = '<option value="">Select task…</option>' + jcConfig.tasks.map(t => `<option value="${escHTML(t)}">${escHTML(t)}</option>`).join('');
-  const div = document.createElement('div'); div.className = 'jc-task-subrow';
-  div.style.cssText = 'display:flex;align-items:center;gap:8px;padding:3px 0;';
-  div.innerHTML = `<span style="font-size:11px;color:var(--text-2);">Task:</span>
-    <select style="min-width:150px;font-size:12px;">${taskOpts}</select>
-    <span style="font-size:11px;color:var(--text-2);">Note:</span>
-    <input type="text" placeholder="Optional note" style="flex:1;font-size:12px;">
-    <button class="btn-del" onclick="this.closest('.jc-task-subrow').remove()" style="font-size:11px;">✕</button>`;
-  if (d) { div.querySelector('select').value=d.task||''; div.querySelector('input').value=d.note||''; }
-  c.appendChild(div);
+function jcOnLabourEmpChange(rid) {
+  const empSel = document.getElementById(rid+'-emp');
+  const emp = jcConfig.employees.find(e => e.name === empSel?.value);
+  jcSetLabourClassification(rid, emp ? emp.classification : '');
 }
-function jcOnLabourClassChange(sel, rid) {
-  const cls=sel?.value, tr=document.getElementById(rid); if (!tr) return;
-  const loc = tr.querySelectorAll('select')[1]?.value||'Workshop';
-  const row = jcConfig.labour.find(r => r.classification===cls);
+function jcSetLabourClassification(rid, cls) {
+  const display = document.getElementById(rid+'-cls');
+  const hidden  = document.getElementById(rid+'-cls-val');
+  if (display) display.textContent = cls || '—';
+  if (hidden)  hidden.value = cls || '';
+  const loc = document.getElementById(rid+'-loc')?.value || 'Workshop';
+  const labRow = jcConfig.labour.find(r => r.classification === cls);
   const rateEl = document.getElementById(rid+'-rate');
-  if (row && rateEl) rateEl.value = (loc==='Workshop' ? row.workshopRate : row.onsiteRate).toFixed(2);
+  if (labRow && rateEl) rateEl.value = (loc === 'Workshop' ? labRow.workshopRate : labRow.onsiteRate).toFixed(2);
   jcUpdateLabourRow(rid);
 }
-function jcOnLabourLocChange(sel, rid) { jcOnLabourClassChange(document.getElementById(rid)?.querySelectorAll('select')[0], rid); }
+function jcOnLabourLocChange2(rid) {
+  jcSetLabourClassification(rid, document.getElementById(rid+'-cls-val')?.value || '');
+}
 function jcCalcLabourHours(rid) {
-  const tr = document.getElementById(rid); if (!tr) return;
-  const times = tr.querySelectorAll('input[type="time"]');
-  const start=times[0].value, end=times[1].value; if (!start||!end) return;
-  const [sh,sm]=start.split(':').map(Number), [eh,em]=end.split(':').map(Number);
-  let hrs=(eh*60+em-sh*60-sm)/60; if (hrs<0) hrs+=24;
-  tr.querySelectorAll('input[type="number"]')[0].value = hrs.toFixed(2);
+  const start = document.getElementById(rid+'-start')?.value;
+  const end   = document.getElementById(rid+'-end')?.value;
+  if (!start || !end) return;
+  const [sh,sm] = start.split(':').map(Number), [eh,em] = end.split(':').map(Number);
+  let mins = eh*60+em - sh*60-sm;
+  if (mins < 0) mins += 24*60;
+  const hrsEl = document.getElementById(rid+'-hrs');
+  if (hrsEl) hrsEl.value = Math.round(mins/60);
   jcUpdateLabourRow(rid);
 }
 function jcUpdateLabourRow(rid) {
-  const tr=document.getElementById(rid); if (!tr) return;
-  const hrs  = parseFloat(tr.querySelectorAll('input[type="number"]')[0]?.value)||0;
-  const rate = parseFloat(document.getElementById(rid+'-rate')?.value)||0;
-  const isOT = hrs>8;
-  const amount = isOT ? (8*rate+(hrs-8)*rate*1.5) : (hrs*rate);
-  const badge=document.getElementById(rid+'-otbadge'), label=document.getElementById(rid+'-otlabel');
-  if (badge) badge.style.display = isOT?'inline':'none';
-  if (label) label.textContent = isOT?'OT':'Reg';
-  tr.classList.toggle('jc-ot-row', isOT);
-  const amtEl=document.getElementById(rid+'-amount'); if (amtEl) amtEl.textContent='$'+amount.toFixed(2);
+  const hrs  = parseFloat(document.getElementById(rid+'-hrs')?.value) || 0;
+  const rate = parseFloat(document.getElementById(rid+'-rate')?.value) || 0;
+  const isOT = hrs > 8;
+  const amount = isOT ? (8*rate + (hrs-8)*rate*1.5) : (hrs*rate);
+  const badge = document.getElementById(rid+'-otbadge'), label = document.getElementById(rid+'-otlabel');
+  const tr = document.getElementById(rid);
+  if (badge) badge.style.display = isOT ? 'inline' : 'none';
+  if (label) label.textContent = isOT ? 'OT' : 'Reg';
+  if (tr) tr.classList.toggle('jc-ot-row', isOT);
+  const amtEl = document.getElementById(rid+'-amount');
+  if (amtEl) amtEl.textContent = '$' + amount.toFixed(2);
   jcUpdateLabourTotals(); jcUpdateCostSummary();
 }
 function jcRemoveLabourRow(rid) {
-  document.getElementById(rid)?.remove(); document.getElementById(rid+'-tasks')?.remove();
+  document.getElementById(rid)?.remove();
   jcUpdateLabourTotals(); jcUpdateCostSummary();
 }
 function jcUpdateLabourTotals() {
   let hrs=0, cost=0;
-  document.querySelectorAll('#jc-labour-body tr:not(.jc-task-subrows)').forEach(tr => {
-    const rid=tr.id; if (!rid||!rid.startsWith('jc-lr-')) return;
-    hrs  += parseFloat(tr.querySelectorAll('input[type="number"]')[0]?.value)||0;
-    cost += parseFloat(document.getElementById(rid+'-amount')?.textContent.replace('$',''))||0;
+  document.querySelectorAll('#jc-labour-body tr').forEach(tr => {
+    const rid = tr.id; if (!rid || !rid.startsWith('jc-lr-')) return;
+    hrs  += parseFloat(document.getElementById(rid+'-hrs')?.value) || 0;
+    cost += parseFloat(document.getElementById(rid+'-amount')?.textContent.replace('$','')) || 0;
   });
   const hEl=document.getElementById('jc-labour-hrs-total'), cEl=document.getElementById('jc-labour-cost-total'), bEl=document.getElementById('jc-labour-hrs-badge');
-  if (hEl) hEl.textContent=hrs.toFixed(2);
-  if (cEl) cEl.textContent='$'+cost.toFixed(2);
-  if (bEl) bEl.textContent=hrs.toFixed(2)+' hrs';
+  if (hEl) hEl.textContent = hrs.toFixed(2);
+  if (cEl) cEl.textContent = '$' + cost.toFixed(2);
+  if (bEl) bEl.textContent = hrs.toFixed(2) + ' hrs';
+}
+// ── LABOUR SORT ───────────────────────────────────────────────────
+function jcOpenLabourSort(e) {
+  e.stopPropagation();
+  document.getElementById('jc-labour-sort-menu')?.remove();
+  const menu = document.createElement('div');
+  menu.id = 'jc-labour-sort-menu';
+  menu.className = 'jc-sort-dropdown';
+  menu.innerHTML = `
+    <div onclick="jcSortLabour('desc')" class="${jcLabourSortDir==='desc'?'active':''}">↓ Newest First</div>
+    <div onclick="jcSortLabour('asc')" class="${jcLabourSortDir==='asc'?'active':''}">↑ Oldest First</div>`;
+  const rect = e.currentTarget.getBoundingClientRect();
+  menu.style.cssText = `top:${rect.bottom+4}px;left:${rect.left}px;`;
+  document.body.appendChild(menu);
+  setTimeout(() => document.addEventListener('click', () => document.getElementById('jc-labour-sort-menu')?.remove(), { once:true }), 0);
+}
+function jcSortLabour(dir) {
+  jcLabourSortDir = dir;
+  const icon = document.getElementById('jc-labour-sort-icon');
+  if (icon) icon.textContent = dir === 'asc' ? '↑' : '↓';
+  const tbody = document.getElementById('jc-labour-body'); if (!tbody) return;
+  const rows = Array.from(tbody.querySelectorAll('tr')).filter(tr => tr.id && tr.id.startsWith('jc-lr-'));
+  rows.sort((a, b) => {
+    const da = document.getElementById(a.id+'-date')?.value || '';
+    const db = document.getElementById(b.id+'-date')?.value || '';
+    return dir === 'asc' ? da.localeCompare(db) : db.localeCompare(da);
+  });
+  rows.forEach(tr => tbody.appendChild(tr));
+  document.getElementById('jc-labour-sort-menu')?.remove();
+}
+// ── LABOUR TASKS MODAL ────────────────────────────────────────────
+function jcTaskCount(tasks) {
+  if (!tasks || !tasks.length) return 'No tasks';
+  return tasks.length === 1 ? '1 task' : tasks.length + ' tasks';
+}
+function jcOpenTasksModal(rid) {
+  document.getElementById('jc-tasks-modal-overlay')?.remove();
+  const btn = document.getElementById(rid+'-tasks-btn');
+  let currentTasks = [];
+  try { currentTasks = JSON.parse(btn?.dataset.tasks || '[]'); } catch(e) {}
+  if (!jcConfig.tasks.length) {
+    showToast('No tasks configured. Add tasks in Job Config first.', 'info'); return;
+  }
+  const taskItems = jcConfig.tasks.map(task => {
+    const existing = currentTasks.find(t => t.task === task);
+    const checked = existing ? 'checked' : '';
+    const note = existing ? escHTML(existing.note||'') : '';
+    return `<div class="jc-task-pick-row">
+      <label class="jc-task-pick-label">
+        <input type="checkbox" value="${escHTML(task)}" ${checked} onchange="jcToggleTaskNote(this)">
+        <span>${escHTML(task)}</span>
+      </label>
+      <input type="text" class="jc-task-pick-note" placeholder="Optional note" value="${note}" style="${checked?'':'display:none;'}">
+    </div>`;
+  }).join('');
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay'; overlay.id = 'jc-tasks-modal-overlay';
+  overlay.innerHTML = `<div class="modal" style="max-width:460px;">
+    <div class="modal-header">
+      <h3 class="modal-title">Select Tasks</h3>
+      <button class="modal-close" onclick="document.getElementById('jc-tasks-modal-overlay').remove()">✕</button>
+    </div>
+    <div class="modal-body"><div class="jc-task-modal-list">${taskItems}</div></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="document.getElementById('jc-tasks-modal-overlay').remove()">Cancel</button>
+      <button class="btn btn-primary" onclick="jcSaveTasksModal('${rid}')">Save</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function jcToggleTaskNote(cb) {
+  const note = cb.closest('.jc-task-pick-row')?.querySelector('.jc-task-pick-note');
+  if (!note) return;
+  note.style.display = cb.checked ? '' : 'none';
+  if (!cb.checked) note.value = '';
+}
+function jcSaveTasksModal(rid) {
+  const overlay = document.getElementById('jc-tasks-modal-overlay'); if (!overlay) return;
+  const tasks = [];
+  overlay.querySelectorAll('.jc-task-pick-row').forEach(row => {
+    const cb = row.querySelector('input[type="checkbox"]');
+    if (cb && cb.checked) tasks.push({ task:cb.value, note:row.querySelector('.jc-task-pick-note')?.value||'' });
+  });
+  const btn = document.getElementById(rid+'-tasks-btn');
+  if (btn) {
+    btn.dataset.tasks = JSON.stringify(tasks);
+    btn.className = 'btn-task-picker' + (tasks.length ? ' has-tasks' : '');
+    const countEl = document.getElementById(rid+'-tasks-count');
+    if (countEl) countEl.textContent = jcTaskCount(tasks);
+  }
+  overlay.remove();
+  jcMarkDirty();
 }
 
 // ── EQUIPMENT ─────────────────────────────────────────────────────
