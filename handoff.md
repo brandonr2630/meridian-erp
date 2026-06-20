@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-20 · Session 30*
+*Last updated: 2026-06-20 · Session 31*
 
 ---
 
@@ -12,6 +12,44 @@
 | GitHub repo | `brandonr2630/meridian-erp` |
 | Deploy | Push to `master` via PR → GitHub Actions → GreenGeeks cPanel auto-deploys |
 | Deploy workflow | `.github/workflows/deploy.yml` → cPanel Fileman API (`chi203.greengeeks.net`) |
+
+---
+
+## Session 31 — Client 360 view
+
+**Date:** 2026-06-20
+**Branch / PR:** [PR #76](https://github.com/brandonr2630/meridian-erp/pull/76)
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| `360` button on Clients table | New action button per row | Calls `open360(clientId)` → sets `currentClient360Id` → `navigate('client-360')`. |
+| `view-client-360` | New full-page view | Static container (`#c360-root`) rendered entirely by JS. Shares the `.page-body` scroll wrapper; no static page-header (header is part of the dynamic render). |
+| `loadClient360()` | Parallel fetch of 9 tables | `Promise.all` over `contact_persons`, `crm_opportunities`, `crm_activities`, `crm_tasks`, `invoices`, `payment_receipts`, `quotations`, `delivery_notes`, `credit_notes` — all filtered by `contact_id=eq.{id}`. `payment_receipts` and `credit_notes` use `.catch(() => [])` for graceful fallback. Client header comes from the existing `contacts` global (no extra fetch). |
+| `_render360(d)` | Main renderer | Left sidebar: avatar initials, financial summary (total billed, balance due, open deals, pipeline value in client's currency, open tasks, last activity, credit limit), contact persons with title/phone/email. Right: `table-wrap` with tab bar + `#c360-content` div. |
+| `_build360Timeline(d)` | Timeline merge function | Normalises all 8 record types to `{ date, icon, title, meta, amount, amountStyle }` and sorts by `date` descending. Payment receipts with `status='voided'` excluded. |
+| `_render360TL(items)` | Timeline renderer | `.c360-tl` list with emoji icon, title, muted meta line, right-aligned amount (coloured for payments/credit notes). |
+| `switch360Tab(tab, el)` | Tab switching | Reads `_c360Data` (module-level); re-renders `#c360-content` from already-fetched data — no re-fetch on tab switch. |
+| `_render360Deals/Invs/Quotes/DNs/CNs/Tasks` | Per-tab table renderers | Standard `.data-table` tables. Delivery Notes and Credit Notes tabs only rendered in the tab bar when `d.dns.length` / `d.cns.length > 0`. Tasks empty state links to `openNewTask(null, clientId)`. |
+| `_open360NewOpp(clientId)` | New deal shortcut | Calls `openNewOpportunity()` then immediately sets `#opp-contact` dropdown value to the client — no modal changes needed. |
+| `.c360-*` CSS | 36-line block | Grid layout (240px sidebar + `minmax(0,1fr)`), panel cards, avatar, stat rows, contact person rows, tab bar with gold active indicator, timeline item rows. Collapses to single-column below 900 px. |
+| Module / sub-module guard | `client-360` added | Added to `sales` module guard and `module_sales_orders` sub-guard — same access level as Clients view. Added to `VIEW_SECTIONS['client-360'] = ['sales']`. |
+| State vars | `currentClient360Id`, `_c360Data` | Added alongside existing CRM state (line ~11531). |
+
+### Architecture notes
+
+- **Jobs not included** — `jobs.customer` is a free-text field, not a `contact_id` FK. To add Work Orders to the 360 view, add a `contact_id` column to the `jobs` table and filter by it here.
+- **No re-fetch on tab switch** — all data is held in `_c360Data` after the initial load. Switching tabs is instant.
+- **`_oppEffectiveStatus(o)`** — reused from the Pipeline module (already global) for deal status badges in the timeline and Deals tab.
+- **Payments currency** — `payment_receipts` has no `currency` column; amounts are shown via `fmtNum` (no currency symbol) rather than `fmt`. The currency is implied by the linked invoice.
+
+### Outstanding
+
+- **Enable leaked password protection** — Supabase Dashboard → Authentication → Passwords (manual toggle only)
+- **Job → Invoice link** — completed job's costing summary pre-fills a Meridian invoice (Session 21)
+- **Job Cards PDF** — printable job card / work order report
+- **Work Orders in Client 360** — requires adding `contact_id` FK to `jobs` table
 
 ---
 
@@ -846,6 +884,7 @@ Items are grouped by theme and ordered by suggested priority within each group. 
 
 - [x] **CRM module** — Pipeline, Activities, Tasks views under the Sales nav; `type: development` for dev inquiry handling. Built in Session 18.
 - [x] **"Convert to Quote" on won deals** — write `quotation_id` back to the opportunity and pre-fill the quote form. Built in Session 28.
+- [x] **Client 360 view** — unified client profile (timeline, financials, deals, invoices, quotes, tasks). Built in Session 31. Work Orders excluded pending `contact_id` FK on `jobs`.
 - [ ] **Email delivery** — send invoices, quotes, and receipts directly from the app via Supabase Edge Function → Resend/SendGrid. Closes the biggest day-to-day manual step.
 - [ ] **Recurring invoices** — flag an invoice as recurring with a frequency; auto-generate the next one on due date. Useful for retainer/monthly clients.
 - [ ] **Overdue reminders** — automated or one-click email reminder for outstanding AR balances. Drives off existing `balance_due` and `due_date` fields.
@@ -885,6 +924,8 @@ Items are grouped by theme and ordered by suggested priority within each group. 
 - [ ] **Enable leaked password protection** — Supabase Dashboard → Authentication → Passwords. Cannot be set via SQL/MCP — requires a manual dashboard toggle.
 - [x] **"Convert to Quote" on a won opportunity** — `openConvertToQuote(oppId)` pre-fills contact/currency/notes/first line from the deal; `saveQuotation()` writes `quotation_id` back; pipeline table shows 📝 Convert or ✓ Quote badge. Built in Session 28.
 - [x] **CRM pipeline KPI widget on the Dashboard** — Zone 3c: 4 stat cards (Open Deals, Won This Month, Win Rate, Open Tasks) + stage funnel (Prospect › Qualified › Proposal › Negotiation). Built in Session 28.
+- [x] **Client 360 view** — full client profile: sidebar financials + contact persons, timeline merging 8 data sources, tabbed drill-down. Built in Session 31.
 - [ ] **Job → Invoice link** — completed job's costing summary pre-fills a Meridian invoice (Session 21)
 - [ ] **Job Cards PDF** — printable job card / work order report for the workshop floor
+- [ ] **Work Orders in Client 360** — add `contact_id` FK to `jobs` table then wire into `loadClient360()`
 
