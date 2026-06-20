@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-20 · Session 28*
+*Last updated: 2026-06-20 · Session 29*
 
 ---
 
@@ -12,6 +12,27 @@
 | GitHub repo | `brandonr2630/meridian-erp` |
 | Deploy | Push to `master` via PR → GitHub Actions → GreenGeeks cPanel auto-deploys |
 | Deploy workflow | `.github/workflows/deploy.yml` → cPanel Fileman API (`chi203.greengeeks.net`) |
+
+---
+
+## Session 29 — Nav and Dashboard layout tweaks
+
+**Date:** 2026-06-20
+**Branch / PRs:** [PR #71](https://github.com/brandonr2630/meridian-erp/pull/71) · [PR #72](https://github.com/brandonr2630/meridian-erp/pull/72)
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| Sidebar: "Sales" → "CRM" | Section label renamed; CRM sub-menu dissolved | "Sales" heading renamed to "CRM". The collapsible CRM sub-section (with its own header and toggle) was removed — Sales Leads, Pipeline, Activities, Tasks are now flat top-level items in the section alongside Quotations and Clients. `VIEW_SECTIONS` updated to remove `'sales-crm'` from auto-expand arrays; stale `sub-section-sales-crm` hide logic removed from `applyRoleNav`. |
+| Dashboard: Sales Pipeline zone moved | Promoted to just below Business Snapshot | Zone 3c (Sales Pipeline stat cards + funnel) moved from between Exchange Rates and Recent Activity to immediately after the Business Snapshot zone. New order: Attention Required → Business Snapshot → **Sales Pipeline** → Operations → Exchange Rates → Recent Activity. |
+
+### Outstanding
+
+- **`voidVendorPayment()` untested** — carried from Session 22
+- **Enable leaked password protection** — Supabase Dashboard → Authentication → Passwords (manual toggle only)
+- **Job → Invoice link** — completed job's costing summary pre-fills a Meridian invoice
+- **Job Cards PDF** — printable job card / work order report
 
 ---
 
