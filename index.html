@@ -1868,6 +1868,34 @@ body {
           </div>
         </div>
 
+        <!-- Zone 3c: Sales Pipeline -->
+        <div id="dash-crm-zone" style="margin-bottom:24px;display:none;">
+          <div style="margin-bottom:8px;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);">Sales Pipeline</div>
+          <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:12px;">
+            <div class="stat-card accent" onclick="navigate('pipeline')" style="cursor:pointer;">
+              <div class="stat-label">Open Deals</div>
+              <div class="stat-value" id="dash-crm-open">—</div>
+              <div class="stat-sub" id="dash-crm-open-val">—</div>
+            </div>
+            <div class="stat-card positive" onclick="navigate('pipeline')" style="cursor:pointer;">
+              <div class="stat-label">Won This Month</div>
+              <div class="stat-value" id="dash-crm-won">—</div>
+              <div class="stat-sub" id="dash-crm-won-val">—</div>
+            </div>
+            <div class="stat-card" onclick="navigate('pipeline')" style="cursor:pointer;">
+              <div class="stat-label">Win Rate</div>
+              <div class="stat-value" id="dash-crm-rate">—</div>
+              <div class="stat-sub">All time</div>
+            </div>
+            <div class="stat-card" onclick="navigate('crm-tasks')" style="cursor:pointer;">
+              <div class="stat-label">Open Tasks</div>
+              <div class="stat-value" id="dash-crm-tasks">—</div>
+              <div class="stat-sub" id="dash-crm-tasks-sub">—</div>
+            </div>
+          </div>
+          <div id="dash-crm-funnel" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;"></div>
+        </div>
+
         <!-- Zone 4: Recent Activity -->
         <div style="display:grid;grid-template-columns:1fr 340px;gap:20px;">
           <div class="section-card">
@@ -7764,6 +7792,9 @@ async function loadDashboard() {
     // ── Zone 3b: Exchange Rates ────────────────────────────────────
     await renderDashForex();
 
+    // ── Zone 3c: Sales Pipeline ────────────────────────────────────
+    loadDashboardCRM().catch(() => {});
+
   } catch(e) { showToast('Dashboard load error: ' + e.message, 'error'); }
 }
 
@@ -11501,6 +11532,7 @@ function printPDF(btn) {
 
 // ── QUOTATIONS ───────────────────────────────────────────────────
 let quotations = [], _quoFiltered = []; let quoPage = 0;
+let _quoFromOppId = null;
 let salesLeads = [];
 let crmOpps = [], _oppFiltered = [], oppPage = 0;
 let crmActivities = [], _actFiltered = [], actPage = 0;
@@ -11610,6 +11642,7 @@ function filterQuotations() {
 }
 
 async function openNewQuotation() {
+  _quoFromOppId = null;
   // Load leads into select
   try {
     salesLeads = await sbGet('sales_leads', Q.salesLeads());
@@ -11636,6 +11669,36 @@ async function openNewQuotation() {
   addQuoLine(); addQuoLine(); addQuoLine();
   recalcQuoTotals();
   document.getElementById('modal-quotation').classList.add('show');
+}
+
+async function openConvertToQuote(oppId) {
+  const opp = crmOpps.find(o => o.id === oppId);
+  if (!opp) return;
+  await openNewQuotation();
+  _quoFromOppId = oppId;
+  document.getElementById('modal-quotation-title').textContent = 'New Quotation from Opportunity';
+  // Pre-fill contact
+  const contact = contacts.find(c => c.id === opp.contact_id);
+  if (contact) {
+    const name = contact.trading_name || contact.name;
+    document.getElementById('quo-contact-id').value          = contact.id;
+    document.getElementById('quo-contact-search').value      = name;
+    document.getElementById('quo-contact-selected').textContent = '✓ ' + name;
+  }
+  // Pre-fill currency
+  if (opp.currency) document.getElementById('quo-currency').value = opp.currency;
+  // Pre-fill notes from opportunity description
+  if (opp.description) document.getElementById('quo-notes').value = opp.description;
+  // Pre-fill first line with opportunity name and value
+  const firstRow = document.querySelector('#quo-lines-body tr');
+  if (firstRow) {
+    const descInput = firstRow.querySelector('input[type="text"]');
+    const nums      = firstRow.querySelectorAll('input[type="number"]');
+    if (descInput) descInput.value = opp.name;
+    if (nums[0])   nums[0].value   = 1;
+    if (nums[1] && opp.value) nums[1].value = parseFloat(opp.value);
+    recalcQuoTotals();
+  }
 }
 
 // ── Quotation new-menu split button ──────────────────────────────
@@ -11969,7 +12032,16 @@ async function saveQuotation(status) {
     }));
     await sbPost('quotation_lines', linePayloads);
 
-    showToast(`Quotation ${quoteNo || '(draft)'} ${status === 'sent' ? 'saved & marked sent' : 'saved as draft'}.`, 'success');
+    if (_quoFromOppId) {
+      const fromOppId = _quoFromOppId;
+      _quoFromOppId = null;
+      await sbPatch('crm_opportunities', fromOppId, { quotation_id: quoId });
+      const oppIdx = crmOpps.findIndex(o => o.id === fromOppId);
+      if (oppIdx >= 0) crmOpps[oppIdx] = { ...crmOpps[oppIdx], quotation_id: quoId };
+      showToast(`Quotation ${quoteNo || '(draft)'} created and linked to opportunity.`, 'success');
+    } else {
+      showToast(`Quotation ${quoteNo || '(draft)'} ${status === 'sent' ? 'saved & marked sent' : 'saved as draft'}.`, 'success');
+    }
     closeModal('modal-quotation');
     await loadQuotations();
     await loadDashConversion();
@@ -12387,6 +12459,72 @@ async function refreshForexRates() {
   await fetchAndSaveRates();
   await loadExchangeRates();
   await renderDashForex();
+}
+
+async function loadDashboardCRM() {
+  const zone = document.getElementById('dash-crm-zone');
+  if (!zone) return;
+  if (!currentUser || currentUser.module_sales_crm === false || !currentUser.module_sales) {
+    zone.style.display = 'none';
+    return;
+  }
+  zone.style.display = '';
+
+  const coId = currentCompany.id;
+  const base  = currentCompany.base_currency || currentCompany.currency || 'TTD';
+  const now   = new Date();
+  const mFrom = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+
+  const [opps, tasks] = await Promise.all([
+    sbGet('crm_opportunities', Q.crmOpps()),
+    sbGet('crm_tasks',         `company_id=eq.${coId}&status=eq.open&select=id,due_date`)
+  ]);
+
+  const open  = opps.filter(o => _oppEffectiveStatus(o) === 'open');
+  const won   = opps.filter(o => _oppEffectiveStatus(o) === 'won');
+  const lost  = opps.filter(o => _oppEffectiveStatus(o) === 'lost');
+  const wonThisMonth = won.filter(o => (o.won_at || '').slice(0,7) === mFrom.slice(0,7));
+
+  const openVal = open.reduce((s,o) => s + convertToBase(parseFloat(o.value||0), o.currency||base).amount, 0);
+  const wonVal  = wonThisMonth.reduce((s,o) => s + convertToBase(parseFloat(o.value||0), o.currency||base).amount, 0);
+  const winRate = (won.length + lost.length) > 0 ? Math.round(won.length / (won.length + lost.length) * 100) : null;
+  const today   = todayDate();
+  const overdueTasks = tasks.filter(t => t.due_date && t.due_date < today).length;
+
+  document.getElementById('dash-crm-open').textContent     = open.length || '—';
+  document.getElementById('dash-crm-open-val').textContent = open.length ? fmt(openVal, base) : 'No open deals';
+  document.getElementById('dash-crm-won').textContent      = wonThisMonth.length || '—';
+  document.getElementById('dash-crm-won-val').textContent  = wonThisMonth.length ? fmt(wonVal, base) : 'None this month';
+  document.getElementById('dash-crm-rate').textContent     = winRate !== null ? `${winRate}%` : '—';
+  document.getElementById('dash-crm-tasks').textContent    = tasks.length || '—';
+  document.getElementById('dash-crm-tasks-sub').textContent = overdueTasks ? `${overdueTasks} overdue` : tasks.length ? 'On track' : 'All clear';
+
+  const tasksCard = document.getElementById('dash-crm-tasks')?.closest('.stat-card');
+  if (tasksCard) tasksCard.style.borderColor = overdueTasks ? 'var(--red)' : '';
+
+  // Stage funnel for open deals
+  const stages = ['prospect','qualified','proposal','negotiation'];
+  const stageLabels = { prospect:'Prospect', qualified:'Qualified', proposal:'Proposal', negotiation:'Negotiation' };
+  const stageCounts = {};
+  stages.forEach(s => { stageCounts[s] = 0; });
+  open.forEach(o => {
+    const s = (o.stage || '').toLowerCase();
+    if (stageCounts[s] !== undefined) stageCounts[s]++;
+    else stageCounts[s] = (stageCounts[s]||0) + 1;
+  });
+
+  const funnel = document.getElementById('dash-crm-funnel');
+  const parts = [];
+  stages.forEach((s, i) => {
+    const count = stageCounts[s] || 0;
+    parts.push(`<div onclick="navigate('pipeline')" style="cursor:pointer;display:inline-flex;flex-direction:column;align-items:center;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:6px 14px;min-width:76px;">
+        <span style="font-size:18px;font-weight:700;color:${count ? 'var(--accent)' : 'var(--text-3)'};">${count}</span>
+        <span style="font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:1px;">${stageLabels[s]}</span>
+      </div>`);
+    if (i < stages.length - 1) parts.push('<span style="color:var(--text-3);font-size:14px;align-self:center;">›</span>');
+  });
+  funnel.style.gap = '8px';
+  funnel.innerHTML = parts.join('');
 }
 
 // Update base_currency in company modal
@@ -13904,6 +14042,8 @@ function renderPipelineTable() {
             <button class="btn btn-ghost btn-xs" aria-label="Log Activity" onclick="openNewActivity('${o.id}',null)">📅</button>
             <button class="btn btn-ghost btn-xs" aria-label="New Task" onclick="openNewTask('${o.id}',null)">✅</button>
             ${effStatus === 'open' ? `<button class="btn btn-ghost btn-xs" aria-label="Mark Won" title="Mark Won" onclick="quickMarkOpp('${o.id}','won')">🏆</button><button class="btn btn-ghost btn-xs" aria-label="Mark Lost" title="Mark Lost" onclick="quickMarkOpp('${o.id}','lost')">✗</button>` : ''}
+            ${effStatus === 'won' && !o.quotation_id ? `<button class="btn btn-ghost btn-xs" aria-label="Convert to Quote" title="Convert to Quote" onclick="openConvertToQuote('${o.id}')">📝</button>` : ''}
+            ${effStatus === 'won' && o.quotation_id  ? `<span title="Quote linked" style="font-size:11px;color:var(--green);padding:0 4px;">✓ Quote</span>` : ''}
             <button class="btn btn-ghost btn-xs" aria-label="Edit" onclick="openEditOpportunity('${o.id}')">✏️</button>
             <button class="btn btn-ghost btn-xs" aria-label="Delete" onclick="deleteOpportunity('${o.id}')">🗑</button>
           </td>
