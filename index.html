@@ -1530,6 +1530,217 @@ body {
 .jc-chip-del:hover { color:var(--red); }
 .jc-task-dd { font-size:11px; border:1px dashed var(--border-2); border-radius:4px; padding:2px 4px; color:var(--text-2); background:var(--bg-card); cursor:pointer; max-width:120px; }
 .jc-task-dd:focus { outline:none; border-color:var(--gold); }
+
+/* ═══════════════════════════════════════════════════════════════
+   MERIDIAN — VISUAL ENHANCEMENT LAYER  (cosmetic only, safe)
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Font rendering ── */
+* { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+/* ── Topbar — elevation & depth ── */
+.topbar {
+  background: linear-gradient(180deg, var(--bg-2) 0%, rgba(20,20,20,0.99) 100%);
+  box-shadow: 0 1px 0 var(--border), 0 4px 24px rgba(0,0,0,0.28);
+  border-bottom: none;
+}
+body.light .topbar {
+  background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%);
+  box-shadow: 0 1px 0 var(--border), 0 2px 10px rgba(0,0,0,0.07);
+  border-bottom: none;
+}
+
+/* ── Logo mark — premium gold gradient with subtle shine ── */
+.topbar-logo-mark, .login-logo-mark {
+  background: linear-gradient(140deg, #a8762e 0%, #eacb6e 42%, #c9a84c 72%, #b59040 100%);
+  box-shadow: 0 2px 12px rgba(201,168,76,0.45), inset 0 1px 0 rgba(255,255,255,0.28);
+}
+.topbar-logo { letter-spacing: 0.8px; }
+
+/* ── Global search — focus glow ── */
+.global-search-box {
+  background: var(--bg);
+  border-color: var(--border-2);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.global-search-box:focus-within {
+  border-color: rgba(201,168,76,0.55);
+  box-shadow: 0 0 0 3px rgba(201,168,76,0.10);
+}
+
+/* ── User avatar ── */
+.user-avatar { box-shadow: 0 0 0 1.5px var(--border-2); font-weight: 700; }
+
+/* ── Sidebar — active item left accent bar ── */
+.nav-item { transition: background 0.1s, color 0.1s; }
+.nav-item.active {
+  background: linear-gradient(90deg, rgba(201,168,76,0.17) 0%, rgba(201,168,76,0.04) 100%);
+  border-color: rgba(201,168,76,0.18);
+  color: var(--gold-2);
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--gold);
+}
+body.light .nav-item.active {
+  background: linear-gradient(90deg, rgba(168,133,58,0.12) 0%, rgba(168,133,58,0.03) 100%);
+  border-color: rgba(168,133,58,0.18);
+  box-shadow: inset 3px 0 0 var(--gold);
+}
+.sidebar-section-label { letter-spacing: 2px; font-size: 9px; }
+
+/* ── Buttons ── */
+.btn { letter-spacing: 0.2px; transition: all 0.15s; }
+.btn-primary {
+  background: linear-gradient(155deg, #d4ae54 0%, #c9a84c 55%, #b89040 100%);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.28), 0 2px 10px rgba(201,168,76,0.28), inset 0 1px 0 rgba(255,255,255,0.18);
+  font-weight: 600;
+}
+.btn-primary:hover {
+  background: linear-gradient(155deg, #debb5f 0%, #d4ae54 55%, #c9a84c 100%);
+  box-shadow: 0 2px 18px rgba(201,168,76,0.44), 0 1px 0 rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.22);
+  transform: translateY(-1px);
+}
+.btn-primary:active { transform: translateY(0); box-shadow: 0 1px 6px rgba(201,168,76,0.3); }
+.btn-outline:hover { transform: translateY(-1px); box-shadow: 0 2px 10px rgba(0,0,0,0.14); }
+
+/* ── Stat cards — color top stripe + hover lift ── */
+.stat-card {
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+  transition: box-shadow 0.15s, transform 0.15s;
+  position: relative;
+}
+.stat-card::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 2px;
+  background: var(--border-2);
+  pointer-events: none;
+  border-radius: 10px 10px 0 0;
+}
+.stat-card.positive::after { background: var(--green); }
+.stat-card.negative::after { background: var(--red); }
+.stat-card.accent::after   { background: linear-gradient(90deg, var(--gold) 0%, var(--gold-2) 100%); }
+.stat-card[onclick]:hover  { transform: translateY(-2px); box-shadow: 0 6px 28px rgba(0,0,0,0.24); }
+body.light .stat-card { box-shadow: 0 1px 4px rgba(0,0,0,0.07), 0 2px 12px rgba(0,0,0,0.04); }
+.stat-label { letter-spacing: 1.2px; font-size: 10px; }
+
+/* ── Tables ── */
+.table-wrap { border-radius: 10px; box-shadow: 0 2px 16px rgba(0,0,0,0.14); }
+body.light .table-wrap { box-shadow: 0 1px 8px rgba(0,0,0,0.07); }
+.data-table th { letter-spacing: 1.1px; }
+.search-box { transition: border-color 0.15s, box-shadow 0.15s; }
+.search-box:focus-within { border-color: rgba(201,168,76,0.5); box-shadow: 0 0 0 3px rgba(201,168,76,0.10); }
+
+/* ── Section cards ── */
+.section-card { border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,0.12); }
+body.light .section-card { box-shadow: 0 1px 6px rgba(0,0,0,0.06); }
+.section-card-title { letter-spacing: 0.8px; }
+
+/* ── Modals — depth & glass ── */
+.modal-overlay { backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.modal, .modal-lg, .modal-xl {
+  border-radius: 12px;
+  box-shadow: 0 24px 72px rgba(0,0,0,0.65), inset 0 0 0 1px rgba(255,255,255,0.04);
+  border-color: var(--border-2);
+}
+body.light .modal, body.light .modal-lg, body.light .modal-xl {
+  box-shadow: 0 16px 52px rgba(0,0,0,0.16);
+  border-color: var(--border);
+}
+.modal-title { letter-spacing: -0.2px; }
+.modal-close { opacity: 0.6; transition: opacity 0.15s, color 0.15s, background 0.15s; }
+.modal-close:hover { opacity: 1; }
+
+/* ── Forms — focus glow ── */
+.field-label { letter-spacing: 1px; font-size: 10.5px; }
+.field input, .field select, .field textarea { border-radius: 6px; transition: border-color 0.15s, box-shadow 0.15s; }
+.field input:focus, .field select:focus, .field textarea:focus { box-shadow: 0 0 0 3px rgba(201,168,76,0.13); }
+
+/* ── Badges ── */
+.badge { font-size: 10px; letter-spacing: 0.5px; border-radius: 5px; }
+
+/* ── Tabs ── */
+.tab-btn.active { font-weight: 600; }
+
+/* ── Toast — glass effect ── */
+.toast {
+  border-radius: 10px;
+  box-shadow: 0 8px 36px rgba(0,0,0,0.38), inset 0 0 0 1px rgba(255,255,255,0.04);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  font-size: 12.5px;
+}
+
+/* ── Login card ── */
+.login-card {
+  border-radius: 14px;
+  box-shadow: 0 32px 80px rgba(0,0,0,0.58), inset 0 0 0 1px rgba(255,255,255,0.04);
+  border-color: var(--border-2);
+}
+.login-btn {
+  border-radius: 7px;
+  letter-spacing: 1.5px;
+  background: linear-gradient(155deg, #d4ae54 0%, #c9a84c 55%, #b89040 100%);
+  box-shadow: 0 2px 14px rgba(201,168,76,0.42);
+  transition: background 0.15s, box-shadow 0.15s, transform 0.12s;
+}
+.login-btn:hover {
+  background: linear-gradient(155deg, #debb5f 0%, #d4ae54 55%, #c9a84c 100%) !important;
+  box-shadow: 0 4px 22px rgba(201,168,76,0.58) !important;
+  transform: translateY(-1px);
+}
+
+/* ── Scrollbar — thinner & refined ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-thumb { border-radius: 4px; }
+
+/* ── Welcome bar — warm gold tint ── */
+.welcome-bar {
+  background: linear-gradient(135deg, var(--bg-2) 0%, var(--bg-3) 60%, rgba(201,168,76,0.06) 100%);
+  border-radius: 10px;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.12);
+}
+body.light .welcome-bar {
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 65%, rgba(168,133,58,0.04) 100%);
+}
+
+/* ── JC cards ── */
+.card { border-radius: 10px; box-shadow: 0 1px 8px rgba(0,0,0,0.16); }
+
+/* ── Dropdowns ── */
+.company-dropdown, .notif-dropdown, .global-search-results, .split-btn-menu {
+  border-radius: 10px;
+  box-shadow: 0 14px 44px rgba(0,0,0,0.42), inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+body.light .company-dropdown, body.light .notif-dropdown,
+body.light .global-search-results, body.light .split-btn-menu {
+  box-shadow: 0 8px 32px rgba(0,0,0,0.13);
+}
+
+/* ── Page & table titles ── */
+.page-title { letter-spacing: -0.4px; }
+.table-title { letter-spacing: 0.3px; }
+
+/* ── Loading spinner ── */
+.loading-spinner { border-top-color: var(--gold); }
+
+/* ── Filter selects ── */
+.filter-select { transition: border-color 0.15s; }
+.filter-select:focus { border-color: rgba(201,168,76,0.5); outline: none; box-shadow: 0 0 0 3px rgba(201,168,76,0.10); }
+
+/* ── Topbar icon buttons ── */
+.topbar-icon-btn { border-radius: 6px; }
+
+/* ── Nav badges ── */
+.nav-badge { font-size: 9px; letter-spacing: 0.3px; }
+
+/* ── C360 panel ── */
+.c360-panel { border-radius: 10px; }
+
+/* ── Dashboard alert cards ── */
+.dash-alert-card { transition: box-shadow 0.15s, transform 0.15s; }
+.dash-alert-card:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(0,0,0,0.22); }
 </style>
 </head>
 <body>
