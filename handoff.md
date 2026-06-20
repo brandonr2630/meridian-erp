@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-20 · Session 27*
+*Last updated: 2026-06-20 · Session 28*
 
 ---
 
@@ -12,6 +12,39 @@
 | GitHub repo | `brandonr2630/meridian-erp` |
 | Deploy | Push to `master` via PR → GitHub Actions → GreenGeeks cPanel auto-deploys |
 | Deploy workflow | `.github/workflows/deploy.yml` → cPanel Fileman API (`chi203.greengeeks.net`) |
+
+---
+
+## Session 28 — Convert to Quote + CRM Dashboard Widget
+
+**Date:** 2026-06-20
+**Branch / PR:** TBD — all changes to `index.html` only.
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| `_quoFromOppId` | New state var | Holds the opportunity ID being converted while the quotation modal is open. Reset to `null` by `openNewQuotation()` and cleared immediately before the write-back in `saveQuotation()`. |
+| `openConvertToQuote(oppId)` | New function | Calls `openNewQuotation()` (initialises blank form), then sets `_quoFromOppId = oppId` and pre-fills: contact (id + search display), currency from the opportunity, notes from opportunity `description`, and first line item (opportunity name as description, qty=1, unit_price=opportunity value if set). |
+| `saveQuotation()` write-back | Conditional PATCH after save | If `_quoFromOppId` is set when `saveQuotation()` completes: PATCHes `crm_opportunities.quotation_id = quoId`, updates the in-memory `crmOpps` array entry, resets `_quoFromOppId`, shows a "created and linked" toast instead of the normal one. |
+| Pipeline table — Convert button | 📝 button on won deals | Shown when `effStatus === 'won' && !o.quotation_id`. Calls `openConvertToQuote(o.id)`. |
+| Pipeline table — Quote linked badge | `✓ Quote` badge on linked deals | Shown when `effStatus === 'won' && o.quotation_id`. Green text, no action. |
+| Dashboard Zone 3c | New "Sales Pipeline" zone | Inserted between the Forex zone and Recent Activity. Four stat cards: Open Deals (count + open value in base currency), Won This Month (count + value), Win Rate (all-time %, won ÷ (won + lost)), Open Tasks (count + "N overdue" if any, red border when overdue). Stage funnel below the cards: Prospect › Qualified › Proposal › Negotiation counts for open deals. Entire zone hidden when `module_sales_crm === false`. |
+| `loadDashboardCRM()` | New async function | Called fire-and-forget from `loadDashboard()`. Fetches `crm_opportunities` (Q.crmOpps()) and `crm_tasks` (open only). Computes all KPIs and renders the zone. |
+
+### Architecture notes
+
+- **`_quoFromOppId` lifecycle:** set by `openConvertToQuote` after the modal is ready; cleared at the start of `saveQuotation`'s success branch (before the PATCH) so a modal close without saving leaves no stale state.
+- **In-memory sync:** after the `quotation_id` write-back, `crmOpps[oppIdx]` is updated in place — so if the user navigates to Pipeline on the same session, the "✓ Quote" badge renders immediately without a round-trip.
+- **Dashboard CRM zone** uses `_oppEffectiveStatus(o)` for backward compat (same as the Pipeline view). Win rate denominator is `won.length + lost.length`; shows `—` if both are zero (no closed deals yet).
+- **Open Tasks card** overdue check uses `todayDate()` and compares `t.due_date`. Red border applied via `.stat-card` `borderColor` (same pattern as overdue invoices card).
+
+### Outstanding
+
+- **`voidVendorPayment()` untested** — carried from Session 22
+- **Enable leaked password protection** — Supabase Dashboard → Authentication → Passwords (manual toggle only)
+- **Job → Invoice link** — completed job's costing summary pre-fills a Meridian invoice
+- **Job Cards PDF** — printable job card / work order report
 
 ---
 
@@ -774,7 +807,7 @@ Items are grouped by theme and ordered by suggested priority within each group. 
 ### Sales & CRM
 
 - [x] **CRM module** — Pipeline, Activities, Tasks views under the Sales nav; `type: development` for dev inquiry handling. Built in Session 18.
-- [ ] **"Convert to Quote" on won deals** — write `quotation_id` back to the opportunity and pre-fill the quote form. The remaining piece of the CRM module.
+- [x] **"Convert to Quote" on won deals** — write `quotation_id` back to the opportunity and pre-fill the quote form. Built in Session 28.
 - [ ] **Email delivery** — send invoices, quotes, and receipts directly from the app via Supabase Edge Function → Resend/SendGrid. Closes the biggest day-to-day manual step.
 - [ ] **Recurring invoices** — flag an invoice as recurring with a frequency; auto-generate the next one on due date. Useful for retainer/monthly clients.
 - [ ] **Overdue reminders** — automated or one-click email reminder for outstanding AR balances. Drives off existing `balance_due` and `due_date` fields.
@@ -791,7 +824,7 @@ Items are grouped by theme and ordered by suggested priority within each group. 
 
 - [ ] **Cash position widget** — sum of all bank account balances by currency on the dashboard. Data already in `bank_accounts`.
 - [ ] **Receivables / payables aging chart** — visual bar chart version of the aged AR/AP reports shown on the dashboard.
-- [ ] **Sales pipeline KPIs** — deals by stage, conversion rate, average deal size. Builds on CRM module.
+- [x] **Sales pipeline KPIs** — deals by stage, conversion rate, average deal size. Dashboard Zone 3c built in Session 28.
 
 ### Usability
 
@@ -812,8 +845,8 @@ Items are grouped by theme and ordered by suggested priority within each group. 
 
 - [x] **CRM module UI** — Enhanced Pipeline (status/probability/source/won-lost + quick Mark Won/Lost), Contact Persons management on client records, Activity + Task contact linking. Built in Session 27.
 - [ ] **Enable leaked password protection** — Supabase Dashboard → Authentication → Passwords. Cannot be set via SQL/MCP — requires a manual dashboard toggle.
-- [ ] **"Convert to Quote" on a won opportunity** — pre-fill the quote form from the deal; write `quotation_id` back to the opportunity (carried over from Session 18)
-- [ ] **CRM pipeline KPI widget on the Dashboard** — deals by stage, conversion rate (carried over from Session 18)
+- [x] **"Convert to Quote" on a won opportunity** — `openConvertToQuote(oppId)` pre-fills contact/currency/notes/first line from the deal; `saveQuotation()` writes `quotation_id` back; pipeline table shows 📝 Convert or ✓ Quote badge. Built in Session 28.
+- [x] **CRM pipeline KPI widget on the Dashboard** — Zone 3c: 4 stat cards (Open Deals, Won This Month, Win Rate, Open Tasks) + stage funnel (Prospect › Qualified › Proposal › Negotiation). Built in Session 28.
 - [ ] **Job → Invoice link** — completed job's costing summary pre-fills a Meridian invoice (Session 21)
 - [ ] **Job Cards PDF** — printable job card / work order report for the workshop floor
 
