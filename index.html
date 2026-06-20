@@ -1319,6 +1319,36 @@ body {
 .card-header-badge { font-family:'DM Mono',monospace; font-size:10px; color:var(--gold); background:var(--gold-bg); border:1px solid var(--gold-border); border-radius:10px; padding:1px 8px; }
 .card-body { padding:14px 16px; }
 
+/* ── CLIENT 360 ── */
+.c360-layout { display:grid; grid-template-columns:240px minmax(0,1fr); gap:1rem; align-items:start; }
+@media (max-width:900px) { .c360-layout { grid-template-columns:1fr; } }
+.c360-panel { background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-lg); padding:1rem; }
+.c360-panel + .c360-panel { margin-top:0.75rem; }
+.c360-avatar { width:52px; height:52px; border-radius:50%; background:var(--gold-bg); border:1px solid var(--gold-border); display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:600; color:var(--gold); margin:0 auto 0.75rem; }
+.c360-name { text-align:center; font-weight:600; font-size:14px; margin-bottom:2px; }
+.c360-sub  { text-align:center; font-size:11px; color:var(--text-2); margin-bottom:2px; }
+.c360-lbl  { font-size:10px; font-weight:600; color:var(--text-3); text-transform:uppercase; letter-spacing:0.06em; margin:14px 0 6px; border-top:1px solid var(--border); padding-top:10px; }
+.c360-row  { display:flex; justify-content:space-between; align-items:center; padding:3px 0; font-size:12px; }
+.c360-key  { color:var(--text-2); }
+.c360-val  { font-weight:500; text-align:right; }
+.c360-cp-row  { display:flex; align-items:center; gap:8px; padding:5px 0; }
+.c360-cp-av   { width:28px; height:28px; border-radius:50%; background:var(--bg-3); display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:600; color:var(--text-2); flex-shrink:0; }
+.c360-cp-name  { font-size:12px; font-weight:500; }
+.c360-cp-title { font-size:11px; color:var(--text-2); }
+.c360-tabs { display:flex; padding:0 12px; border-bottom:1px solid var(--border); gap:0; overflow-x:auto; }
+.c360-tab  { padding:10px 12px; font-size:12px; color:var(--text-2); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap; }
+.c360-tab:hover { color:var(--text); }
+.c360-tab.active { color:var(--text); border-bottom-color:var(--gold); font-weight:500; }
+.c360-tl { display:flex; flex-direction:column; }
+.c360-tl-item { display:flex; align-items:flex-start; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); }
+.c360-tl-item:last-child { border-bottom:none; }
+.c360-tl-ic   { font-size:16px; flex-shrink:0; width:26px; text-align:center; margin-top:1px; }
+.c360-tl-body { flex:1; min-width:0; }
+.c360-tl-title { font-size:12px; font-weight:500; margin-bottom:2px; }
+.c360-tl-meta  { font-size:11px; color:var(--text-2); }
+.c360-tl-amt   { font-size:12px; font-weight:500; white-space:nowrap; flex-shrink:0; margin-left:auto; }
+.c360-empty { text-align:center; color:var(--text-3); padding:2rem; font-size:13px; }
+
 /* Section divider within cards */
 .section-divider { font-size:10px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-3); padding:8px 0 4px; border-bottom:1px solid var(--border); margin-bottom:10px; }
 
@@ -2518,6 +2548,13 @@ body {
           </div>
           <div id="clients-table-wrap"><div class="page-loading"><div class="loading-spinner"></div> Loading...</div></div>
         </div>
+      </div>
+    </div>
+
+    <!-- ── CLIENT 360 ── -->
+    <div class="page-view" id="view-client-360">
+      <div class="page-body">
+        <div id="c360-root"><div class="page-loading"><div class="loading-spinner"></div> Loading...</div></div>
       </div>
     </div>
 
@@ -5641,7 +5678,7 @@ const VIEW_SECTIONS = {
   bs:         ['finance', 'finance-reports'],
   tb:         ['finance', 'finance-reports'],
   cf:         ['finance', 'finance-reports'],
-  quotations: ['sales'], clients: ['sales'],
+  quotations: ['sales'], clients: ['sales'], 'client-360': ['sales'],
   'sales-leads': ['sales'],
   pipeline: ['sales'], 'crm-activities': ['sales'], 'crm-tasks': ['sales'],
   'work-orders': ['operations'], 'job-costing': ['operations'], 'delivery-notes': ['operations'], 'job-config': ['operations'],
@@ -5697,7 +5734,7 @@ function navigate(view) {
     const u = currentUser;
     const moduleGuard = {
       finance:    ['coa','journal','ar','credit-notes','ap','vendors','bank','pl','bs','tb','cf','aged-ar','aged-ap'],
-      sales:      ['sales-leads','pipeline','crm-activities','crm-tasks','quotations','clients'],
+      sales:      ['sales-leads','pipeline','crm-activities','crm-tasks','quotations','clients','client-360'],
       operations: ['work-orders','job-costing','delivery-notes','job-config'],
     };
     for (const [mod, views] of Object.entries(moduleGuard)) {
@@ -5712,7 +5749,7 @@ function navigate(view) {
         [['coa','journal'],                  u.module_finance_ledger  === false],
         [['pl','bs','tb','cf','aged-ar','aged-ap'], u.module_finance_reports === false],
         [['sales-leads','pipeline','crm-activities','crm-tasks'], u.module_sales_crm    === false],
-        [['quotations','clients'],           u.module_sales_orders    === false],
+        [['quotations','clients','client-360'], u.module_sales_orders    === false],
       ];
       for (const [views, blocked] of subGuard) {
         if (blocked && views.includes(view)) { view = 'dashboard'; break; }
@@ -5761,7 +5798,8 @@ async function loadViewData(view) {
     case 'pipeline':       await loadPipeline(); break;
     case 'crm-activities': await loadCRMActivities(); break;
     case 'crm-tasks':      await loadCRMTasks(); break;
-    case 'clients':   await loadClients(); break;
+    case 'clients':      await loadClients(); break;
+    case 'client-360':  await loadClient360(); break;
     case 'vendors':   await loadVendors(); break;
     case 'erp-companies': await loadErpCompanies(); break; // alias (legacy)
     case 'companies': await loadErpCompanies(); break;
@@ -8662,6 +8700,7 @@ function renderClientsTable(list) {
         <td class="mono">${c.credit_limit ? fmt(c.credit_limit, c.currency) : '—'}</td>
         <td><span class="badge ${c.is_active!==false?'badge-posted':'badge-void'}">${c.is_active!==false?'Active':'Inactive'}</span></td>
         <td class="right" style="white-space:nowrap;">
+          <button class="btn btn-ghost btn-sm btn-icon" onclick="open360('${c.id}')" title="360 View" aria-label="Client 360 view">360</button>
           <button class="btn btn-ghost btn-sm btn-icon" onclick="openContactPersonsModal('${c.id}')" title="Contact Persons" aria-label="Contact persons">👥</button>
           <button class="btn btn-ghost btn-sm btn-icon" onclick="openEditClient('${c.id}')" title="Edit" aria-label="Edit client">✏️</button>
         </td>
@@ -11528,6 +11567,7 @@ let crmActivities = [], _actFiltered = [], actPage = 0;
 let crmTasks = [], _taskFiltered = [], taskPage = 0;
 let erpUsers = [];
 let contactPersons = [], _editOppId = null, _editActId = null, _editTaskId = null, _editCPId = null, _cpClientId = null;
+let currentClient360Id = null, _c360Data = null;
 
 async function loadQuotations() {
   const quoWrap = document.getElementById('quo-table-wrap');
@@ -14475,6 +14515,340 @@ async function deleteTask(id) {
     showToast('Task deleted.', 'success');
     await loadCRMTasks();
   } catch(e) { showToast('Error deleting task.', 'error'); }
+}
+
+// ── CLIENT 360 ───────────────────────────────────────────────────
+
+function open360(clientId) {
+  currentClient360Id = clientId;
+  navigate('client-360');
+}
+
+function _open360NewOpp(clientId) {
+  openNewOpportunity();
+  const sel = document.getElementById('opp-contact');
+  if (sel && clientId) sel.value = clientId;
+}
+
+async function loadClient360() {
+  if (!currentClient360Id) return;
+  const root = document.getElementById('c360-root');
+  root.innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading client profile...</div>';
+  const cid = currentCompany.id;
+  const id  = currentClient360Id;
+  const client = contacts.find(c => c.id === id) || {};
+  try {
+    const [persons, opps, activities, tasks, invs, receipts, quotes, dns, cns] = await Promise.all([
+      sbGet('contact_persons',   `contact_id=eq.${id}&is_active=eq.true&order=is_primary.desc,name`),
+      sbGet('crm_opportunities', `company_id=eq.${cid}&contact_id=eq.${id}&order=created_at.desc`),
+      sbGet('crm_activities',    `company_id=eq.${cid}&contact_id=eq.${id}&order=activity_date.desc,created_at.desc`),
+      sbGet('crm_tasks',         `company_id=eq.${cid}&contact_id=eq.${id}&order=due_date.asc`),
+      sbGet('invoices',          `company_id=eq.${cid}&contact_id=eq.${id}&order=invoice_date.desc`),
+      sbGet('payment_receipts',  `contact_id=eq.${id}&order=receipt_date.desc`).catch(() => []),
+      sbGet('quotations',        `company_id=eq.${cid}&contact_id=eq.${id}&order=quote_date.desc`),
+      sbGet('delivery_notes',    `company_id=eq.${cid}&contact_id=eq.${id}&order=dn_date.desc`),
+      sbGet('credit_notes',      `company_id=eq.${cid}&contact_id=eq.${id}&order=cn_date.desc`).catch(() => []),
+    ]);
+    _c360Data = { client, persons, opps, activities, tasks, invs, receipts, quotes, dns, cns };
+    _render360(_c360Data);
+  } catch(e) {
+    root.innerHTML = `<div class="table-empty">Error loading client: ${escHTML(e.message)}</div>`;
+    showToast('Client 360 load error: ' + e.message, 'error');
+  }
+}
+
+function switch360Tab(tab, el) {
+  document.querySelectorAll('.c360-tab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  const d = _c360Data;
+  const content = document.getElementById('c360-content');
+  if (!d || !content) return;
+  switch(tab) {
+    case 'timeline': content.innerHTML = _render360TL(_build360Timeline(d)); break;
+    case 'deals':    content.innerHTML = _render360Deals(d.opps); break;
+    case 'invoices': content.innerHTML = _render360Invs(d.invs); break;
+    case 'quotes':   content.innerHTML = _render360Quotes(d.quotes); break;
+    case 'dns':      content.innerHTML = _render360DNs(d.dns); break;
+    case 'cns':      content.innerHTML = _render360CNs(d.cns); break;
+    case 'tasks':    content.innerHTML = _render360Tasks(d.tasks, d.client.id); break;
+  }
+}
+
+function _build360Timeline(d) {
+  const items = [];
+  const today = todayDate();
+
+  d.invs.forEach(i => items.push({
+    date: i.invoice_date || '',
+    icon: '📄',
+    title: `Invoice ${escHTML(i.invoice_no || 'Draft')} raised`,
+    meta: `${i.invoice_date || '—'} · Due ${i.due_date || '—'} · ${i.status}`,
+    amount: fmt(i.total || 0, i.currency),
+    amountStyle: '',
+  }));
+
+  d.receipts.filter(r => r.status !== 'voided').forEach(r => items.push({
+    date: r.receipt_date || (r.created_at || '').slice(0, 10),
+    icon: '💰',
+    title: `Payment received${r.receipt_no ? ' — ' + escHTML(r.receipt_no) : ''}`,
+    meta: `${r.receipt_date || '—'}${r.payment_method ? ' · ' + escHTML(r.payment_method) : ''}`,
+    amount: r.amount ? fmtNum(r.amount) : null,
+    amountStyle: 'color:var(--green)',
+  }));
+
+  d.quotes.forEach(q => items.push({
+    date: q.quote_date || '',
+    icon: '📝',
+    title: `Quotation ${escHTML(q.quote_no || 'Draft')}`,
+    meta: `${q.quote_date || '—'} · ${q.status}`,
+    amount: fmt(q.total || 0, q.currency),
+    amountStyle: '',
+  }));
+
+  d.activities.forEach(a => items.push({
+    date: a.activity_date || (a.created_at || '').slice(0, 10),
+    icon: a.type === 'call' ? '📞' : a.type === 'email' ? '📧' : a.type === 'meeting' ? '🤝' : '📋',
+    title: `${a.type ? a.type.charAt(0).toUpperCase() + a.type.slice(1) : 'Activity'}: ${escHTML(a.subject || '')}`,
+    meta: a.activity_date || '',
+    amount: null,
+    amountStyle: '',
+  }));
+
+  d.tasks.forEach(t => {
+    const overdue = !t.completed && t.due_date && t.due_date < today;
+    items.push({
+      date: t.due_date || (t.created_at || '').slice(0, 10),
+      icon: t.completed ? '✅' : '📌',
+      title: `Task: ${escHTML(t.title || '')}`,
+      meta: t.due_date ? `Due ${t.due_date}${t.completed ? ' · Completed' : overdue ? ' · Overdue' : ''}` : '',
+      amount: null,
+      amountStyle: overdue ? 'color:var(--red)' : '',
+    });
+  });
+
+  d.opps.forEach(o => {
+    const status = _oppEffectiveStatus(o);
+    items.push({
+      date: (o.created_at || '').slice(0, 10),
+      icon: status === 'won' ? '🏆' : status === 'lost' ? '❌' : '📈',
+      title: `Deal: ${escHTML(o.name || '')}`,
+      meta: `${(o.created_at || '').slice(0, 10)} · ${o.stage || ''} · ${status}`,
+      amount: o.value ? fmt(o.value, o.currency) : null,
+      amountStyle: status === 'won' ? 'color:var(--green)' : '',
+    });
+  });
+
+  d.dns.forEach(dn => items.push({
+    date: dn.dn_date || '',
+    icon: '🚚',
+    title: `Delivery Note ${escHTML(dn.dn_no || 'Draft')}`,
+    meta: dn.dn_date || '',
+    amount: null,
+    amountStyle: '',
+  }));
+
+  d.cns.forEach(cn => items.push({
+    date: cn.cn_date || '',
+    icon: '↩️',
+    title: `Credit Note ${escHTML(cn.cn_no || 'Draft')}`,
+    meta: `${cn.cn_date || '—'} · ${cn.status || ''}`,
+    amount: cn.total ? fmt(cn.total, cn.currency) : null,
+    amountStyle: 'color:var(--red)',
+  }));
+
+  return items.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+}
+
+function _render360TL(items) {
+  if (!items.length) return '<div class="c360-empty">No activity on this client yet.</div>';
+  return `<div class="c360-tl">${items.map(item => `
+    <div class="c360-tl-item">
+      <div class="c360-tl-ic">${item.icon}</div>
+      <div class="c360-tl-body">
+        <div class="c360-tl-title">${item.title}</div>
+        ${item.meta ? `<div class="c360-tl-meta">${item.meta}</div>` : ''}
+      </div>
+      ${item.amount ? `<div class="c360-tl-amt" style="${item.amountStyle}">${item.amount}</div>` : ''}
+    </div>`).join('')}</div>`;
+}
+
+function _render360Deals(opps) {
+  if (!opps.length) return '<div class="c360-empty">No deals yet.</div>';
+  const stageBadge = { prospect:'badge-draft', qualified:'badge-partial', proposal:'badge-posted', negotiation:'badge-posted' };
+  return `<table class="data-table"><thead><tr>
+    <th>Deal</th><th>Stage</th><th>Status</th><th>Prob.</th><th>Value</th><th>Expected Close</th>
+  </tr></thead><tbody>${opps.map(o => {
+    const status = _oppEffectiveStatus(o);
+    return `<tr>
+      <td class="bold">${escHTML(o.name)}</td>
+      <td><span class="badge ${stageBadge[o.stage] || 'badge-draft'}">${o.stage || '—'}</span></td>
+      <td><span class="badge ${status === 'won' ? 'badge-paid' : status === 'lost' ? 'badge-void' : 'badge-draft'}">${status}</span></td>
+      <td class="mono">${o.probability != null ? o.probability + '%' : '—'}</td>
+      <td class="mono">${o.value ? fmt(o.value, o.currency) : '—'}</td>
+      <td>${o.expected_close || '—'}</td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+function _render360Invs(invs) {
+  if (!invs.length) return '<div class="c360-empty">No invoices yet.</div>';
+  const bc = { posted:'badge-posted', paid:'badge-paid', partial:'badge-partial', void:'badge-void', voided:'badge-void', overdue:'badge-overdue', draft:'badge-draft' };
+  return `<table class="data-table"><thead><tr>
+    <th>Invoice #</th><th>Date</th><th>Due</th><th>Status</th><th class="right">Total</th><th class="right">Balance</th>
+  </tr></thead><tbody>${invs.map(i => `<tr>
+    <td class="mono bold">${escHTML(i.invoice_no || 'Draft')}</td>
+    <td>${i.invoice_date || '—'}</td>
+    <td>${i.due_date || '—'}</td>
+    <td><span class="badge ${bc[i.status] || 'badge-draft'}">${i.status || '—'}</span></td>
+    <td class="mono right">${fmt(i.total || 0, i.currency)}</td>
+    <td class="mono right" style="${parseFloat(i.balance_due || 0) > 0 ? 'color:var(--red)' : ''}">${fmt(i.balance_due || 0, i.currency)}</td>
+  </tr>`).join('')}</tbody></table>`;
+}
+
+function _render360Quotes(quotes) {
+  if (!quotes.length) return '<div class="c360-empty">No quotations yet.</div>';
+  const bc = { sent:'badge-posted', draft:'badge-draft', accepted:'badge-paid', declined:'badge-void', expired:'badge-void' };
+  return `<table class="data-table"><thead><tr>
+    <th>Quote #</th><th>Date</th><th>Valid Until</th><th>Status</th><th class="right">Total</th>
+  </tr></thead><tbody>${quotes.map(q => `<tr>
+    <td class="mono bold">${escHTML(q.quote_no || 'Draft')}</td>
+    <td>${q.quote_date || '—'}</td>
+    <td>${q.valid_until || '—'}</td>
+    <td><span class="badge ${bc[q.status] || 'badge-draft'}">${q.status || '—'}</span></td>
+    <td class="mono right">${fmt(q.total || 0, q.currency)}</td>
+  </tr>`).join('')}</tbody></table>`;
+}
+
+function _render360DNs(dns) {
+  if (!dns.length) return '<div class="c360-empty">No delivery notes.</div>';
+  return `<table class="data-table"><thead><tr>
+    <th>DN #</th><th>Date</th><th>Status</th><th>Reference</th>
+  </tr></thead><tbody>${dns.map(dn => `<tr>
+    <td class="mono bold">${escHTML(dn.dn_no || 'Draft')}</td>
+    <td>${dn.dn_date || '—'}</td>
+    <td><span class="badge badge-draft">${dn.status || '—'}</span></td>
+    <td>${escHTML(dn.client_ref || '—')}</td>
+  </tr>`).join('')}</tbody></table>`;
+}
+
+function _render360CNs(cns) {
+  if (!cns.length) return '<div class="c360-empty">No credit notes.</div>';
+  const bc = { posted:'badge-posted', void:'badge-void', voided:'badge-void', draft:'badge-draft' };
+  return `<table class="data-table"><thead><tr>
+    <th>CN #</th><th>Date</th><th>Status</th><th class="right">Total</th>
+  </tr></thead><tbody>${cns.map(cn => `<tr>
+    <td class="mono bold">${escHTML(cn.cn_no || 'Draft')}</td>
+    <td>${cn.cn_date || '—'}</td>
+    <td><span class="badge ${bc[cn.status] || 'badge-draft'}">${cn.status || '—'}</span></td>
+    <td class="mono right">${fmt(cn.total || 0, cn.currency)}</td>
+  </tr>`).join('')}</tbody></table>`;
+}
+
+function _render360Tasks(tasks, clientId) {
+  const today = todayDate();
+  if (!tasks.length) return `<div class="c360-empty">No tasks yet. <a href="#" onclick="openNewTask(null,'${clientId}');return false;" style="color:var(--gold);">Add one →</a></div>`;
+  return `<table class="data-table"><thead><tr>
+    <th>Task</th><th>Due Date</th><th>Status</th><th>Notes</th>
+  </tr></thead><tbody>${tasks.map(t => {
+    const overdue = !t.completed && t.due_date && t.due_date < today;
+    return `<tr>
+      <td class="bold">${escHTML(t.title)}</td>
+      <td style="${overdue ? 'color:var(--red)' : ''}">${t.due_date || '—'}</td>
+      <td><span class="badge ${t.completed ? 'badge-paid' : 'badge-draft'}">${t.completed ? 'Complete' : 'Open'}</span></td>
+      <td style="font-size:12px;color:var(--text-2);">${escHTML(t.description || '—')}</td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+function _render360(d) {
+  const c   = d.client;
+  const ccy = c.currency || currentCompany.currency || 'TTD';
+  const name = c.trading_name || c.name || '—';
+  const initials = name.split(' ').slice(0, 2).map(w => (w[0] || '').toUpperCase()).join('');
+
+  const totalBilled = d.invs.reduce((s, i) => s + parseFloat(i.total || 0), 0);
+  const balanceDue  = d.invs.filter(i => ['posted','overdue','partial'].includes(i.status)).reduce((s, i) => s + parseFloat(i.balance_due || 0), 0);
+  const openOpps    = d.opps.filter(o => _oppEffectiveStatus(o) === 'open');
+  const pipeVal     = openOpps.filter(o => o.currency === ccy).reduce((s, o) => s + parseFloat(o.value || 0), 0);
+  const openTasks   = d.tasks.filter(t => !t.completed);
+  const sortedActs  = [...d.activities].sort((a, b) => (b.activity_date || b.created_at || '').localeCompare(a.activity_date || a.created_at || ''));
+  const lastActDate = sortedActs[0] ? (sortedActs[0].activity_date || (sortedActs[0].created_at || '').slice(0, 10)) : null;
+  const tl = _build360Timeline(d);
+
+  const personsHtml = d.persons.length ? `<div class="c360-panel" style="margin-top:0.75rem;">
+    <div class="c360-lbl" style="margin-top:0;border-top:none;padding-top:0;">Contact Persons</div>
+    ${d.persons.map(p => {
+      const pi = (p.name || '?').split(' ').slice(0, 2).map(w => (w[0] || '').toUpperCase()).join('');
+      return `<div class="c360-cp-row">
+        <div class="c360-cp-av">${escHTML(pi)}</div>
+        <div>
+          <div class="c360-cp-name">${escHTML(p.name || '')}${p.is_primary ? ' <span class="badge badge-posted" style="font-size:9px;padding:1px 5px;">Primary</span>' : ''}</div>
+          ${p.title ? `<div class="c360-cp-title">${escHTML(p.title)}</div>` : ''}
+          ${p.phone ? `<div class="c360-cp-title">${escHTML(p.phone)}</div>` : ''}
+          ${p.email ? `<div class="c360-cp-title" style="font-size:10px;">${escHTML(p.email)}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('')}
+  </div>` : '';
+
+  document.getElementById('c360-root').innerHTML = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:1.25rem;flex-wrap:wrap;">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;flex-wrap:wrap;">
+          <button class="btn btn-ghost btn-sm" onclick="navigate('clients')" style="font-size:11px;padding:3px 8px;">← Clients</button>
+          <div class="page-title">${escHTML(name)}</div>
+          <span class="badge ${c.is_active !== false ? 'badge-posted' : 'badge-void'}">${c.is_active !== false ? 'Active' : 'Inactive'}</span>
+        </div>
+        <div class="page-subtitle">${escHTML(ccy)}${c.industry ? ' · ' + escHTML(c.industry) : ''}${c.trn ? ' · TRN ' + escHTML(c.trn) : ''}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" onclick="openContactPersonsModal('${c.id}')">👥 Persons</button>
+        <button class="btn btn-ghost btn-sm" onclick="openNewActivity(null,'${c.id}')">+ Activity</button>
+        <button class="btn btn-ghost btn-sm" onclick="openNewTask(null,'${c.id}')">+ Task</button>
+        <button class="btn btn-primary btn-sm" onclick="_open360NewOpp('${c.id}')">+ New Deal</button>
+      </div>
+    </div>
+    <div class="c360-layout">
+      <div>
+        <div class="c360-panel">
+          <div class="c360-avatar">${escHTML(initials || '?')}</div>
+          <div class="c360-name">${escHTML(name)}</div>
+          ${c.name && c.trading_name && c.name !== c.trading_name ? `<div class="c360-sub">${escHTML(c.name)}</div>` : ''}
+          <div class="c360-sub">${escHTML(ccy)}${c.payment_terms ? ' · Net ' + c.payment_terms : ''}</div>
+          ${c.phone || c.email || c.bill_address_line1 ? `
+            <div class="c360-lbl">Contact</div>
+            ${c.phone ? `<div class="c360-row"><span class="c360-key">Phone</span><span class="c360-val">${escHTML(c.phone)}</span></div>` : ''}
+            ${c.email ? `<div class="c360-row"><span class="c360-key">Email</span><span class="c360-val" style="font-size:11px;">${escHTML(c.email)}</span></div>` : ''}
+            ${c.bill_address_line1 ? `<div class="c360-row"><span class="c360-key">City</span><span class="c360-val" style="font-size:11px;">${escHTML(c.bill_address_line1)}</span></div>` : ''}
+          ` : ''}
+          <div class="c360-lbl">Financials</div>
+          <div class="c360-row"><span class="c360-key">Total billed</span><span class="c360-val">${fmt(totalBilled, ccy)}</span></div>
+          <div class="c360-row"><span class="c360-key">Balance due</span><span class="c360-val" style="${balanceDue > 0 ? 'color:var(--red)' : ''}">${fmt(balanceDue, ccy)}</span></div>
+          <div class="c360-row"><span class="c360-key">Open deals</span><span class="c360-val">${openOpps.length}</span></div>
+          ${openOpps.length ? `<div class="c360-row"><span class="c360-key">Pipeline</span><span class="c360-val" style="color:var(--green)">${fmt(pipeVal, ccy)}</span></div>` : ''}
+          ${openTasks.length ? `<div class="c360-row"><span class="c360-key">Open tasks</span><span class="c360-val" style="color:var(--amber)">${openTasks.length}</span></div>` : ''}
+          <div class="c360-row"><span class="c360-key">Last activity</span><span class="c360-val">${lastActDate || '—'}</span></div>
+          ${c.credit_limit ? `<div class="c360-row"><span class="c360-key">Credit limit</span><span class="c360-val">${fmt(c.credit_limit, ccy)}</span></div>` : ''}
+        </div>
+        ${personsHtml}
+      </div>
+      <div>
+        <div class="table-wrap">
+          <div class="c360-tabs">
+            <div class="c360-tab active" onclick="switch360Tab('timeline',this)">Timeline (${tl.length})</div>
+            <div class="c360-tab" onclick="switch360Tab('deals',this)">Deals (${d.opps.length})</div>
+            <div class="c360-tab" onclick="switch360Tab('invoices',this)">Invoices (${d.invs.length})</div>
+            <div class="c360-tab" onclick="switch360Tab('quotes',this)">Quotes (${d.quotes.length})</div>
+            ${d.dns.length ? `<div class="c360-tab" onclick="switch360Tab('dns',this)">Delivery Notes (${d.dns.length})</div>` : ''}
+            ${d.cns.length ? `<div class="c360-tab" onclick="switch360Tab('cns',this)">Credit Notes (${d.cns.length})</div>` : ''}
+            <div class="c360-tab" onclick="switch360Tab('tasks',this)">Tasks (${d.tasks.length})</div>
+          </div>
+          <div id="c360-content" style="padding:1rem;">
+            ${_render360TL(tl)}
+          </div>
+        </div>
+      </div>
+    </div>`;
 }
 
 // ── CONTACT PERSONS ───────────────────────────────────────────────
