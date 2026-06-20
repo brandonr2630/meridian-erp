@@ -1812,6 +1812,34 @@ body {
           <div class="stat-card accent"><div class="stat-label">Revenue This Month</div><div class="stat-value" id="stat-revenue">—</div><div class="stat-sub" id="stat-revenue-sub">vs last month</div></div>
         </div>
 
+        <!-- Zone 3c: Sales Pipeline -->
+        <div id="dash-crm-zone" style="margin-bottom:24px;display:none;">
+          <div style="margin-bottom:8px;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);">Sales Pipeline</div>
+          <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:12px;">
+            <div class="stat-card accent" onclick="navigate('pipeline')" style="cursor:pointer;">
+              <div class="stat-label">Open Deals</div>
+              <div class="stat-value" id="dash-crm-open">—</div>
+              <div class="stat-sub" id="dash-crm-open-val">—</div>
+            </div>
+            <div class="stat-card positive" onclick="navigate('pipeline')" style="cursor:pointer;">
+              <div class="stat-label">Won This Month</div>
+              <div class="stat-value" id="dash-crm-won">—</div>
+              <div class="stat-sub" id="dash-crm-won-val">—</div>
+            </div>
+            <div class="stat-card" onclick="navigate('pipeline')" style="cursor:pointer;">
+              <div class="stat-label">Win Rate</div>
+              <div class="stat-value" id="dash-crm-rate">—</div>
+              <div class="stat-sub">All time</div>
+            </div>
+            <div class="stat-card" onclick="navigate('crm-tasks')" style="cursor:pointer;">
+              <div class="stat-label">Open Tasks</div>
+              <div class="stat-value" id="dash-crm-tasks">—</div>
+              <div class="stat-sub" id="dash-crm-tasks-sub">—</div>
+            </div>
+          </div>
+          <div id="dash-crm-funnel" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;"></div>
+        </div>
+
         <!-- Zone 3: Operations -->
         <div style="margin-bottom:8px;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);">Operations</div>
         <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px;">
@@ -1858,34 +1886,6 @@ body {
               <button class="btn btn-ghost" style="padding:2px 8px;font-size:10px;" onclick="refreshForexRates()">↻ Refresh</button>
             </div>
           </div>
-        </div>
-
-        <!-- Zone 3c: Sales Pipeline -->
-        <div id="dash-crm-zone" style="margin-bottom:24px;display:none;">
-          <div style="margin-bottom:8px;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);">Sales Pipeline</div>
-          <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:12px;">
-            <div class="stat-card accent" onclick="navigate('pipeline')" style="cursor:pointer;">
-              <div class="stat-label">Open Deals</div>
-              <div class="stat-value" id="dash-crm-open">—</div>
-              <div class="stat-sub" id="dash-crm-open-val">—</div>
-            </div>
-            <div class="stat-card positive" onclick="navigate('pipeline')" style="cursor:pointer;">
-              <div class="stat-label">Won This Month</div>
-              <div class="stat-value" id="dash-crm-won">—</div>
-              <div class="stat-sub" id="dash-crm-won-val">—</div>
-            </div>
-            <div class="stat-card" onclick="navigate('pipeline')" style="cursor:pointer;">
-              <div class="stat-label">Win Rate</div>
-              <div class="stat-value" id="dash-crm-rate">—</div>
-              <div class="stat-sub">All time</div>
-            </div>
-            <div class="stat-card" onclick="navigate('crm-tasks')" style="cursor:pointer;">
-              <div class="stat-label">Open Tasks</div>
-              <div class="stat-value" id="dash-crm-tasks">—</div>
-              <div class="stat-sub" id="dash-crm-tasks-sub">—</div>
-            </div>
-          </div>
-          <div id="dash-crm-funnel" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;"></div>
         </div>
 
         <!-- Zone 4: Recent Activity -->
