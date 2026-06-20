@@ -1670,29 +1670,21 @@ body {
     </div>
     <div class="sidebar-section" data-section="sales">
       <div class="sidebar-section-header" onclick="toggleNavSection('sales')">
-        <div class="sidebar-section-label">Sales</div>
+        <div class="sidebar-section-label">CRM</div>
         <span class="nav-toggle" id="toggle-sales">&#8722;</span>
       </div>
       <div class="nav-section-body" id="section-body-sales">
-        <div class="nav-sub-section" id="sub-section-sales-crm">
-          <div class="nav-sub-header" onclick="toggleNavSubSection('sales-crm')">
-            <span class="nav-sub-label">CRM</span>
-            <span class="nav-sub-toggle" id="toggle-sales-crm">&#8722;</span>
-          </div>
-          <div class="nav-sub-body" id="sub-body-sales-crm">
-            <div class="nav-item sub-item" onclick="navigate('sales-leads')" id="nav-sales-leads">
-              <span class="nav-item-icon">👥</span> Sales Leads
-            </div>
-            <div class="nav-item sub-item" onclick="navigate('pipeline')" id="nav-pipeline">
-              <span class="nav-item-icon">🎯</span> Pipeline
-            </div>
-            <div class="nav-item sub-item" onclick="navigate('crm-activities')" id="nav-crm-activities">
-              <span class="nav-item-icon">📅</span> Activities
-            </div>
-            <div class="nav-item sub-item" onclick="navigate('crm-tasks')" id="nav-crm-tasks">
-              <span class="nav-item-icon">✅</span> Tasks
-            </div>
-          </div>
+        <div class="nav-item" onclick="navigate('sales-leads')" id="nav-sales-leads">
+          <span class="nav-item-icon">👥</span> Sales Leads
+        </div>
+        <div class="nav-item" onclick="navigate('pipeline')" id="nav-pipeline">
+          <span class="nav-item-icon">🎯</span> Pipeline
+        </div>
+        <div class="nav-item" onclick="navigate('crm-activities')" id="nav-crm-activities">
+          <span class="nav-item-icon">📅</span> Activities
+        </div>
+        <div class="nav-item" onclick="navigate('crm-tasks')" id="nav-crm-tasks">
+          <span class="nav-item-icon">✅</span> Tasks
         </div>
         <div class="nav-item" onclick="navigate('quotations')" id="nav-quotations">
           <span class="nav-item-icon">📝</span> Quotations
@@ -5540,9 +5532,6 @@ function applyRoleNav() {
         const el = document.getElementById(id);
         if (el) el.style.display = visible ? '' : 'none';
       });
-      // Hide CRM sub-section header if all CRM items are hidden
-      const crmSec = document.getElementById('sub-section-sales-crm');
-      if (crmSec) crmSec.style.display = (u?.module_sales_crm !== false) ? '' : 'none';
     }
   }
 }
@@ -5653,8 +5642,8 @@ const VIEW_SECTIONS = {
   tb:         ['finance', 'finance-reports'],
   cf:         ['finance', 'finance-reports'],
   quotations: ['sales'], clients: ['sales'],
-  'sales-leads': ['sales', 'sales-crm'],
-  pipeline: ['sales','sales-crm'], 'crm-activities': ['sales','sales-crm'], 'crm-tasks': ['sales','sales-crm'],
+  'sales-leads': ['sales'],
+  pipeline: ['sales'], 'crm-activities': ['sales'], 'crm-tasks': ['sales'],
   'work-orders': ['operations'], 'job-costing': ['operations'], 'delivery-notes': ['operations'], 'job-config': ['operations'],
   companies: ['setup'], 'user-management': ['setup'], settings: ['setup']
 };
