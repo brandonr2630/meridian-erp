@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-20 · Session 29*
+*Last updated: 2026-06-20 · Session 30*
 
 ---
 
@@ -12,6 +12,25 @@
 | GitHub repo | `brandonr2630/meridian-erp` |
 | Deploy | Push to `master` via PR → GitHub Actions → GreenGeeks cPanel auto-deploys |
 | Deploy workflow | `.github/workflows/deploy.yml` → cPanel Fileman API (`chi203.greengeeks.net`) |
+
+---
+
+## Session 30 — Fix voidVendorPayment status value
+
+**Date:** 2026-06-20
+**Branch / PR:** [PR #74](https://github.com/brandonr2630/meridian-erp/pull/74)
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| `voidVendorPayment()` — status value | `'void'` → `'voided'` | The patch to `payments` was writing `status: 'void'` but the render guard in `openBillPaymentHistory` (`p.status === 'voided'`) and the re-void guard in `voidVendorPayment` (`payment.status === 'voided'`) both checked against `'voided'`. After a successful void, the Void button remained active and the double-void guard never fired — enabling duplicate JE reversals. One-character fix. |
+
+### Outstanding
+
+- **Enable leaked password protection** — Supabase Dashboard → Authentication → Passwords (manual toggle only)
+- **Job → Invoice link** — completed job's costing summary pre-fills a Meridian invoice
+- **Job Cards PDF** — printable job card / work order report
 
 ---
 
@@ -29,7 +48,6 @@
 
 ### Outstanding
 
-- **`voidVendorPayment()` untested** — carried from Session 22
 - **Enable leaked password protection** — Supabase Dashboard → Authentication → Passwords (manual toggle only)
 - **Job → Invoice link** — completed job's costing summary pre-fills a Meridian invoice
 - **Job Cards PDF** — printable job card / work order report
@@ -62,7 +80,6 @@
 
 ### Outstanding
 
-- **`voidVendorPayment()` untested** — carried from Session 22
 - **Enable leaked password protection** — Supabase Dashboard → Authentication → Passwords (manual toggle only)
 - **Job → Invoice link** — completed job's costing summary pre-fills a Meridian invoice
 - **Job Cards PDF** — printable job card / work order report
@@ -819,7 +836,7 @@ PDFs rendered client-side with a custom multi-page renderer. SheetJS lazy-loaded
 
 ## Known Issues
 
-- **`voidVendorPayment()` untested** — AP void flow hasn't been exercised since the payments table FK was fixed (2026-05-08). Confirm it sets status to 'void', reverses the JE, and recalculates the bill balance.
+*(none)*
 
 ## Backlog
 
