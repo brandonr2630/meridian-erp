@@ -2193,6 +2193,12 @@ body {
               <option value="won">Won</option>
               <option value="lost">Lost</option>
             </select>
+            <select class="filter-select" id="opp-status-filter" onchange="filterPipeline()">
+              <option value="">All Status</option>
+              <option value="open">Open</option>
+              <option value="won">Won</option>
+              <option value="lost">Lost</option>
+            </select>
             <select class="filter-select" id="opp-type-filter" onchange="filterPipeline()">
               <option value="">All Types</option>
               <option value="standard">Standard</option>
@@ -4867,6 +4873,12 @@ body {
             <option value="qualified">Qualified</option>
             <option value="proposal">Proposal</option>
             <option value="negotiation">Negotiation</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label">Status</label>
+          <select id="opp-status" onchange="oppStatusChange()">
+            <option value="open">Open</option>
             <option value="won">Won</option>
             <option value="lost">Lost</option>
           </select>
@@ -4876,6 +4888,17 @@ body {
           <select id="opp-type">
             <option value="standard">Standard</option>
             <option value="development">Development</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label">Source</label>
+          <select id="opp-source">
+            <option value="">— None —</option>
+            <option value="referral">Referral</option>
+            <option value="cold_call">Cold Call</option>
+            <option value="website">Website</option>
+            <option value="repeat">Repeat Client</option>
+            <option value="other">Other</option>
           </select>
         </div>
         <div class="field">
@@ -4891,12 +4914,20 @@ body {
           </select>
         </div>
         <div class="field">
+          <label class="field-label">Probability %</label>
+          <input type="number" id="opp-probability" placeholder="e.g. 50" min="0" max="100" step="5">
+        </div>
+        <div class="field">
           <label class="field-label">Expected Close</label>
           <input type="date" id="opp-close-date">
         </div>
         <div class="field">
           <label class="field-label">Owner</label>
           <select id="opp-owner"><option value="">— Unassigned —</option></select>
+        </div>
+        <div class="field" id="opp-lost-reason-field" style="display:none;">
+          <label class="field-label">Lost Reason</label>
+          <input type="text" id="opp-lost-reason" placeholder="Why was this deal lost?">
         </div>
         <div class="field" style="grid-column:span 2;">
           <label class="field-label">Description</label>
@@ -4937,12 +4968,20 @@ body {
           <input type="text" id="act-subject" placeholder="e.g. Follow-up call with client">
         </div>
         <div class="field" style="grid-column:span 2;">
-          <label class="field-label">Opportunity</label>
+          <label class="field-label">Contact <span style="font-weight:400;color:var(--text-3);">(optional)</span></label>
+          <select id="act-contact" onchange="onActContactChange()"><option value="">— None —</option></select>
+        </div>
+        <div class="field" id="act-cp-field" style="grid-column:span 2;display:none;">
+          <label class="field-label">Contact Person</label>
+          <select id="act-contact-person"><option value="">— None —</option></select>
+        </div>
+        <div class="field" style="grid-column:span 2;">
+          <label class="field-label">Opportunity <span style="font-weight:400;color:var(--text-3);">(optional)</span></label>
           <select id="act-opportunity"><option value="">— None —</option></select>
         </div>
         <div class="field" style="grid-column:span 2;">
           <label class="field-label">Notes</label>
-          <textarea id="act-notes" rows="4" placeholder="What was discussed..."></textarea>
+          <textarea id="act-notes" rows="3" placeholder="What was discussed..."></textarea>
         </div>
       </div>
     </div>
@@ -4974,18 +5013,85 @@ body {
           <select id="task-assignee"><option value="">— Unassigned —</option></select>
         </div>
         <div class="field" style="grid-column:span 2;">
-          <label class="field-label">Opportunity</label>
+          <label class="field-label">Contact <span style="font-weight:400;color:var(--text-3);">(optional)</span></label>
+          <select id="task-contact" onchange="onTaskContactChange()"><option value="">— None —</option></select>
+        </div>
+        <div class="field" id="task-cp-field" style="grid-column:span 2;display:none;">
+          <label class="field-label">Contact Person</label>
+          <select id="task-contact-person"><option value="">— None —</option></select>
+        </div>
+        <div class="field" style="grid-column:span 2;">
+          <label class="field-label">Opportunity <span style="font-weight:400;color:var(--text-3);">(optional)</span></label>
           <select id="task-opportunity"><option value="">— None —</option></select>
         </div>
         <div class="field" style="grid-column:span 2;">
           <label class="field-label">Description</label>
-          <textarea id="task-description" rows="3" placeholder="Optional details..."></textarea>
+          <textarea id="task-description" rows="2" placeholder="Optional details..."></textarea>
         </div>
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-crm-task')">Cancel</button>
       <button class="btn btn-primary" onclick="saveTask()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── CONTACT PERSONS MODAL ── -->
+<div class="modal-overlay" id="modal-contact-persons" onclick="if(event.target===this)closeModal('modal-contact-persons')">
+  <div class="modal modal-lg" style="max-width:min(720px,95vw);">
+    <div class="modal-header">
+      <div class="modal-title" id="cp-modal-title">Contact Persons</div>
+      <button class="modal-close" onclick="closeModal('modal-contact-persons')">✕</button>
+    </div>
+    <div class="modal-body" style="padding-top:0;">
+      <div id="cp-list-wrap"><div class="page-loading"><div class="loading-spinner"></div> Loading...</div></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-contact-persons')">Close</button>
+      <button class="btn btn-primary" onclick="openNewCPForm()">+ Add Person</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── CONTACT PERSON FORM MODAL ── -->
+<div class="modal-overlay" id="modal-cp-form" onclick="if(event.target===this)closeModal('modal-cp-form')">
+  <div class="modal" style="max-width:min(560px,95vw);">
+    <div class="modal-header">
+      <div class="modal-title" id="cp-form-title">Add Contact Person</div>
+      <button class="modal-close" onclick="closeModal('modal-cp-form')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid grid-2">
+        <div class="field" style="grid-column:span 2;">
+          <label class="field-label">Full Name *</label>
+          <input type="text" id="cp-name" placeholder="e.g. John Smith">
+        </div>
+        <div class="field">
+          <label class="field-label">Title / Position</label>
+          <input type="text" id="cp-title" placeholder="e.g. Purchasing Manager">
+        </div>
+        <div class="field">
+          <label class="field-label">Email</label>
+          <input type="email" id="cp-email">
+        </div>
+        <div class="field">
+          <label class="field-label">Phone</label>
+          <input type="tel" id="cp-phone">
+        </div>
+        <div class="field" style="flex-direction:row;align-items:center;gap:8px;padding-top:16px;">
+          <input type="checkbox" id="cp-primary" style="width:auto;">
+          <label for="cp-primary" style="font-size:13px;color:var(--text-2);cursor:pointer;">Primary contact</label>
+        </div>
+        <div class="field" style="grid-column:span 2;">
+          <label class="field-label">Notes</label>
+          <textarea id="cp-notes" rows="2" placeholder="Optional notes..."></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-cp-form')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveContactPerson()">Save</button>
     </div>
   </div>
 </div>
@@ -8535,7 +8641,8 @@ function renderClientsTable(list) {
         <td class="mono">${c.currency}</td>
         <td class="mono">${c.credit_limit ? fmt(c.credit_limit, c.currency) : '—'}</td>
         <td><span class="badge ${c.is_active!==false?'badge-posted':'badge-void'}">${c.is_active!==false?'Active':'Inactive'}</span></td>
-        <td class="right">
+        <td class="right" style="white-space:nowrap;">
+          <button class="btn btn-ghost btn-sm btn-icon" onclick="openContactPersonsModal('${c.id}')" title="Contact Persons" aria-label="Contact persons">👥</button>
           <button class="btn btn-ghost btn-sm btn-icon" onclick="openEditClient('${c.id}')" title="Edit" aria-label="Edit client">✏️</button>
         </td>
       </tr>`).join('')}
@@ -11399,7 +11506,7 @@ let crmOpps = [], _oppFiltered = [], oppPage = 0;
 let crmActivities = [], _actFiltered = [], actPage = 0;
 let crmTasks = [], _taskFiltered = [], taskPage = 0;
 let erpUsers = [];
-let _editOppId = null, _editActId = null, _editTaskId = null;
+let contactPersons = [], _editOppId = null, _editActId = null, _editTaskId = null, _editCPId = null, _cpClientId = null;
 
 async function loadQuotations() {
   const quoWrap = document.getElementById('quo-table-wrap');
@@ -13721,14 +13828,26 @@ async function loadPipeline() {
   }
 }
 
+function _oppEffectiveStatus(o) {
+  if (o.status && o.status !== 'open') return o.status;
+  if (['won','lost'].includes(o.stage)) return o.stage;
+  return 'open';
+}
+
+function oppStatusChange() {
+  const st = document.getElementById('opp-status')?.value;
+  const lrf = document.getElementById('opp-lost-reason-field');
+  if (lrf) lrf.style.display = st === 'lost' ? '' : 'none';
+}
+
 function renderPipelineStats() {
   const currency = currentCompany.base_currency || currentCompany.currency;
-  const open     = crmOpps.filter(o => !['won','lost'].includes(o.stage));
+  const open     = crmOpps.filter(o => _oppEffectiveStatus(o) === 'open');
   const openVal  = open.filter(o => o.currency === currency).reduce((s,o) => s + parseFloat(o.value||0), 0);
   const monthStr = new Date().toISOString().slice(0,7);
-  const wonMonth = crmOpps.filter(o => o.stage === 'won' && (o.updated_at||'').slice(0,7) === monthStr).length;
-  const closed   = crmOpps.filter(o => ['won','lost'].includes(o.stage));
-  const won      = crmOpps.filter(o => o.stage === 'won');
+  const wonMonth = crmOpps.filter(o => _oppEffectiveStatus(o) === 'won' && (o.won_at||o.updated_at||'').slice(0,7) === monthStr).length;
+  const closed   = crmOpps.filter(o => ['won','lost'].includes(_oppEffectiveStatus(o)));
+  const won      = crmOpps.filter(o => _oppEffectiveStatus(o) === 'won');
   const rate     = closed.length > 0 ? Math.round((won.length / closed.length) * 100) : null;
   document.getElementById('opp-stat-open').textContent  = open.length;
   document.getElementById('opp-stat-value').textContent = fmt(openVal, currency);
@@ -13737,15 +13856,17 @@ function renderPipelineStats() {
 }
 
 function filterPipeline() {
-  const q     = (document.getElementById('opp-search')?.value || '').toLowerCase();
-  const stage = document.getElementById('opp-stage-filter')?.value || '';
-  const type  = document.getElementById('opp-type-filter')?.value  || '';
-  const owner = document.getElementById('opp-owner-filter')?.value || '';
+  const q      = (document.getElementById('opp-search')?.value || '').toLowerCase();
+  const stage  = document.getElementById('opp-stage-filter')?.value  || '';
+  const status = document.getElementById('opp-status-filter')?.value || '';
+  const type   = document.getElementById('opp-type-filter')?.value   || '';
+  const owner  = document.getElementById('opp-owner-filter')?.value  || '';
   const contactMap = {}; contacts.forEach(c => { contactMap[c.id] = c.trading_name || c.name; });
   _oppFiltered = crmOpps.filter(o => {
-    if (stage && o.stage !== stage) return false;
-    if (type  && o.type  !== type)  return false;
-    if (owner && o.owner_id !== owner) return false;
+    if (stage  && o.stage !== stage)                    return false;
+    if (status && _oppEffectiveStatus(o) !== status)    return false;
+    if (type   && o.type  !== type)                     return false;
+    if (owner  && o.owner_id !== owner)                 return false;
     if (q && ![(o.name||''), (contactMap[o.contact_id]||'')].join(' ').toLowerCase().includes(q)) return false;
     return true;
   });
@@ -13763,25 +13884,31 @@ function renderPipelineTable() {
   wrap.innerHTML = `
     <table class="data-table">
       <thead><tr>
-        <th>Name</th><th>Contact</th><th>Stage</th><th>Type</th>
-        <th class="right">Value</th><th>Close Date</th><th>Owner</th><th></th>
+        <th>Name</th><th>Contact</th><th>Stage</th><th>Status</th><th>Type</th>
+        <th class="right">Value</th><th class="right">Prob.</th><th>Close Date</th><th>Owner</th><th></th>
       </tr></thead>
-      <tbody>${slice.map(o => `
-        <tr>
+      <tbody>${slice.map(o => {
+        const effStatus = _oppEffectiveStatus(o);
+        const probVal   = o.probability != null ? o.probability + '%' : '—';
+        return `<tr>
           <td class="bold">${escHTML(o.name)}</td>
           <td>${escHTML(contactMap[o.contact_id] || '—')}</td>
           <td><span class="badge badge-${o.stage}">${o.stage}</span></td>
+          <td><span class="badge badge-${effStatus}">${effStatus}</span></td>
           <td><span class="badge badge-${o.type}">${o.type}</span></td>
           <td class="right mono">${o.value ? fmt(parseFloat(o.value), o.currency || currentCompany.currency) : '—'}</td>
+          <td class="right mono">${probVal}</td>
           <td class="mono">${o.expected_close || '—'}</td>
           <td>${escHTML(ownerMap[o.owner_id] || '—')}</td>
           <td class="right" style="white-space:nowrap;">
-            <button class="btn btn-ghost btn-xs" aria-label="Log Activity" onclick="openNewActivity('${o.id}')">📅</button>
-            <button class="btn btn-ghost btn-xs" aria-label="New Task" onclick="openNewTask('${o.id}')">✅</button>
+            <button class="btn btn-ghost btn-xs" aria-label="Log Activity" onclick="openNewActivity('${o.id}',null)">📅</button>
+            <button class="btn btn-ghost btn-xs" aria-label="New Task" onclick="openNewTask('${o.id}',null)">✅</button>
+            ${effStatus === 'open' ? `<button class="btn btn-ghost btn-xs" aria-label="Mark Won" title="Mark Won" onclick="quickMarkOpp('${o.id}','won')">🏆</button><button class="btn btn-ghost btn-xs" aria-label="Mark Lost" title="Mark Lost" onclick="quickMarkOpp('${o.id}','lost')">✗</button>` : ''}
             <button class="btn btn-ghost btn-xs" aria-label="Edit" onclick="openEditOpportunity('${o.id}')">✏️</button>
             <button class="btn btn-ghost btn-xs" aria-label="Delete" onclick="deleteOpportunity('${o.id}')">🗑</button>
           </td>
-        </tr>`).join('')}
+        </tr>`;
+      }).join('')}
       </tbody>
     </table>
     ${renderPager(_oppFiltered.length, oppPage, PAGE_SIZE, 'setOppPage')}`;
@@ -13792,10 +13919,13 @@ function setOppPage(n) { oppPage = n; renderPipelineTable(); }
 function openNewOpportunity() {
   _editOppId = null;
   document.getElementById('modal-opp-title').textContent = 'New Opportunity';
-  ['opp-name','opp-value','opp-close-date','opp-description'].forEach(id => document.getElementById(id).value = '');
+  ['opp-name','opp-value','opp-close-date','opp-description','opp-lost-reason','opp-probability'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('opp-stage').value    = 'prospect';
+  document.getElementById('opp-status').value   = 'open';
   document.getElementById('opp-type').value     = 'standard';
+  document.getElementById('opp-source').value   = '';
   document.getElementById('opp-currency').value = currentCompany.base_currency || currentCompany.currency || 'TTD';
+  document.getElementById('opp-lost-reason-field').style.display = 'none';
   _populateOppSelects(null, null);
   document.getElementById('modal-opportunity').classList.add('show');
 }
@@ -13804,14 +13934,20 @@ function openEditOpportunity(id) {
   const o = crmOpps.find(x => x.id === id);
   if (!o) return;
   _editOppId = id;
+  const effStatus = _oppEffectiveStatus(o);
   document.getElementById('modal-opp-title').textContent  = 'Edit Opportunity';
   document.getElementById('opp-name').value        = o.name            || '';
-  document.getElementById('opp-stage').value       = o.stage           || 'prospect';
+  document.getElementById('opp-stage').value       = ['won','lost'].includes(o.stage) ? 'negotiation' : (o.stage || 'prospect');
+  document.getElementById('opp-status').value      = effStatus;
   document.getElementById('opp-type').value        = o.type            || 'standard';
+  document.getElementById('opp-source').value      = o.source          || '';
+  document.getElementById('opp-probability').value = o.probability != null ? o.probability : '';
   document.getElementById('opp-value').value       = o.value           || '';
   document.getElementById('opp-currency').value    = o.currency        || currentCompany.currency || 'TTD';
   document.getElementById('opp-close-date').value  = o.expected_close  || '';
   document.getElementById('opp-description').value = o.description     || '';
+  document.getElementById('opp-lost-reason').value = o.lost_reason     || '';
+  document.getElementById('opp-lost-reason-field').style.display = effStatus === 'lost' ? '' : 'none';
   _populateOppSelects(o.contact_id, o.owner_id);
   document.getElementById('modal-opportunity').classList.add('show');
 }
@@ -13826,23 +13962,43 @@ function _populateOppSelects(selContactId, selOwnerId) {
 async function saveOpportunity() {
   const name = document.getElementById('opp-name').value.trim();
   if (!name) { showToast('Name is required.', 'error'); return; }
+  const status = document.getElementById('opp-status').value;
+  const prob   = document.getElementById('opp-probability').value;
+  const existing = _editOppId ? crmOpps.find(x => x.id === _editOppId) : null;
   const payload = {
     company_id:     currentCompany.id,
     contact_id:     document.getElementById('opp-contact').value    || null,
     name,
     stage:          document.getElementById('opp-stage').value,
+    status,
     type:           document.getElementById('opp-type').value,
+    source:         document.getElementById('opp-source').value     || null,
+    probability:    prob !== '' ? parseInt(prob, 10) : null,
     value:          parseFloat(document.getElementById('opp-value').value) || null,
     currency:       document.getElementById('opp-currency').value   || null,
     expected_close: document.getElementById('opp-close-date').value || null,
     description:    document.getElementById('opp-description').value.trim() || null,
+    lost_reason:    status === 'lost' ? (document.getElementById('opp-lost-reason').value.trim() || null) : null,
     owner_id:       document.getElementById('opp-owner').value      || null,
+    won_at:  status === 'won' && existing?.status !== 'won'  ? nowISO() : (existing?.won_at  || null),
+    lost_at: status === 'lost' && existing?.status !== 'lost' ? nowISO() : (existing?.lost_at || null),
   };
   try {
     if (_editOppId) await sbPatch('crm_opportunities', _editOppId, payload);
     else            await sbPost('crm_opportunities', payload);
     closeModal('modal-opportunity');
     showToast(_editOppId ? 'Opportunity updated.' : 'Opportunity created.', 'success');
+    await loadPipeline();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function quickMarkOpp(id, status) {
+  const label = status === 'won' ? 'won' : 'lost';
+  if (!confirm(`Mark this opportunity as ${label}?`)) return;
+  try {
+    const patch = { status, [status === 'won' ? 'won_at' : 'lost_at']: nowISO() };
+    await sbPatch('crm_opportunities', id, patch);
+    showToast(`Opportunity marked as ${label}.`, 'success');
     await loadPipeline();
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
@@ -13876,11 +14032,12 @@ function filterActivities() {
   const type = document.getElementById('act-type-filter')?.value || '';
   const from = document.getElementById('act-date-from')?.value   || '';
   const to   = document.getElementById('act-date-to')?.value     || '';
+  const contactMap = {}; contacts.forEach(c => { contactMap[c.id] = c.trading_name || c.name; });
   _actFiltered = crmActivities.filter(a => {
     if (type && a.type !== type)           return false;
     if (from && a.activity_date < from)    return false;
     if (to   && a.activity_date > to)      return false;
-    if (q && ![(a.subject||''), (a.notes||'')].join(' ').toLowerCase().includes(q)) return false;
+    if (q && ![(a.subject||''), (a.notes||''), (contactMap[a.contact_id]||'')].join(' ').toLowerCase().includes(q)) return false;
     return true;
   });
   actPage = 0;
@@ -13890,20 +14047,22 @@ function filterActivities() {
 function renderActivitiesTable() {
   const wrap = document.getElementById('act-table-wrap');
   if (!wrap) return;
-  const oppMap  = {}; crmOpps.forEach(o  => { oppMap[o.id]  = o.name;      });
-  const userMap = {}; erpUsers.forEach(u => { userMap[u.id] = u.full_name; });
+  const oppMap     = {}; crmOpps.forEach(o  => { oppMap[o.id]  = o.name;      });
+  const userMap    = {}; erpUsers.forEach(u => { userMap[u.id] = u.full_name; });
+  const contactMap = {}; contacts.forEach(c => { contactMap[c.id] = c.trading_name || c.name; });
   if (!_actFiltered.length) { wrap.innerHTML = '<div class="table-empty">No activities found.</div>'; return; }
   const slice = _actFiltered.slice(actPage * PAGE_SIZE, (actPage + 1) * PAGE_SIZE);
   wrap.innerHTML = `
     <table class="data-table">
       <thead><tr>
-        <th>Date</th><th>Type</th><th>Subject</th><th>Opportunity</th><th>By</th><th></th>
+        <th>Date</th><th>Type</th><th>Subject</th><th>Contact</th><th>Opportunity</th><th>By</th><th></th>
       </tr></thead>
       <tbody>${slice.map(a => `
         <tr>
           <td class="mono">${a.activity_date}</td>
           <td><span class="badge badge-${a.type}">${a.type}</span></td>
           <td>${escHTML(a.subject)}</td>
+          <td>${escHTML(contactMap[a.contact_id] || '—')}</td>
           <td>${escHTML(oppMap[a.opportunity_id] || '—')}</td>
           <td>${escHTML(userMap[a.user_id] || '—')}</td>
           <td class="right" style="white-space:nowrap;">
@@ -13918,14 +14077,43 @@ function renderActivitiesTable() {
 
 function setActPage(n) { actPage = n; renderActivitiesTable(); }
 
-function openNewActivity(oppId) {
+function _populateActSelects(selOppId, selContactId, selCPId) {
+  document.getElementById('act-contact').innerHTML = '<option value="">— None —</option>' +
+    contacts.map(c => `<option value="${c.id}"${c.id===selContactId?' selected':''}>${escHTML(c.trading_name||c.name)}</option>`).join('');
+  document.getElementById('act-opportunity').innerHTML = '<option value="">— None —</option>' +
+    crmOpps.map(o => `<option value="${o.id}"${o.id===selOppId?' selected':''}>${escHTML(o.name)}</option>`).join('');
+  _refreshActCPSelect(selContactId, selCPId);
+}
+
+async function _refreshActCPSelect(contactId, selCPId) {
+  const cpSel  = document.getElementById('act-contact-person');
+  const cpField = document.getElementById('act-cp-field');
+  if (!contactId) {
+    cpSel.innerHTML = '<option value="">— None —</option>';
+    if (cpField) cpField.style.display = 'none';
+    return;
+  }
+  if (cpField) cpField.style.display = '';
+  try {
+    const persons = await sbGet('contact_persons', `contact_id=eq.${contactId}&is_active=eq.true&order=is_primary.desc,name`);
+    cpSel.innerHTML = '<option value="">— None —</option>' +
+      persons.map(p => `<option value="${p.id}"${p.id===selCPId?' selected':''}>${escHTML(p.name)}${p.title?' — '+escHTML(p.title):''}</option>`).join('');
+  } catch(e) { cpSel.innerHTML = '<option value="">— None —</option>'; }
+}
+
+async function onActContactChange() {
+  const contactId = document.getElementById('act-contact').value || null;
+  await _refreshActCPSelect(contactId, null);
+}
+
+function openNewActivity(oppId, contactId) {
   _editActId = null;
   document.getElementById('modal-act-title').textContent = 'Log Activity';
   document.getElementById('act-type').value    = 'call';
   document.getElementById('act-date').value    = todayDate();
   document.getElementById('act-subject').value = '';
   document.getElementById('act-notes').value   = '';
-  _populateActOppSelect(oppId || null);
+  _populateActSelects(oppId || null, contactId || null, null);
   document.getElementById('modal-crm-activity').classList.add('show');
 }
 
@@ -13938,26 +14126,26 @@ function openEditActivity(id) {
   document.getElementById('act-date').value    = a.activity_date || todayDate();
   document.getElementById('act-subject').value = a.subject       || '';
   document.getElementById('act-notes').value   = a.notes         || '';
-  _populateActOppSelect(a.opportunity_id);
+  _populateActSelects(a.opportunity_id, a.contact_id, a.contact_person_id);
   document.getElementById('modal-crm-activity').classList.add('show');
 }
 
-function _populateActOppSelect(selOppId) {
-  document.getElementById('act-opportunity').innerHTML = '<option value="">— None —</option>' +
-    crmOpps.map(o => `<option value="${o.id}"${o.id===selOppId?' selected':''}>${escHTML(o.name)}</option>`).join('');
-}
-
 async function saveActivity() {
-  const subject = document.getElementById('act-subject').value.trim();
+  const subject    = document.getElementById('act-subject').value.trim();
+  const contact_id = document.getElementById('act-contact').value     || null;
+  const opp_id     = document.getElementById('act-opportunity').value  || null;
   if (!subject) { showToast('Subject is required.', 'error'); return; }
+  if (!contact_id && !opp_id) { showToast('Link to a Contact or Opportunity.', 'error'); return; }
   const payload = {
-    company_id:     currentCompany.id,
-    opportunity_id: document.getElementById('act-opportunity').value || null,
-    type:           document.getElementById('act-type').value,
+    company_id:        currentCompany.id,
+    opportunity_id:    opp_id,
+    contact_id,
+    contact_person_id: document.getElementById('act-contact-person').value || null,
+    type:              document.getElementById('act-type').value,
     subject,
-    notes:          document.getElementById('act-notes').value.trim() || null,
-    activity_date:  document.getElementById('act-date').value         || todayDate(),
-    user_id:        currentUser?.id || null,
+    notes:             document.getElementById('act-notes').value.trim() || null,
+    activity_date:     document.getElementById('act-date').value         || todayDate(),
+    user_id:           currentUser?.id || null,
   };
   try {
     if (_editActId) await sbPatchWhere('crm_activities', `id=eq.${_editActId}`, payload);
@@ -14012,12 +14200,13 @@ function filterTasks() {
   const status   = document.getElementById('task-status-filter')?.value  || '';
   const assignee = document.getElementById('task-assignee-filter')?.value || '';
   const today    = todayDate();
+  const contactMap = {}; contacts.forEach(c => { contactMap[c.id] = c.trading_name || c.name; });
   _taskFiltered  = crmTasks.filter(t => {
     if (assignee && t.assignee_id !== assignee) return false;
     if (status === 'completed' && !t.completed) return false;
     if (status === 'open'      && (t.completed || (t.due_date && t.due_date < today))) return false;
     if (status === 'overdue'   && (!t.due_date || t.due_date >= today || t.completed)) return false;
-    if (q && !(t.title||'').toLowerCase().includes(q)) return false;
+    if (q && ![(t.title||''), (contactMap[t.contact_id]||'')].join(' ').toLowerCase().includes(q)) return false;
     return true;
   });
   taskPage = 0;
@@ -14027,15 +14216,16 @@ function filterTasks() {
 function renderTasksTable() {
   const wrap = document.getElementById('task-table-wrap');
   if (!wrap) return;
-  const oppMap  = {}; crmOpps.forEach(o  => { oppMap[o.id]  = o.name;      });
-  const userMap = {}; erpUsers.forEach(u => { userMap[u.id] = u.full_name; });
-  const today   = todayDate();
+  const oppMap     = {}; crmOpps.forEach(o  => { oppMap[o.id]  = o.name;      });
+  const userMap    = {}; erpUsers.forEach(u => { userMap[u.id] = u.full_name; });
+  const contactMap = {}; contacts.forEach(c => { contactMap[c.id] = c.trading_name || c.name; });
+  const today      = todayDate();
   if (!_taskFiltered.length) { wrap.innerHTML = '<div class="table-empty">No tasks found.</div>'; return; }
   const slice = _taskFiltered.slice(taskPage * PAGE_SIZE, (taskPage + 1) * PAGE_SIZE);
   wrap.innerHTML = `
     <table class="data-table">
       <thead><tr>
-        <th>Title</th><th>Opportunity</th><th>Due Date</th><th>Assignee</th><th>Status</th><th></th>
+        <th>Title</th><th>Contact</th><th>Opportunity</th><th>Due Date</th><th>Assignee</th><th>Status</th><th></th>
       </tr></thead>
       <tbody>${slice.map(t => {
         const overdue = !t.completed && t.due_date && t.due_date < today;
@@ -14044,6 +14234,7 @@ function renderTasksTable() {
           : '<span class="badge badge-partial">Open</span>';
         return `<tr${t.completed ? ' style="opacity:0.6;"' : ''}>
           <td>${escHTML(t.title)}</td>
+          <td>${escHTML(contactMap[t.contact_id] || '—')}</td>
           <td>${escHTML(oppMap[t.opportunity_id] || '—')}</td>
           <td class="mono"${overdue ? ' style="color:var(--red);"' : ''}>${t.due_date || '—'}</td>
           <td>${escHTML(userMap[t.assignee_id] || '—')}</td>
@@ -14062,11 +14253,42 @@ function renderTasksTable() {
 
 function setTaskPage(n) { taskPage = n; renderTasksTable(); }
 
-function openNewTask(oppId) {
+function _populateTaskSelects(selOppId, selAssigneeId, selContactId, selCPId) {
+  document.getElementById('task-contact').innerHTML = '<option value="">— None —</option>' +
+    contacts.map(c => `<option value="${c.id}"${c.id===selContactId?' selected':''}>${escHTML(c.trading_name||c.name)}</option>`).join('');
+  document.getElementById('task-opportunity').innerHTML = '<option value="">— None —</option>' +
+    crmOpps.map(o => `<option value="${o.id}"${o.id===selOppId?' selected':''}>${escHTML(o.name)}</option>`).join('');
+  document.getElementById('task-assignee').innerHTML = '<option value="">— Unassigned —</option>' +
+    erpUsers.map(u => `<option value="${u.id}"${u.id===selAssigneeId?' selected':''}>${escHTML(u.full_name)}</option>`).join('');
+  _refreshTaskCPSelect(selContactId, selCPId);
+}
+
+async function _refreshTaskCPSelect(contactId, selCPId) {
+  const cpSel   = document.getElementById('task-contact-person');
+  const cpField = document.getElementById('task-cp-field');
+  if (!contactId) {
+    cpSel.innerHTML = '<option value="">— None —</option>';
+    if (cpField) cpField.style.display = 'none';
+    return;
+  }
+  if (cpField) cpField.style.display = '';
+  try {
+    const persons = await sbGet('contact_persons', `contact_id=eq.${contactId}&is_active=eq.true&order=is_primary.desc,name`);
+    cpSel.innerHTML = '<option value="">— None —</option>' +
+      persons.map(p => `<option value="${p.id}"${p.id===selCPId?' selected':''}>${escHTML(p.name)}${p.title?' — '+escHTML(p.title):''}</option>`).join('');
+  } catch(e) { cpSel.innerHTML = '<option value="">— None —</option>'; }
+}
+
+async function onTaskContactChange() {
+  const contactId = document.getElementById('task-contact').value || null;
+  await _refreshTaskCPSelect(contactId, null);
+}
+
+function openNewTask(oppId, contactId) {
   _editTaskId = null;
   document.getElementById('modal-task-title').textContent = 'New Task';
   ['task-title','task-due-date','task-description'].forEach(id => document.getElementById(id).value = '');
-  _populateTaskSelects(oppId || null, null);
+  _populateTaskSelects(oppId || null, null, contactId || null, null);
   document.getElementById('modal-crm-task').classList.add('show');
 }
 
@@ -14078,27 +14300,25 @@ function openEditTask(id) {
   document.getElementById('task-title').value       = t.title       || '';
   document.getElementById('task-due-date').value    = t.due_date    || '';
   document.getElementById('task-description').value = t.description || '';
-  _populateTaskSelects(t.opportunity_id, t.assignee_id);
+  _populateTaskSelects(t.opportunity_id, t.assignee_id, t.contact_id, t.contact_person_id);
   document.getElementById('modal-crm-task').classList.add('show');
 }
 
-function _populateTaskSelects(selOppId, selAssigneeId) {
-  document.getElementById('task-opportunity').innerHTML = '<option value="">— None —</option>' +
-    crmOpps.map(o => `<option value="${o.id}"${o.id===selOppId?' selected':''}>${escHTML(o.name)}</option>`).join('');
-  document.getElementById('task-assignee').innerHTML = '<option value="">— Unassigned —</option>' +
-    erpUsers.map(u => `<option value="${u.id}"${u.id===selAssigneeId?' selected':''}>${escHTML(u.full_name)}</option>`).join('');
-}
-
 async function saveTask() {
-  const title = document.getElementById('task-title').value.trim();
+  const title      = document.getElementById('task-title').value.trim();
+  const contact_id = document.getElementById('task-contact').value    || null;
+  const opp_id     = document.getElementById('task-opportunity').value || null;
   if (!title) { showToast('Title is required.', 'error'); return; }
+  if (!contact_id && !opp_id) { showToast('Link to a Contact or Opportunity.', 'error'); return; }
   const payload = {
-    company_id:     currentCompany.id,
-    opportunity_id: document.getElementById('task-opportunity').value || null,
+    company_id:        currentCompany.id,
+    opportunity_id:    opp_id,
+    contact_id,
+    contact_person_id: document.getElementById('task-contact-person').value || null,
     title,
-    description:    document.getElementById('task-description').value.trim() || null,
-    due_date:       document.getElementById('task-due-date').value            || null,
-    assignee_id:    document.getElementById('task-assignee').value            || null,
+    description:       document.getElementById('task-description').value.trim() || null,
+    due_date:          document.getElementById('task-due-date').value            || null,
+    assignee_id:       document.getElementById('task-assignee').value            || null,
   };
   try {
     if (_editTaskId) await sbPatchWhere('crm_tasks', `id=eq.${_editTaskId}`, payload);
@@ -14126,6 +14346,123 @@ async function deleteTask(id) {
     showToast('Task deleted.', 'success');
     await loadCRMTasks();
   } catch(e) { showToast('Error deleting task.', 'error'); }
+}
+
+// ── CONTACT PERSONS ───────────────────────────────────────────────
+async function openContactPersonsModal(clientId) {
+  _cpClientId = clientId;
+  const client = clients.find(c => c.id === clientId);
+  document.getElementById('cp-modal-title').textContent = `Contact Persons — ${client ? (client.trading_name || client.name) : ''}`;
+  document.getElementById('modal-contact-persons').classList.add('show');
+  await loadContactPersons();
+}
+
+async function loadContactPersons() {
+  const wrap = document.getElementById('cp-list-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading...</div>';
+  try {
+    contactPersons = await sbGet('contact_persons', `contact_id=eq.${_cpClientId}&order=is_primary.desc,name`);
+    renderContactPersonsList();
+  } catch(e) {
+    wrap.innerHTML = '<div class="table-empty">Error loading contact persons.</div>';
+  }
+}
+
+function renderContactPersonsList() {
+  const wrap = document.getElementById('cp-list-wrap');
+  if (!wrap) return;
+  if (!contactPersons.length) {
+    wrap.innerHTML = '<div class="table-empty" style="padding:24px 0;">No contact persons yet. Click "+ Add Person" to add one.</div>';
+    return;
+  }
+  wrap.innerHTML = `
+    <table class="data-table">
+      <thead><tr>
+        <th>Name</th><th>Title</th><th>Email</th><th>Phone</th><th>Status</th><th class="right">Actions</th>
+      </tr></thead>
+      <tbody>${contactPersons.map(p => `
+        <tr>
+          <td class="bold">${escHTML(p.name)}${p.is_primary ? ' <span class="badge badge-posted" style="font-size:10px;padding:1px 6px;">Primary</span>' : ''}</td>
+          <td>${escHTML(p.title || '—')}</td>
+          <td class="mono">${escHTML(p.email || '—')}</td>
+          <td class="mono">${escHTML(p.phone || '—')}</td>
+          <td><span class="badge ${p.is_active!==false?'badge-posted':'badge-void'}">${p.is_active!==false?'Active':'Inactive'}</span></td>
+          <td class="right" style="white-space:nowrap;">
+            ${!p.is_primary ? `<button class="btn btn-ghost btn-xs" aria-label="Set as primary" title="Set as primary" onclick="setPrimaryCP('${p.id}')">⭐</button>` : ''}
+            <button class="btn btn-ghost btn-xs" aria-label="Edit" onclick="openEditCPForm('${p.id}')">✏️</button>
+            <button class="btn btn-ghost btn-xs" aria-label="Delete" onclick="deleteContactPerson('${p.id}')">🗑</button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+function openNewCPForm() {
+  _editCPId = null;
+  document.getElementById('cp-form-title').textContent = 'Add Contact Person';
+  ['cp-name','cp-title','cp-email','cp-phone','cp-notes'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('cp-primary').checked = !contactPersons.length;
+  document.getElementById('modal-cp-form').classList.add('show');
+}
+
+function openEditCPForm(id) {
+  const p = contactPersons.find(x => x.id === id);
+  if (!p) return;
+  _editCPId = id;
+  document.getElementById('cp-form-title').textContent = 'Edit Contact Person';
+  document.getElementById('cp-name').value    = p.name    || '';
+  document.getElementById('cp-title').value   = p.title   || '';
+  document.getElementById('cp-email').value   = p.email   || '';
+  document.getElementById('cp-phone').value   = p.phone   || '';
+  document.getElementById('cp-notes').value   = p.notes   || '';
+  document.getElementById('cp-primary').checked = !!p.is_primary;
+  document.getElementById('modal-cp-form').classList.add('show');
+}
+
+async function saveContactPerson() {
+  const name = document.getElementById('cp-name').value.trim();
+  if (!name) { showToast('Name is required.', 'error'); return; }
+  const isPrimary = document.getElementById('cp-primary').checked;
+  const payload = {
+    company_id:  currentCompany.id,
+    contact_id:  _cpClientId,
+    name,
+    title:       document.getElementById('cp-title').value.trim() || null,
+    email:       document.getElementById('cp-email').value.trim() || null,
+    phone:       document.getElementById('cp-phone').value.trim() || null,
+    notes:       document.getElementById('cp-notes').value.trim() || null,
+    is_primary:  isPrimary,
+    is_active:   true,
+  };
+  try {
+    if (isPrimary) {
+      await sbPatchWhere('contact_persons', `contact_id=eq.${_cpClientId}`, { is_primary: false });
+    }
+    if (_editCPId) await sbPatch('contact_persons', _editCPId, payload);
+    else           await sbPost('contact_persons', payload);
+    closeModal('modal-cp-form');
+    showToast(_editCPId ? 'Contact person updated.' : 'Contact person added.', 'success');
+    await loadContactPersons();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function deleteContactPerson(id) {
+  if (!confirm('Delete this contact person?')) return;
+  try {
+    await sbDelete('contact_persons', id);
+    showToast('Contact person deleted.', 'success');
+    await loadContactPersons();
+  } catch(e) { showToast('Error deleting contact person.', 'error'); }
+}
+
+async function setPrimaryCP(id) {
+  try {
+    await sbPatchWhere('contact_persons', `contact_id=eq.${_cpClientId}`, { is_primary: false });
+    await sbPatch('contact_persons', id, { is_primary: true });
+    showToast('Primary contact updated.', 'success');
+    await loadContactPersons();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 </script>
 </body>

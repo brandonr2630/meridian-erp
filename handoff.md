@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-18 · Session 25*
+*Last updated: 2026-06-20 · Session 27*
 
 ---
 
@@ -12,6 +12,81 @@
 | GitHub repo | `brandonr2630/meridian-erp` |
 | Deploy | Push to `master` via PR → GitHub Actions → GreenGeeks cPanel auto-deploys |
 | Deploy workflow | `.github/workflows/deploy.yml` → cPanel Fileman API (`chi203.greengeeks.net`) |
+
+---
+
+## Session 27 — CRM module UI (pipeline enhancements + contact persons + contact linking)
+
+**Date:** 2026-06-20
+**Branch / PR:** TBD — all changes to `index.html` only.
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| Opportunity modal | Status, Source, Probability, Lost Reason fields added | Status (open/won/lost) is now separate from Stage. Stage dropdown removes won/lost — those are outcomes, not pipeline positions. Source: referral/cold_call/website/repeat/other. Probability: 0–100 integer %. Lost Reason: text field, shown only when status=lost. |
+| `oppStatusChange()` | Show/hide Lost Reason field | Called on status dropdown change; hides Lost Reason unless status=lost. |
+| `_oppEffectiveStatus(o)` | Backward-compat status resolver | Returns `o.status` if not 'open'; falls back to legacy `o.stage` ('won'/'lost') for records created before Session 26. |
+| `openEditOpportunity()` | Populates new fields on edit | Maps legacy stage='won'/'lost' to status; sets stage to 'negotiation' for legacy won/lost records (since won/lost removed from stage dropdown). |
+| `saveOpportunity()` | Writes status, source, probability, lost_reason, won_at, lost_at | Sets `won_at` / `lost_at` to `nowISO()` only when status first transitions to that value. |
+| `quickMarkOpp(id, status)` | One-click Won / Lost from table row | 🏆 and ✗ buttons shown on open deals in the pipeline table; fires a confirm then patches status + won_at/lost_at. |
+| Pipeline table | Added Status + Probability columns | Status badge shows effective status; Prob. column shows `—` when null. Quick Won/Lost buttons only on open deals. |
+| Pipeline filter | Status filter added | All Status / Open / Won / Lost; filters on `_oppEffectiveStatus`. |
+| `renderPipelineStats()` | Updated to use effective status | Won This Month now reads `won_at` for timestamping (falls back to `updated_at`). |
+| Activity modal | Contact + Contact Person fields | Contact dropdown (from global `contacts`); Contact Person loaded async from `contact_persons` on contact selection via `onActContactChange()`. Opportunity remains optional. Validation: at least one of contact or opportunity required. |
+| Activities table | Contact column added | Shows trading_name/name for `contact_id`; Contact column added between Subject and Opportunity. |
+| `filterActivities()` | Searches contact name | Contact name included in full-text search. |
+| Task modal | Contact + Contact Person fields | Same pattern as activity modal: contact select → `onTaskContactChange()` → CP select populates. Validation: contact or opportunity required. |
+| Tasks table | Contact column added | Between Title and Opportunity columns. |
+| `filterTasks()` | Searches contact name | Contact name included in full-text search. |
+| Contact Persons modal | New `modal-contact-persons` | Opens per client from the Clients table (👥 button). Shows all contact persons with Primary badge, status, and edit/delete/set-primary actions. |
+| Contact Person form | New `modal-cp-form` | Add/edit a contact person: name, title, email, phone, is_primary checkbox, notes. Setting primary auto-clears is_primary on all other persons for that contact (bulk PATCH then individual PATCH). |
+| Client table | 👥 Persons button | Each client row now has a Contact Persons button before the Edit button. |
+| State vars | `contactPersons`, `_editCPId`, `_cpClientId` | Added alongside existing CRM state. |
+
+### Architecture notes
+
+- **`_oppEffectiveStatus(o)`** — the canonical way to determine a deal's outcome. Always call this rather than reading `o.status` directly, to handle the pre-Session-26 dataset where status defaults to 'open' even for deals with stage='won'/'lost'.
+- **Activity / Task validation** — both modals now require at least one of `contact_id` or `opportunity_id`. The "None" option is still available in each dropdown; the save function checks both before submitting.
+- **Contact Person CP select (activities/tasks)** — `_refreshActCPSelect` / `_refreshTaskCPSelect` fire an async `sbGet('contact_persons', ...)` each time a contact is selected. The field (`act-cp-field` / `task-cp-field`) is hidden when no contact is selected, visible when one is.
+- **Bulk is_primary reset** — `saveContactPerson()` and `setPrimaryCP()` both call `sbPatchWhere('contact_persons', 'contact_id=eq.${id}', { is_primary: false })` before setting the new primary. This is not atomic but safe for a single-user session; a race would be caught on the next load.
+
+### Outstanding
+
+- **"Convert to Quote" on won deals** — carried from Session 18
+- **CRM pipeline KPI widget on Dashboard** — carried from Session 18
+- **`voidVendorPayment()` untested** — carried from Session 22
+
+---
+
+## Session 26 — CRM schema migration (contact_persons + enriched CRM tables)
+
+**Date:** 2026-06-20
+**Branch / PR:** No code change to `index.html` this session — schema-only. Supabase migration `crm_schema_v1` applied directly to `fcagxvjxfqqkmuposmcb`.
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| `contact_persons` table | New | Multiple people per company/contact. Replaces flat `contact_person_*` columns on `contacts` (those columns kept for backward compat — deprecate later). Columns: `id`, `company_id`, `contact_id` (FK → contacts, cascade), `name`, `title`, `email`, `phone`, `is_primary`, `notes`, `is_active`, `created_at`, `updated_at`. Indexes on `contact_id` and `company_id`. |
+| Existing contact persons | Migrated | `contact_person_name/title/email/phone` from `contacts` copied into `contact_persons` as `is_primary=true` records. **20 records migrated.** |
+| `crm_activities` | 2 columns added | `contact_id` (FK → contacts, set null on delete), `contact_person_id` (FK → contact_persons, set null on delete). Activities can now be logged against a client directly, without requiring an opportunity. App rule: at least one of `contact_id` or `opportunity_id` must be set. |
+| `crm_tasks` | 2 columns added | Same pattern as `crm_activities` — `contact_id` and `contact_person_id` added. |
+| `crm_opportunities` | 6 columns added | `status` text NOT NULL default `'open'` check (`open`/`won`/`lost`) — outcome, separate from `stage` which tracks pipeline position; `probability` integer 0–100; `source` text (referral, cold_call, website, repeat, etc.); `lost_reason` text; `won_at` timestamptz; `lost_at` timestamptz. Indexes on `status` and `company_id`. |
+
+### Architecture notes
+
+- **`contact_persons` vs flat columns:** The old `contact_person_*` fields on `contacts` still exist and all existing save/load paths still write to them. `contact_persons` is additive — the CRM UI will read from it; the accounting UI still uses the flat columns. Clean-up pass deferred until after the CRM module UI is built.
+- **`sales_leads` is NOT a CRM prospect table.** It is an internal salesperson/account-executive roster used to attribute quotations to reps (`quotations.sales_lead_id`). The CRM pipeline lives entirely in `crm_opportunities`, with `stage='prospect'` as the entry point. No changes to `sales_leads`.
+- **status vs stage on opportunities:** `stage` = where in the sales process (prospect → qualified → proposal → negotiation); `status` = outcome (open / won / lost). A deal moves through stages while `status='open'`, then closes as won or lost.
+- **Reference doc:** `crm-reference/twenty-capabilities.md` — full feature catalogue of Twenty CRM (twentyhq/twenty), retained as a build reference for the native CRM module.
+
+### Outstanding
+
+- **CRM module UI** — schema is ready; no JS changes made this session. Next: build the enhanced Pipeline, Activities, Tasks, and Contact Persons views in `index.html`.
+- **"Convert to Quote" on won deals** — carried from Session 18
+- **CRM pipeline KPI widget on Dashboard** — carried from Session 18
+- **`voidVendorPayment()` untested** — carried from Session 22
 
 ---
 
@@ -248,11 +323,13 @@ Icons are rendered as `<img src="assets/..." style="width:18px;height:18px;verti
 
 ### Schema
 
-**`crm_opportunities`:** id · company_id · contact_id · name · stage (prospect→won/lost) · type (standard/development) · value · currency · expected_close · description · quotation_id · owner_id (erp_users) · created_at · updated_at
+**`crm_opportunities`:** id · company_id · contact_id · name · stage (prospect/qualified/proposal/negotiation/won/lost) · type (standard/development) · value · currency · expected_close · description · quotation_id · owner_id (erp_users) · created_at · updated_at · **status** (open/won/lost) · **probability** (0–100) · **source** · **lost_reason** · **won_at** · **lost_at** *(bold = added Session 26)*
 
-**`crm_activities`:** id · company_id · opportunity_id · contact_id · type · subject · notes · activity_date · user_id (erp_users) · created_at
+**`crm_activities`:** id · company_id · opportunity_id · type · subject · notes · activity_date · user_id (erp_users) · created_at · **contact_id** · **contact_person_id** *(bold = added Session 26)*
 
-**`crm_tasks`:** id · company_id · opportunity_id · contact_id · title · description · due_date · assignee_id (erp_users) · completed · completed_at · created_at
+**`crm_tasks`:** id · company_id · opportunity_id · title · description · due_date · assignee_id (erp_users) · completed · completed_at · created_at · **contact_id** · **contact_person_id** *(bold = added Session 26)*
+
+**`contact_persons`** *(new Session 26):* id · company_id · contact_id · name · title · email · phone · is_primary · notes · is_active · created_at · updated_at
 
 ### Outstanding
 
@@ -733,9 +810,10 @@ Items are grouped by theme and ordered by suggested priority within each group. 
 
 ### To Do
 
-- [ ] **Enable leaked password protection** — Supabase Dashboard → Authentication → Passwords. Checks new passwords against HaveIBeenPwned; flagged by the security advisors in Session 20 and cannot be enabled via SQL/MCP — requires a manual dashboard toggle.
+- [x] **CRM module UI** — Enhanced Pipeline (status/probability/source/won-lost + quick Mark Won/Lost), Contact Persons management on client records, Activity + Task contact linking. Built in Session 27.
+- [ ] **Enable leaked password protection** — Supabase Dashboard → Authentication → Passwords. Cannot be set via SQL/MCP — requires a manual dashboard toggle.
 - [ ] **"Convert to Quote" on a won opportunity** — pre-fill the quote form from the deal; write `quotation_id` back to the opportunity (carried over from Session 18)
-- [ ] **CRM pipeline KPI widget on the Dashboard** — deals by stage, conversion rate (carried over from Session 18; same item as "Sales pipeline KPIs" in the Backlog)
-- [ ] **Job → Invoice link** — completed job's costing summary pre-fills a Meridian invoice (new in Session 21; same-project query now feasible)
+- [ ] **CRM pipeline KPI widget on the Dashboard** — deals by stage, conversion rate (carried over from Session 18)
+- [ ] **Job → Invoice link** — completed job's costing summary pre-fills a Meridian invoice (Session 21)
 - [ ] **Job Cards PDF** — printable job card / work order report for the workshop floor
 
