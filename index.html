@@ -1983,6 +1983,9 @@ body.light .global-search-results, body.light .split-btn-menu {
         <div class="nav-item" onclick="navigate('crm-tasks')" id="nav-crm-tasks">
           <span class="nav-item-icon">✅</span> Tasks
         </div>
+        <div class="nav-item" onclick="navigate('crm-team-members')" id="nav-crm-team-members">
+          <span class="nav-item-icon">👷</span> Team Members
+        </div>
         <div class="nav-item" onclick="navigate('quotations')" id="nav-quotations">
           <span class="nav-item-icon">📝</span> Quotations
           <span class="nav-badge" id="badge-quotations">0</span>
@@ -2607,6 +2610,28 @@ body.light .global-search-results, body.light .split-btn-menu {
             </select>
           </div>
           <div id="task-table-wrap"><div class="page-loading"><div class="loading-spinner"></div> Loading...</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CRM TEAM MEMBERS ── -->
+    <div class="page-view" id="view-crm-team-members">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Team Members</div>
+          <div class="page-subtitle">Internal directory for CRM team assignments</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-primary btn-sm" onclick="openNewTeamMember()">+ Add Team Member</button>
+        </div>
+      </div>
+      <div class="page-body">
+        <div class="table-wrap">
+          <div class="table-toolbar">
+            <span class="table-title">Team Members</span>
+            <div class="search-box"><span class="search-icon">🔍</span><input type="text" placeholder="Search..." id="tm-search" oninput="filterTeamMembers()"></div>
+          </div>
+          <div id="team-member-table-wrap"><div class="page-loading"><div class="loading-spinner"></div> Loading...</div></div>
         </div>
       </div>
     </div>
@@ -5268,11 +5293,44 @@ body.light .global-search-results, body.light .split-btn-menu {
           <label class="field-label">Description</label>
           <textarea id="opp-description" rows="3" placeholder="Scope, background, notes..."></textarea>
         </div>
+        <div class="field" style="grid-column:span 2;">
+          <label class="field-label">Team</label>
+          <div id="opp-team-picker" style="border:1px solid var(--border);border-radius:8px;padding:8px;max-height:180px;overflow-y:auto;min-height:40px;"></div>
+        </div>
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-opportunity')">Cancel</button>
       <button class="btn btn-primary" onclick="saveOpportunity()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-crm-team-member" onclick="if(event.target===this)closeModal('modal-crm-team-member')">
+  <div class="modal" style="max-width:min(480px,95vw);">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-tm-title">New Team Member</div>
+      <button class="modal-close" onclick="closeModal('modal-crm-team-member')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid grid-2">
+        <div class="field" style="grid-column:span 2;">
+          <label class="field-label">Name *</label>
+          <input type="text" id="tm-name" placeholder="e.g. Jordan Smith">
+        </div>
+        <div class="field">
+          <label class="field-label">Job Title</label>
+          <input type="text" id="tm-job-title" placeholder="e.g. Project Engineer">
+        </div>
+        <div class="field">
+          <label class="field-label">Email</label>
+          <input type="email" id="tm-email" placeholder="e.g. jordan@example.com">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-crm-team-member')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveTeamMember()">Save</button>
     </div>
   </div>
 </div>
@@ -5465,6 +5523,7 @@ const Q = {
   crmOpps:       () => `company_id=eq.${currentCompany.id}&order=created_at.desc`,
   crmActivities: () => `company_id=eq.${currentCompany.id}&order=activity_date.desc,created_at.desc`,
   crmTasks:      () => `company_id=eq.${currentCompany.id}&order=due_date.asc,created_at.desc`,
+  crmTeamMembers: () => `company_id=eq.${currentCompany.id}&is_active=eq.true&order=name`,
 };
 
 // ── STATE ────────────────────────────────────────────────────────
@@ -5491,6 +5550,8 @@ let bankAccounts     = [];
 let coaExpanded      = {};
 let currentView      = 'dashboard';
 let notifData        = null;
+let _taskNotifs      = [];
+let _financialNotifCount = 0;
 let editingAccountId = null;
 let _accessToken     = null;
 
@@ -5567,7 +5628,7 @@ async function sb(path, opts = {}) {
 }
 async function sbGet(table, params = '')        { return sb(`${table}?${params}`); }
 async function sbPost(table, body)              { return sb(table, { method: 'POST', body }); }
-const NO_UPDATED_AT = new Set(['sequence_counters','crm_activities','crm_tasks']);
+const NO_UPDATED_AT = new Set(['sequence_counters','crm_activities','crm_tasks','crm_team_members','opportunity_team','erp_notifications']);
 async function sbPatch(table, id, body)         { const ts = NO_UPDATED_AT.has(table) ? {} : { updated_at: nowISO() }; return sb(`${table}?id=eq.${id}`, { method: 'PATCH', body: { ...body, ...ts } }); }
 async function sbPatchWhere(table, where, body) { const ts = NO_UPDATED_AT.has(table) ? {} : { updated_at: nowISO() }; return sb(`${table}?${where}`, { method: 'PATCH', prefer: 'return=minimal', body: { ...body, ...ts } }); }
 async function sbDelete(table, id)              { return sb(`${table}?id=eq.${id}`, { method: 'DELETE', prefer: 'return=minimal' }); }
@@ -5752,6 +5813,7 @@ async function initApp() {
   // Apply nav visibility based on role
   applyRoleNav();
   restoreNavState();
+  refreshNotifBadge();
 
   navigate('workspace');
 }
@@ -5760,7 +5822,7 @@ function applyRoleNav() {
   const role = currentUser?.role;
   const financeOnly  = ['nav-coa','nav-journal','nav-ap','nav-bank','nav-pl','nav-bs','nav-tb','nav-aged-ap','nav-companies','nav-settings'];
   const adminOnly    = ['nav-user-management'];
-  const salesVisible = ['nav-dashboard','nav-quotations','nav-ar','nav-aged-ar','nav-clients','nav-sales-leads','nav-pipeline','nav-crm-activities','nav-crm-tasks'];
+  const salesVisible = ['nav-dashboard','nav-quotations','nav-ar','nav-aged-ar','nav-clients','nav-sales-leads','nav-pipeline','nav-crm-activities','nav-crm-tasks','nav-crm-team-members'];
 
   if (role === 'sales') {
     document.querySelectorAll('.nav-item[id^="nav-"]').forEach(el => {
@@ -6076,7 +6138,8 @@ async function loadViewData(view) {
     case 'sales-leads':    await loadSalesLeadsPage(); break;
     case 'pipeline':       await loadPipeline(); break;
     case 'crm-activities': await loadCRMActivities(); break;
-    case 'crm-tasks':      await loadCRMTasks(); break;
+    case 'crm-tasks':        await loadCRMTasks(); break;
+    case 'crm-team-members': await loadTeamMembers(); break;
     case 'clients':      await loadClients(); break;
     case 'client-360':  await loadClient360(); break;
     case 'vendors':   await loadVendors(); break;
@@ -8036,7 +8099,8 @@ async function loadDashboard() {
     document.getElementById('alert-drafts').textContent      = totalDrafts || '—';
 
     // Update notification badge and panel data
-    updateNotifBadge(overdue.length + expiring.length + billsDue7.length);
+    _financialNotifCount = overdue.length + expiring.length + billsDue7.length;
+    refreshNotifBadge();
     notifData = {
       overdue:   { count: overdue.length,    value: overdueVal, currency: base },
       due7:      { count: due7.length,        value: due7val,    currency: base },
@@ -11845,6 +11909,7 @@ let crmOpps = [], _oppFiltered = [], oppPage = 0;
 let crmActivities = [], _actFiltered = [], actPage = 0;
 let crmTasks = [], _taskFiltered = [], taskPage = 0;
 let erpUsers = [];
+let crmTeamMembers = [], _editTeamMemberId = null;
 let contactPersons = [], _editOppId = null, _editActId = null, _editTaskId = null, _editCPId = null, _cpClientId = null;
 let currentClient360Id = null, _c360Data = null;
 
@@ -14200,9 +14265,13 @@ async function switchCompanyAndNav(coId, view) {
   navigate(view);
 }
 
-function toggleNotifications() {
+async function toggleNotifications() {
   const panel = document.getElementById('notif-dropdown');
   if (panel.classList.contains('open')) { panel.classList.remove('open'); return; }
+  try {
+    _taskNotifs = await sbGet('erp_notifications',
+      `user_id=eq.${currentUser.id}&company_id=eq.${currentCompany.id}&is_read=eq.false&order=created_at.desc&limit=20`);
+  } catch(e) { _taskNotifs = []; }
   panel.innerHTML = renderNotifPanel();
   panel.classList.add('open');
 }
@@ -14211,14 +14280,24 @@ function closeNotifPanel() {
 }
 function renderNotifPanel() {
   const d = notifData;
-  const total = d ? (d.overdue.count + d.due7.count + d.expiring.count + d.billsDue7.count) : 0;
-  const header = `<div class="notif-header">Notifications</div>`;
-  if (!d || total === 0) return header + `<div class="notif-empty">✅ All clear — nothing needs attention</div>`;
+  const finCount = d ? (d.overdue.count + d.due7.count + d.expiring.count + d.billsDue7.count) : 0;
+  const total = finCount + _taskNotifs.length;
+  const markAllBtn = _taskNotifs.length
+    ? `<button onclick="markAllNotifsRead()" style="float:right;background:none;border:none;color:var(--accent);font-size:11px;cursor:pointer;padding:0;line-height:1;">Mark all read</button>`
+    : '';
+  const header = `<div class="notif-header">${markAllBtn}Notifications</div>`;
+  if (total === 0) return header + `<div class="notif-empty">✅ All clear — nothing needs attention</div>`;
   let rows = '';
-  if (d.overdue.count)   rows += _notifRow('🔴','Overdue Invoices',`${d.overdue.count} invoice${d.overdue.count>1?'s':''} · ${fmt(d.overdue.value,d.overdue.currency)}`,"navigate('ar');closeNotifPanel()",true);
-  if (d.due7.count)      rows += _notifRow('🟡','Due in 7 Days',`${d.due7.count} invoice${d.due7.count>1?'s':''} · ${fmt(d.due7.value,d.due7.currency)}`,"navigate('ar');closeNotifPanel()");
-  if (d.expiring.count)  rows += _notifRow('📋','Expiring Quotes',`${d.expiring.count} quotation${d.expiring.count>1?'s':''} expiring soon`,"navigate('quotations');closeNotifPanel()");
-  if (d.billsDue7.count) rows += _notifRow('📦','Bills Due Soon',`${d.billsDue7.count} bill${d.billsDue7.count>1?'s':''} · ${fmt(d.billsDue7.value,d.billsDue7.currency)}`,"navigate('ap');closeNotifPanel()");
+  _taskNotifs.forEach(n => {
+    const icon = n.type === 'task_assigned' ? '📋' : '✅';
+    rows += `<div class="notif-row" onclick="markNotifRead('${n.id}','crm-tasks')"><span class="notif-row-icon">${icon}</span><div class="notif-row-body"><div class="notif-row-title">${escHTML(n.title)}</div><div class="notif-row-sub">${escHTML(n.body||'')}</div></div><span class="notif-row-arrow">›</span></div>`;
+  });
+  if (d) {
+    if (d.overdue.count)   rows += _notifRow('🔴','Overdue Invoices',`${d.overdue.count} invoice${d.overdue.count>1?'s':''} · ${fmt(d.overdue.value,d.overdue.currency)}`,"navigate('ar');closeNotifPanel()",true);
+    if (d.due7.count)      rows += _notifRow('🟡','Due in 7 Days',`${d.due7.count} invoice${d.due7.count>1?'s':''} · ${fmt(d.due7.value,d.due7.currency)}`,"navigate('ar');closeNotifPanel()");
+    if (d.expiring.count)  rows += _notifRow('📋','Expiring Quotes',`${d.expiring.count} quotation${d.expiring.count>1?'s':''} expiring soon`,"navigate('quotations');closeNotifPanel()");
+    if (d.billsDue7.count) rows += _notifRow('📦','Bills Due Soon',`${d.billsDue7.count} bill${d.billsDue7.count>1?'s':''} · ${fmt(d.billsDue7.value,d.billsDue7.currency)}`,"navigate('ap');closeNotifPanel()");
+  }
   return header + rows;
 }
 function _notifRow(icon, title, sub, action, urgent=false) {
@@ -14238,6 +14317,37 @@ function updateNotifBadge(count) {
   } else {
     badge.style.display = 'none';
   }
+}
+
+async function refreshNotifBadge() {
+  if (!currentUser || !currentCompany) return;
+  try {
+    const unread = await sbGet('erp_notifications',
+      `user_id=eq.${currentUser.id}&company_id=eq.${currentCompany.id}&is_read=eq.false&select=id`);
+    updateNotifBadge(_financialNotifCount + unread.length);
+  } catch(e) {}
+}
+
+async function markNotifRead(id, view) {
+  try {
+    await sbPatchWhere('erp_notifications', `id=eq.${id}`, { is_read: true });
+    _taskNotifs = _taskNotifs.filter(n => n.id !== id);
+  } catch(e) {}
+  closeNotifPanel();
+  if (view) navigate(view);
+  refreshNotifBadge();
+}
+
+async function markAllNotifsRead() {
+  if (!currentUser || !currentCompany) return;
+  try {
+    await sbPatchWhere('erp_notifications',
+      `user_id=eq.${currentUser.id}&company_id=eq.${currentCompany.id}&is_read=eq.false`,
+      { is_read: true });
+    _taskNotifs = [];
+  } catch(e) {}
+  closeNotifPanel();
+  refreshNotifBadge();
 }
 
 // ── DELETE DRAFT DOCUMENT ─────────────────────────────────────────
@@ -14286,9 +14396,10 @@ function showToast(msg, type='success') {
 async function loadPipeline() {
   document.getElementById('opp-table-wrap').innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading...</div>';
   try {
-    [crmOpps, erpUsers] = await Promise.all([
+    [crmOpps, erpUsers, crmTeamMembers] = await Promise.all([
       sbGet('crm_opportunities', Q.crmOpps()),
-      sbGet('erp_users', 'is_active=eq.true&order=full_name').catch(() => [])
+      sbGet('erp_users', 'is_active=eq.true&order=full_name').catch(() => []),
+      sbGet('crm_team_members', Q.crmTeamMembers()).catch(() => [])
     ]);
     const ownerSel = document.getElementById('opp-owner-filter');
     if (ownerSel) ownerSel.innerHTML = '<option value="">All Owners</option>' +
@@ -14401,10 +14512,11 @@ function openNewOpportunity() {
   document.getElementById('opp-currency').value = currentCompany.base_currency || currentCompany.currency || 'TTD';
   document.getElementById('opp-lost-reason-field').style.display = 'none';
   _populateOppSelects(null, null);
+  _renderOppTeamPicker([]);
   document.getElementById('modal-opportunity').classList.add('show');
 }
 
-function openEditOpportunity(id) {
+async function openEditOpportunity(id) {
   const o = crmOpps.find(x => x.id === id);
   if (!o) return;
   _editOppId = id;
@@ -14423,7 +14535,11 @@ function openEditOpportunity(id) {
   document.getElementById('opp-lost-reason').value = o.lost_reason     || '';
   document.getElementById('opp-lost-reason-field').style.display = effStatus === 'lost' ? '' : 'none';
   _populateOppSelects(o.contact_id, o.owner_id);
+  _renderOppTeamPicker([]);
   document.getElementById('modal-opportunity').classList.add('show');
+  sbGet('opportunity_team', `opportunity_id=eq.${id}`).then(team => {
+    _renderOppTeamPicker(team.map(t => t.team_member_id));
+  }).catch(() => {});
 }
 
 function _populateOppSelects(selContactId, selOwnerId) {
@@ -14458,8 +14574,14 @@ async function saveOpportunity() {
     lost_at: status === 'lost' && existing?.status !== 'lost' ? nowISO() : (existing?.lost_at || null),
   };
   try {
-    if (_editOppId) await sbPatch('crm_opportunities', _editOppId, payload);
-    else            await sbPost('crm_opportunities', payload);
+    let oppId = _editOppId;
+    if (_editOppId) {
+      await sbPatch('crm_opportunities', _editOppId, payload);
+    } else {
+      const [created] = await sbPost('crm_opportunities', payload);
+      oppId = created.id;
+    }
+    await _saveOppTeam(oppId);
     closeModal('modal-opportunity');
     showToast(_editOppId ? 'Opportunity updated.' : 'Opportunity created.', 'success');
     await loadPipeline();
@@ -14643,14 +14765,16 @@ async function deleteActivity(id) {
 async function loadCRMTasks() {
   document.getElementById('task-table-wrap').innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading...</div>';
   try {
-    [crmTasks, crmOpps, erpUsers] = await Promise.all([
+    [crmTasks, crmOpps, erpUsers, crmTeamMembers] = await Promise.all([
       sbGet('crm_tasks', Q.crmTasks()),
       sbGet('crm_opportunities', Q.crmOpps()),
-      sbGet('erp_users', 'is_active=eq.true&order=full_name').catch(() => [])
+      sbGet('erp_users', 'is_active=eq.true&order=full_name').catch(() => []),
+      sbGet('crm_team_members', Q.crmTeamMembers()).catch(() => [])
     ]);
     const asSel = document.getElementById('task-assignee-filter');
     if (asSel) asSel.innerHTML = '<option value="">All Assignees</option>' +
-      erpUsers.map(u => `<option value="${u.id}">${escHTML(u.full_name)}</option>`).join('');
+      (erpUsers.length ? `<optgroup label="ERP Users">${erpUsers.map(u => `<option value="u:${u.id}">${escHTML(u.full_name)}</option>`).join('')}</optgroup>` : '') +
+      (crmTeamMembers.length ? `<optgroup label="Team Members">${crmTeamMembers.map(m => `<option value="t:${m.id}">${escHTML(m.name)}</option>`).join('')}</optgroup>` : '');
     renderTaskStats();
     filterTasks();
   } catch(e) {
@@ -14676,7 +14800,10 @@ function filterTasks() {
   const today    = todayDate();
   const contactMap = {}; contacts.forEach(c => { contactMap[c.id] = c.trading_name || c.name; });
   _taskFiltered  = crmTasks.filter(t => {
-    if (assignee && t.assignee_id !== assignee) return false;
+    if (assignee) {
+      if (assignee.startsWith('u:') && t.assignee_id !== assignee.slice(2)) return false;
+      if (assignee.startsWith('t:') && t.team_member_assignee_id !== assignee.slice(2)) return false;
+    }
     if (status === 'completed' && !t.completed) return false;
     if (status === 'open'      && (t.completed || (t.due_date && t.due_date < today))) return false;
     if (status === 'overdue'   && (!t.due_date || t.due_date >= today || t.completed)) return false;
@@ -14692,6 +14819,7 @@ function renderTasksTable() {
   if (!wrap) return;
   const oppMap     = {}; crmOpps.forEach(o  => { oppMap[o.id]  = o.name;      });
   const userMap    = {}; erpUsers.forEach(u => { userMap[u.id] = u.full_name; });
+  const tmMap      = {}; crmTeamMembers.forEach(m => { tmMap[m.id] = m.name; });
   const contactMap = {}; contacts.forEach(c => { contactMap[c.id] = c.trading_name || c.name; });
   const today      = todayDate();
   if (!_taskFiltered.length) { wrap.innerHTML = '<div class="table-empty">No tasks found.</div>'; return; }
@@ -14711,7 +14839,7 @@ function renderTasksTable() {
           <td>${escHTML(contactMap[t.contact_id] || '—')}</td>
           <td>${escHTML(oppMap[t.opportunity_id] || '—')}</td>
           <td class="mono"${overdue ? ' style="color:var(--red);"' : ''}>${t.due_date || '—'}</td>
-          <td>${escHTML(userMap[t.assignee_id] || '—')}</td>
+          <td>${escHTML(userMap[t.assignee_id] || tmMap[t.team_member_assignee_id] || '—')}</td>
           <td>${statusBadge}</td>
           <td class="right" style="white-space:nowrap;">
             ${!t.completed ? `<button class="btn btn-ghost btn-xs" aria-label="Mark complete" onclick="completeTask('${t.id}')">✓</button>` : ''}
@@ -14733,7 +14861,8 @@ function _populateTaskSelects(selOppId, selAssigneeId, selContactId, selCPId) {
   document.getElementById('task-opportunity').innerHTML = '<option value="">— None —</option>' +
     crmOpps.map(o => `<option value="${o.id}"${o.id===selOppId?' selected':''}>${escHTML(o.name)}</option>`).join('');
   document.getElementById('task-assignee').innerHTML = '<option value="">— Unassigned —</option>' +
-    erpUsers.map(u => `<option value="${u.id}"${u.id===selAssigneeId?' selected':''}>${escHTML(u.full_name)}</option>`).join('');
+    (erpUsers.length ? `<optgroup label="ERP Users">${erpUsers.map(u => `<option value="u:${u.id}"${'u:'+u.id===selAssigneeId?' selected':''}>${escHTML(u.full_name)}</option>`).join('')}</optgroup>` : '') +
+    (crmTeamMembers.length ? `<optgroup label="Team Members">${crmTeamMembers.map(m => `<option value="t:${m.id}"${'t:'+m.id===selAssigneeId?' selected':''}>${escHTML(m.name)}${m.job_title?' — '+escHTML(m.job_title):''}</option>`).join('')}</optgroup>` : '');
   _refreshTaskCPSelect(selContactId, selCPId);
 }
 
@@ -14774,7 +14903,8 @@ function openEditTask(id) {
   document.getElementById('task-title').value       = t.title       || '';
   document.getElementById('task-due-date').value    = t.due_date    || '';
   document.getElementById('task-description').value = t.description || '';
-  _populateTaskSelects(t.opportunity_id, t.assignee_id, t.contact_id, t.contact_person_id);
+  const taskAssigneeVal = t.team_member_assignee_id ? `t:${t.team_member_assignee_id}` : t.assignee_id ? `u:${t.assignee_id}` : '';
+  _populateTaskSelects(t.opportunity_id, taskAssigneeVal, t.contact_id, t.contact_person_id);
   document.getElementById('modal-crm-task').classList.add('show');
 }
 
@@ -14792,24 +14922,58 @@ async function saveTask() {
     title,
     description:       document.getElementById('task-description').value.trim() || null,
     due_date:          document.getElementById('task-due-date').value            || null,
-    assignee_id:       document.getElementById('task-assignee').value            || null,
+    assignee_id:             (v => v.startsWith('u:') ? v.slice(2) : null)(document.getElementById('task-assignee').value || ''),
+    team_member_assignee_id: (v => v.startsWith('t:') ? v.slice(2) : null)(document.getElementById('task-assignee').value || ''),
   };
   try {
-    if (_editTaskId) await sbPatchWhere('crm_tasks', `id=eq.${_editTaskId}`, payload);
-    else             await sbPost('crm_tasks', payload);
+    const prevAssigneeId = _editTaskId ? (crmTasks.find(t => t.id === _editTaskId)?.assignee_id) : null;
+    let taskId = _editTaskId;
+    if (_editTaskId) {
+      await sbPatchWhere('crm_tasks', `id=eq.${_editTaskId}`, payload);
+    } else {
+      const [created] = await sbPost('crm_tasks', payload);
+      taskId = created.id;
+    }
     closeModal('modal-crm-task');
     showToast(_editTaskId ? 'Task updated.' : 'Task created.', 'success');
+    if (payload.assignee_id && payload.assignee_id !== prevAssigneeId) {
+      sbPost('erp_notifications', {
+        company_id: currentCompany.id,
+        user_id:    payload.assignee_id,
+        type:       'task_assigned',
+        title:      'Task assigned to you',
+        body:       payload.title,
+        task_id:    taskId,
+      }).then(() => { if (payload.assignee_id === currentUser.id) refreshNotifBadge(); }).catch(() => {});
+    }
     await loadCRMTasks();
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
 async function completeTask(id) {
   try {
+    const task = crmTasks.find(t => t.id === id);
     await sbPatchWhere('crm_tasks', `id=eq.${id}`, { completed: true, completed_at: nowISO() });
     showToast('Task completed.', 'success');
     crmTasks = crmTasks.map(t => t.id === id ? { ...t, completed: true, completed_at: nowISO() } : t);
     renderTaskStats();
     filterTasks();
+    if (task?.opportunity_id) {
+      const opp = crmOpps.find(o => o.id === task.opportunity_id);
+      if (opp?.owner_id) {
+        const who = erpUsers.find(u => u.id === task.assignee_id)?.full_name
+                 || crmTeamMembers.find(m => m.id === task.team_member_assignee_id)?.name
+                 || 'Someone';
+        sbPost('erp_notifications', {
+          company_id: currentCompany.id,
+          user_id:    opp.owner_id,
+          type:       'task_completed',
+          title:      'Task completed',
+          body:       `"${task.title}" completed by ${who}`,
+          task_id:    id,
+        }).then(() => { if (opp.owner_id === currentUser.id) refreshNotifBadge(); }).catch(() => {});
+      }
+    }
   } catch(e) { showToast('Error completing task.', 'error'); }
 }
 
@@ -14820,6 +14984,121 @@ async function deleteTask(id) {
     showToast('Task deleted.', 'success');
     await loadCRMTasks();
   } catch(e) { showToast('Error deleting task.', 'error'); }
+}
+
+// ── CRM TEAM MEMBERS ─────────────────────────────────────────────
+let _tmFiltered = [];
+
+async function loadTeamMembers() {
+  document.getElementById('team-member-table-wrap').innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading...</div>';
+  try {
+    crmTeamMembers = await sbGet('crm_team_members', `company_id=eq.${currentCompany.id}&order=name`);
+    filterTeamMembers();
+  } catch(e) {
+    document.getElementById('team-member-table-wrap').innerHTML = '<div class="table-empty">Error loading team members.</div>';
+  }
+}
+
+function filterTeamMembers() {
+  const q = (document.getElementById('tm-search')?.value || '').toLowerCase();
+  _tmFiltered = crmTeamMembers.filter(m =>
+    !q || [m.name, m.job_title, m.email].filter(Boolean).join(' ').toLowerCase().includes(q)
+  );
+  renderTeamMembersTable();
+}
+
+function renderTeamMembersTable() {
+  const wrap = document.getElementById('team-member-table-wrap');
+  if (!wrap) return;
+  if (!_tmFiltered.length) {
+    wrap.innerHTML = '<div class="table-empty">No team members found. Add one to get started.</div>';
+    return;
+  }
+  wrap.innerHTML = `
+    <table class="data-table">
+      <thead><tr><th>Name</th><th>Job Title</th><th>Email</th><th></th></tr></thead>
+      <tbody>${_tmFiltered.map(m => `<tr>
+        <td style="font-weight:500;">${escHTML(m.name)}</td>
+        <td>${escHTML(m.job_title || '—')}</td>
+        <td>${m.email ? `<a href="mailto:${escHTML(m.email)}" style="color:var(--accent);">${escHTML(m.email)}</a>` : '—'}</td>
+        <td class="right" style="white-space:nowrap;">
+          <button class="btn btn-ghost btn-xs" onclick="openEditTeamMember('${m.id}')">✏️</button>
+          <button class="btn btn-ghost btn-xs" onclick="deleteTeamMember('${m.id}')">🗑</button>
+        </td>
+      </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+function openNewTeamMember() {
+  _editTeamMemberId = null;
+  document.getElementById('modal-tm-title').textContent = 'New Team Member';
+  ['tm-name','tm-job-title','tm-email'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('modal-crm-team-member').classList.add('show');
+}
+
+function openEditTeamMember(id) {
+  const m = crmTeamMembers.find(x => x.id === id);
+  if (!m) return;
+  _editTeamMemberId = id;
+  document.getElementById('modal-tm-title').textContent  = 'Edit Team Member';
+  document.getElementById('tm-name').value      = m.name      || '';
+  document.getElementById('tm-job-title').value = m.job_title || '';
+  document.getElementById('tm-email').value     = m.email     || '';
+  document.getElementById('modal-crm-team-member').classList.add('show');
+}
+
+async function saveTeamMember() {
+  const name = document.getElementById('tm-name').value.trim();
+  if (!name) { showToast('Name is required.', 'error'); return; }
+  const payload = {
+    company_id: currentCompany.id,
+    name,
+    job_title: document.getElementById('tm-job-title').value.trim() || null,
+    email:     document.getElementById('tm-email').value.trim()     || null,
+  };
+  try {
+    if (_editTeamMemberId) await sbPatch('crm_team_members', _editTeamMemberId, payload);
+    else                   await sbPost('crm_team_members', payload);
+    closeModal('modal-crm-team-member');
+    showToast(_editTeamMemberId ? 'Team member updated.' : 'Team member added.', 'success');
+    await loadTeamMembers();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function deleteTeamMember(id) {
+  if (!confirm('Delete this team member? They will be removed from all opportunity teams.')) return;
+  try {
+    await sbDelete('crm_team_members', id);
+    showToast('Team member deleted.', 'success');
+    await loadTeamMembers();
+  } catch(e) { showToast('Error deleting team member.', 'error'); }
+}
+
+function _renderOppTeamPicker(selectedIds) {
+  const picker = document.getElementById('opp-team-picker');
+  if (!picker) return;
+  if (!crmTeamMembers.length) {
+    picker.innerHTML = '<span style="color:var(--text-3);font-size:12px;">No team members yet — add via CRM → Team Members.</span>';
+    return;
+  }
+  const sel = new Set(selectedIds);
+  picker.innerHTML = crmTeamMembers.map(m => `
+    <label style="display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--bg-3)'" onmouseout="this.style.background=''">
+      <input type="checkbox" value="${m.id}"${sel.has(m.id) ? ' checked' : ''} style="width:14px;height:14px;accent-color:var(--accent);flex-shrink:0;">
+      <span style="display:flex;align-items:baseline;gap:6px;">
+        <span style="font-weight:500;font-size:13px;">${escHTML(m.name)}</span>
+        ${m.job_title ? `<span style="color:var(--text-3);font-size:11px;">${escHTML(m.job_title)}</span>` : ''}
+      </span>
+    </label>`).join('');
+}
+
+async function _saveOppTeam(oppId) {
+  const checked = [...document.querySelectorAll('#opp-team-picker input[type=checkbox]:checked')].map(cb => cb.value);
+  await sbDeleteWhere('opportunity_team', `opportunity_id=eq.${oppId}`);
+  if (checked.length) {
+    await Promise.all(checked.map(tmId => sbPost('opportunity_team', { opportunity_id: oppId, team_member_id: tmId })));
+  }
 }
 
 // ── CLIENT 360 ───────────────────────────────────────────────────
