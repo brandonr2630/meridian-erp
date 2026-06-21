@@ -1866,30 +1866,37 @@ body.light .global-search-results, body.light .split-btn-menu {
         <span class="nav-toggle" id="toggle-finance">&#8722;</span>
       </div>
       <div class="nav-section-body" id="section-body-finance">
-        <div style="font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);padding:8px 12px 4px 12px;">Transactions</div>
-        <div class="nav-item" onclick="navigate('ar')" id="nav-ar">
-          <span class="nav-item-icon"><img src="assets/Acc Receivables Icon.svg" style="width:18px;height:18px;vertical-align:middle;"></span> Accounts Receivable
-          <span class="nav-badge" id="badge-ar">0</span>
-        </div>
-        <div class="nav-item" onclick="navigate('credit-notes')" id="nav-credit-notes">
-          <span class="nav-item-icon"><img src="assets/Credit Note.svg" style="width:18px;height:18px;vertical-align:middle;"></span> Credit Notes
-          <span class="nav-badge" id="badge-credit-notes">0</span>
-        </div>
-        <div class="nav-item" onclick="navigate('ap')" id="nav-ap">
-          <span class="nav-item-icon"><img src="assets/Acc Payables Icon.svg" style="width:18px;height:18px;vertical-align:middle;"></span> Accounts Payable
-          <span class="nav-badge" id="badge-ap">0</span>
-        </div>
-        <div class="nav-item" onclick="navigate('vendors')" id="nav-vendors">
-          <span class="nav-item-icon">🏭</span> Vendors
-        </div>
-        <div class="nav-item" onclick="navigate('bank')" id="nav-bank">
-          <span class="nav-item-icon">🏦</span> Bank & Cash
-        </div>
-        <div class="nav-item" onclick="navigate('journal')" id="nav-journal">
-          <span class="nav-item-icon">📓</span> Journal Entries
-        </div>
-        <div class="nav-item" onclick="navigate('coa')" id="nav-coa">
-          <span class="nav-item-icon">📋</span> Chart of Accounts
+        <div class="nav-sub-section" id="sub-section-finance-transactions">
+          <div class="nav-sub-header" onclick="toggleNavSubSection('finance-transactions')">
+            <span class="nav-sub-label">Transactions</span>
+            <span class="nav-sub-toggle" id="toggle-finance-transactions">&#8722;</span>
+          </div>
+          <div class="nav-sub-body" id="sub-body-finance-transactions">
+            <div class="nav-item sub-item" onclick="navigate('ar')" id="nav-ar">
+              <span class="nav-item-icon"><img src="assets/Acc Receivables Icon.svg" style="width:18px;height:18px;vertical-align:middle;"></span> Accounts Receivable
+              <span class="nav-badge" id="badge-ar">0</span>
+            </div>
+            <div class="nav-item sub-item" onclick="navigate('credit-notes')" id="nav-credit-notes">
+              <span class="nav-item-icon"><img src="assets/Credit Note.svg" style="width:18px;height:18px;vertical-align:middle;"></span> Credit Notes
+              <span class="nav-badge" id="badge-credit-notes">0</span>
+            </div>
+            <div class="nav-item sub-item" onclick="navigate('ap')" id="nav-ap">
+              <span class="nav-item-icon"><img src="assets/Acc Payables Icon.svg" style="width:18px;height:18px;vertical-align:middle;"></span> Accounts Payable
+              <span class="nav-badge" id="badge-ap">0</span>
+            </div>
+            <div class="nav-item sub-item" onclick="navigate('vendors')" id="nav-vendors">
+              <span class="nav-item-icon">🏭</span> Vendors
+            </div>
+            <div class="nav-item sub-item" onclick="navigate('bank')" id="nav-bank">
+              <span class="nav-item-icon">🏦</span> Bank & Cash
+            </div>
+            <div class="nav-item sub-item" onclick="navigate('journal')" id="nav-journal">
+              <span class="nav-item-icon">📓</span> Journal Entries
+            </div>
+            <div class="nav-item sub-item" onclick="navigate('coa')" id="nav-coa">
+              <span class="nav-item-icon">📋</span> Chart of Accounts
+            </div>
+          </div>
         </div>
         <div class="nav-sub-section" id="sub-section-finance-reports">
           <div class="nav-sub-header" onclick="toggleNavSubSection('finance-reports')">
@@ -5890,9 +5897,9 @@ function updateCompanyContext() {
 
 // ── NAV COLLAPSE ─────────────────────────────────────────────────
 const VIEW_SECTIONS = {
-  coa: ['finance'], journal: ['finance'], ar: ['finance'],
-  'credit-notes': ['finance'], ap: ['finance'], bank: ['finance'],
-  vendors: ['finance'],
+  coa: ['finance', 'finance-transactions'], journal: ['finance', 'finance-transactions'], ar: ['finance', 'finance-transactions'],
+  'credit-notes': ['finance', 'finance-transactions'], ap: ['finance', 'finance-transactions'], bank: ['finance', 'finance-transactions'],
+  vendors: ['finance', 'finance-transactions'],
   'aged-ar':  ['finance', 'finance-reports'],
   'aged-ap':  ['finance', 'finance-reports'],
   pl:         ['finance', 'finance-reports'],
