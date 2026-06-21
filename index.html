@@ -1550,6 +1550,42 @@ body.light .topbar {
   border-bottom: none;
 }
 
+/* ── Workspace company picker ── */
+.workspace-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+  padding: 4px 0;
+}
+.workspace-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  position: relative;
+}
+.workspace-card:hover {
+  border-color: var(--gold);
+  box-shadow: 0 2px 14px rgba(201,168,76,0.14);
+}
+.workspace-card.active {
+  border-color: var(--gold);
+  background: var(--gold-bg);
+}
+.workspace-card-info { flex: 1; min-width: 0; }
+.workspace-card-name { font-weight: 600; font-size: 14px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.workspace-card-meta { font-size: 11px; color: var(--text-3); margin-top: 3px; font-family: 'DM Mono', monospace; }
+.workspace-card-badge {
+  font-size: 9px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--gold); background: var(--gold-bg); border: 1px solid var(--gold-border);
+  border-radius: 4px; padding: 2px 7px; flex-shrink: 0;
+}
+
 /* ── Logo mark — premium gold gradient with subtle shine ── */
 .topbar-logo-mark, .login-logo-mark {
   background: linear-gradient(140deg, #a8762e 0%, #eacb6e 42%, #c9a84c 72%, #b59040 100%);
@@ -1856,7 +1892,10 @@ body.light .global-search-results, body.light .split-btn-menu {
   <nav class="sidebar">
     <div class="sidebar-section" data-section="overview">
       <div class="sidebar-section-label">Overview</div>
-      <div class="nav-item active" onclick="navigate('dashboard')" id="nav-dashboard">
+      <div class="nav-item" onclick="navigate('workspace')" id="nav-workspace">
+        <span class="nav-item-icon">🏢</span> Workspace
+      </div>
+      <div class="nav-item" onclick="navigate('dashboard')" id="nav-dashboard">
         <span class="nav-item-icon">📊</span> Dashboard
       </div>
     </div>
@@ -2174,6 +2213,17 @@ body.light .global-search-results, body.light .split-btn-menu {
         </div>
 
       </div>
+    </div>
+
+    <!-- ── WORKSPACE ── -->
+    <div class="page-view" id="view-workspace">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Workspace</div>
+          <div class="page-subtitle">Select a company to open its dashboard</div>
+        </div>
+      </div>
+      <div class="workspace-grid" id="workspace-grid"></div>
     </div>
 
     <!-- ── CHART OF ACCOUNTS ── -->
@@ -5703,7 +5753,7 @@ async function initApp() {
   applyRoleNav();
   restoreNavState();
 
-  navigate('dashboard');
+  navigate('workspace');
 }
 
 function applyRoleNav() {
@@ -6005,6 +6055,7 @@ function closeSidebar() {
 }
 
 async function loadViewData(view) {
+  if (view === 'workspace') { loadWorkspaceView(); return; }
   if (!currentCompany) return;
   switch(view) {
     case 'dashboard': await loadDashboard(); break;
@@ -13958,6 +14009,32 @@ async function openCNPDF(id) {
     parseFloat(cn.total||0), null, null, cn.notes, null, co.name, cn.cn_no);
 
   document.getElementById('modal-cn-pdf').classList.add('show');
+}
+
+// ── WORKSPACE ────────────────────────────────────────────────────
+function loadWorkspaceView() {
+  const colors = ['#2563eb','#7c3aed','#db2777','#ea580c','#16a34a','#0891b2','#b45309'];
+  const cards = companies.map((co, i) => {
+    const col = colors[i % colors.length];
+    const isActive = currentCompany?.id === co.id;
+    const icon = co.logo_url
+      ? `<img src="${escHTML(co.logo_url)}" style="width:48px;height:48px;object-fit:contain;border-radius:10px;flex-shrink:0;">`
+      : `<div style="width:48px;height:48px;border-radius:10px;background:${col}22;border:1px solid ${col}44;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;color:${col};flex-shrink:0;">${escHTML((co.code||co.name||'?').slice(0,2).toUpperCase())}</div>`;
+    return `<div class="workspace-card${isActive?' active':''}" onclick="selectWorkspaceCompany('${escHTML(co.id)}')">
+      ${icon}
+      <div class="workspace-card-info">
+        <div class="workspace-card-name">${escHTML(co.trading_name || co.name)}</div>
+        <div class="workspace-card-meta">${escHTML(co.code||'')} · ${escHTML(co.currency||'')}</div>
+      </div>
+      ${isActive ? '<span class="workspace-card-badge">Active</span>' : ''}
+    </div>`;
+  }).join('');
+  document.getElementById('workspace-grid').innerHTML = cards || '<div class="table-empty">No companies available.</div>';
+}
+
+async function selectWorkspaceCompany(id) {
+  await switchCompany(id);
+  navigate('dashboard');
 }
 
 // ── Hook new views into loadViewData ──────────────────────────────
