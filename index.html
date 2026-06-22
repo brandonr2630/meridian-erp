@@ -5528,6 +5528,7 @@ const Q = {
 
 // ── STATE ────────────────────────────────────────────────────────
 let currentUser      = null;
+let _perms           = {};   // flat permission map built at login + company switch
 
 // ── ROLE HELPERS ──────────────────────────────────────────────────
 function isSuperAdmin() { return currentUser?.role === 'super_admin'; }
@@ -5541,6 +5542,37 @@ function canDelete()    { return isAdmin(); }
 function canSettings()  { return isAdmin(); }
 function canFinance()   { return isAdmin(); }  // AP, Bank, CoA, Journal, Reports
 function canViewAR()    { return !isUser() || isAdmin(); } // sales can view AR
+
+// ── PERMISSION ENGINE ─────────────────────────────────────────────
+// _perms is populated by buildPerms() at login and on every company switch.
+// can(perm) is the single source of truth for access checks.
+function buildPerms(rolePermissions = {}, overrides = {}) {
+  _perms = { ...rolePermissions, ...overrides };
+}
+function can(perm)        { return _perms[perm] === true; }
+function canAny(...perms) { return perms.some(p => can(p)); }
+
+async function loadAndBuildPerms() {
+  if (!currentUser || !currentCompany) return;
+  try {
+    const rows = await sbGet(
+      'erp_user_company_roles',
+      `user_id=eq.${currentUser.id}&company_id=eq.${currentCompany.id}&select=*,erp_roles(*)&limit=1`
+    );
+    if (rows.length) {
+      const assignment = rows[0];
+      const rolePerms  = assignment.erp_roles?.permissions || {};
+      const overrides  = assignment.permission_overrides   || {};
+      buildPerms(rolePerms, overrides);
+    } else {
+      buildPerms({}, {});   // no assignment found — deny everything
+    }
+  } catch(e) {
+    console.warn('loadAndBuildPerms failed:', e.message);
+    buildPerms({}, {});
+  }
+}
+
 let currentCompany   = null;
 let companies        = [];
 let accounts         = [];
