@@ -5590,22 +5590,12 @@ async function loadAndBuildPerms() {
       'erp_user_company_roles',
       `user_id=eq.${currentUser.id}&company_id=eq.${currentCompany.id}&select=role_id,permission_overrides&limit=1`
     );
-    if (!ucr.length) {
-      showToast('RBAC debug: no UCR row found for user+company', 'error');
-      buildPerms({}, {}); return;
-    }
+    if (!ucr.length) { buildPerms({}, {}); return; }
     const { role_id, permission_overrides } = ucr[0];
     const roles = await sbGet('erp_roles', `id=eq.${role_id}&select=permissions&limit=1`);
-    if (!roles.length) {
-      showToast(`RBAC debug: erp_roles returned 0 rows for id=${role_id}`, 'error');
-      buildPerms({}, {}); return;
-    }
-    const rolePerms = roles[0].permissions || {};
-    const permCount = Object.keys(rolePerms).length;
-    showToast(`RBAC debug: loaded ${permCount} permissions`, 'success');
-    buildPerms(rolePerms, permission_overrides || {});
+    if (!roles.length) { buildPerms({}, {}); return; }
+    buildPerms(roles[0].permissions || {}, permission_overrides || {});
   } catch(e) {
-    showToast(`RBAC debug: loadAndBuildPerms threw — ${e.message}`, 'error');
     console.warn('loadAndBuildPerms failed:', e.message);
     buildPerms({}, {});
   }
@@ -5920,13 +5910,20 @@ function applyRoleNav() {
     el.style.display = can(el.dataset.perm) ? '' : 'none';
   });
 
-  // Hide Finance section header if all finance sub-items are hidden
-  const subSec = document.getElementById('sub-section-finance-reports');
-  if (subSec) {
-    const anyVisible = Array.from(subSec.querySelectorAll('.nav-item'))
-                           .some(el => el.style.display !== 'none');
+  // Hide sub-sections (e.g. Transactions, Reports) when all their items are hidden
+  document.querySelectorAll('.nav-sub-section').forEach(subSec => {
+    const items = subSec.querySelectorAll('.nav-item[data-perm]');
+    const anyVisible = Array.from(items).some(el => el.style.display !== 'none');
     subSec.style.display = anyVisible ? '' : 'none';
-  }
+  });
+
+  // Hide top-level sidebar sections when all their perm-gated items are hidden
+  document.querySelectorAll('.sidebar-section[data-section]').forEach(sec => {
+    if (sec.dataset.section === 'overview') return;
+    const items = sec.querySelectorAll('.nav-item[data-perm]');
+    const anyVisible = Array.from(items).some(el => el.style.display !== 'none');
+    sec.style.display = anyVisible ? '' : 'none';
+  });
 }
 
 // ── COMPANIES ────────────────────────────────────────────────────
