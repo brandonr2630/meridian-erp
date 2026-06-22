@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-20 · Session 32*
+*Last updated: 2026-06-22 · Session 33*
 
 ---
 
@@ -12,6 +12,41 @@
 | GitHub repo | `brandonr2630/meridian-erp` |
 | Deploy | Push to `master` via PR → GitHub Actions → GreenGeeks cPanel auto-deploys |
 | Deploy workflow | `.github/workflows/deploy.yml` → cPanel Fileman API (`chi203.greengeeks.net`) |
+
+---
+
+## Session 33 — RBAC Phase 4 cutover bug fixes
+
+**Date:** 2026-06-22
+**Branch / PR:** [PR #86](https://github.com/brandonr2630/meridian-erp/pull/86) ← **PENDING MERGE**
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| `is_super_admin()` DB function | Rewrote to use `erp_user_company_roles` | Was `WHERE erp_users.role = 'super_admin'` — Phase 4 dropped that column. Fixed to JOIN `erp_user_company_roles` → `erp_roles` and check `(permissions->>'admin:companies')::boolean = true`. Applied via Supabase migration. |
+| `my_company_ids()` DB function | Rewrote to use `erp_user_company_roles` | Was querying dead `user_company_access` table. Fixed to `SELECT ucr.company_id FROM erp_users eu JOIN erp_user_company_roles ucr ON ucr.user_id = eu.id WHERE eu.auth_user_id = auth.uid()`. Applied via Supabase migration. |
+| `erp_roles` SELECT RLS policy | `auth.role()='authenticated'` → `auth.uid() IS NOT NULL` | `auth.role()` reads `request.jwt.claim.role` which can be null in some Supabase JWT configurations. `auth.uid() IS NOT NULL` is universally reliable. Applied via Supabase migration. |
+| `loadAndBuildPerms()` | Split embedded join into two explicit queries | PostgREST embedded join `erp_roles(*)` was silently returning null (schema cache + RLS interaction). Now: (1) fetch UCR row, (2) fetch `erp_roles` by `id`. Prevents `buildPerms({},{})` silent fallback. |
+| Debug toasts in `loadAndBuildPerms` | Temporary — shows which step fails | Will surface "RBAC debug: loaded N permissions" (green) or specific failure path (red) as a toast on login. Remove after root cause confirmed. |
+
+### DB migrations applied (production)
+
+- `fix_is_super_admin_and_my_company_ids_drop_role_column_ref`
+- `fix_erp_roles_select_policy_use_uid_not_null`
+
+### Status
+
+PR #86 created but **not yet merged** — deploys the two-query `loadAndBuildPerms` fix + debug toasts. Merge it, hard-refresh, confirm toast shows "RBAC debug: loaded 40 permissions" (green), then remove the debug toasts in a follow-up PR.
+
+### Outstanding
+
+- **PR #86 merge** — required before nav visibility is confirmed fixed
+- **Remove debug toasts** — after PR #86 confirms the fix works
+- **Enable leaked password protection** — Supabase Dashboard → Authentication → Passwords (manual toggle only)
+- **Job → Invoice link** — completed job's costing summary pre-fills a Meridian invoice (Session 21)
+- **Job Cards PDF** — printable job card / work order report
+- **Work Orders in Client 360** — requires adding `contact_id` FK to `jobs` table
 
 ---
 
@@ -879,11 +914,15 @@ The entire app is `index.html` — approximately 15,200 lines of inline CSS and 
 - `navigate(view)` sets `currentView` and calls `loadViewData(view)`
 - Global state declared at `// ── STATE ──` (~line 3373): `currentUser`, `currentCompany`, `companies`, `accounts`, `contacts`, `journalEntries`, `bankAccounts`, etc.
 
-### Roles
+### Roles (RBAC — Phase 4 complete)
 
-`super_admin` > `admin` > `sales` > `user`
+Roles now live in `erp_roles` (jsonb permissions) + `erp_user_company_roles` (user↔company↔role assignment). The old `erp_users.role` column and all `module_*` columns were dropped in Phase 4.
 
-Finance modules (AP, Bank, CoA, Journal, Reports) are admin-only. Check `canPost()`, `canVoid()`, `canFinance()` before rendering controls.
+Permission engine: `loadAndBuildPerms()` → `buildPerms(rolePerms, overrides)` → `_perms = {...rolePerms, ...overrides}`. Lookup: `can('domain:module:action')`.
+
+Thin wrappers still exist for legacy call sites: `isAdmin()`, `isSuperAdmin()`, `canPost()`, `canVoid()`, `canFinance()`, etc.
+
+System roles: `super_admin` · `company_admin` · `finance_manager` · `sales_rep` · `operations_tech` · `viewer`. Custom roles per company also supported.
 
 ### Modules
 
@@ -947,11 +986,9 @@ Items are grouped by theme and ordered by suggested priority within each group. 
 
 ### To Do
 
-- [x] **CRM module UI** — Enhanced Pipeline (status/probability/source/won-lost + quick Mark Won/Lost), Contact Persons management on client records, Activity + Task contact linking. Built in Session 27.
+- [ ] **Merge PR #86** — RBAC nav fix; confirms or surfaces remaining issue via debug toasts
+- [ ] **Remove debug toasts** — `loadAndBuildPerms` has temporary `showToast` diagnostics; delete after fix confirmed
 - [ ] **Enable leaked password protection** — Supabase Dashboard → Authentication → Passwords. Cannot be set via SQL/MCP — requires a manual dashboard toggle.
-- [x] **"Convert to Quote" on a won opportunity** — `openConvertToQuote(oppId)` pre-fills contact/currency/notes/first line from the deal; `saveQuotation()` writes `quotation_id` back; pipeline table shows 📝 Convert or ✓ Quote badge. Built in Session 28.
-- [x] **CRM pipeline KPI widget on the Dashboard** — Zone 3c: 4 stat cards (Open Deals, Won This Month, Win Rate, Open Tasks) + stage funnel (Prospect › Qualified › Proposal › Negotiation). Built in Session 28.
-- [x] **Client 360 view** — full client profile: sidebar financials + contact persons, timeline merging 8 data sources, tabbed drill-down. Built in Session 31.
 - [ ] **Job → Invoice link** — completed job's costing summary pre-fills a Meridian invoice (Session 21)
 - [ ] **Job Cards PDF** — printable job card / work order report for the workshop floor
 - [ ] **Work Orders in Client 360** — add `contact_id` FK to `jobs` table then wire into `loadClient360()`
