@@ -1911,28 +1911,28 @@ body.light .global-search-results, body.light .split-btn-menu {
             <span class="nav-sub-toggle" id="toggle-finance-transactions">&#8722;</span>
           </div>
           <div class="nav-sub-body" id="sub-body-finance-transactions">
-            <div class="nav-item sub-item" onclick="navigate('ar')" id="nav-ar">
+            <div class="nav-item sub-item" data-perm="finance:ar:read" onclick="navigate('ar')" id="nav-ar">
               <span class="nav-item-icon"><img src="assets/Acc Receivables Icon.svg" style="width:18px;height:18px;vertical-align:middle;"></span> Accounts Receivable
               <span class="nav-badge" id="badge-ar">0</span>
             </div>
-            <div class="nav-item sub-item" onclick="navigate('credit-notes')" id="nav-credit-notes">
+            <div class="nav-item sub-item" data-perm="finance:ar:read" onclick="navigate('credit-notes')" id="nav-credit-notes">
               <span class="nav-item-icon"><img src="assets/Credit Note.svg" style="width:18px;height:18px;vertical-align:middle;"></span> Credit Notes
               <span class="nav-badge" id="badge-credit-notes">0</span>
             </div>
-            <div class="nav-item sub-item" onclick="navigate('ap')" id="nav-ap">
+            <div class="nav-item sub-item" data-perm="finance:ap:read" onclick="navigate('ap')" id="nav-ap">
               <span class="nav-item-icon"><img src="assets/Acc Payables Icon.svg" style="width:18px;height:18px;vertical-align:middle;"></span> Accounts Payable
               <span class="nav-badge" id="badge-ap">0</span>
             </div>
-            <div class="nav-item sub-item" onclick="navigate('vendors')" id="nav-vendors">
+            <div class="nav-item sub-item" data-perm="finance:ap:read" onclick="navigate('vendors')" id="nav-vendors">
               <span class="nav-item-icon">🏭</span> Vendors
             </div>
-            <div class="nav-item sub-item" onclick="navigate('bank')" id="nav-bank">
+            <div class="nav-item sub-item" data-perm="finance:bank:read" onclick="navigate('bank')" id="nav-bank">
               <span class="nav-item-icon">🏦</span> Bank & Cash
             </div>
-            <div class="nav-item sub-item" onclick="navigate('journal')" id="nav-journal">
+            <div class="nav-item sub-item" data-perm="finance:ledger:read" onclick="navigate('journal')" id="nav-journal">
               <span class="nav-item-icon">📓</span> Journal Entries
             </div>
-            <div class="nav-item sub-item" onclick="navigate('coa')" id="nav-coa">
+            <div class="nav-item sub-item" data-perm="finance:coa:read" onclick="navigate('coa')" id="nav-coa">
               <span class="nav-item-icon">📋</span> Chart of Accounts
             </div>
           </div>
@@ -1943,22 +1943,22 @@ body.light .global-search-results, body.light .split-btn-menu {
             <span class="nav-sub-toggle" id="toggle-finance-reports">&#8722;</span>
           </div>
           <div class="nav-sub-body" id="sub-body-finance-reports">
-            <div class="nav-item sub-item" onclick="navigate('aged-ar')" id="nav-aged-ar">
+            <div class="nav-item sub-item" data-perm="finance:ar:read" onclick="navigate('aged-ar')" id="nav-aged-ar">
               <span class="nav-item-icon">⏱️</span> Aged Receivables
             </div>
-            <div class="nav-item sub-item" onclick="navigate('aged-ap')" id="nav-aged-ap">
+            <div class="nav-item sub-item" data-perm="finance:ap:read" onclick="navigate('aged-ap')" id="nav-aged-ap">
               <span class="nav-item-icon">⏳</span> Aged Payables
             </div>
-            <div class="nav-item sub-item" onclick="navigate('pl')" id="nav-pl">
+            <div class="nav-item sub-item" data-perm="finance:reports:read" onclick="navigate('pl')" id="nav-pl">
               <span class="nav-item-icon">📈</span> Profit & Loss
             </div>
-            <div class="nav-item sub-item" onclick="navigate('bs')" id="nav-bs">
+            <div class="nav-item sub-item" data-perm="finance:reports:read" onclick="navigate('bs')" id="nav-bs">
               <span class="nav-item-icon">⚖️</span> Balance Sheet
             </div>
-            <div class="nav-item sub-item" onclick="navigate('tb')" id="nav-tb">
+            <div class="nav-item sub-item" data-perm="finance:reports:read" onclick="navigate('tb')" id="nav-tb">
               <span class="nav-item-icon">🗂️</span> Trial Balance
             </div>
-            <div class="nav-item sub-item" onclick="navigate('cf')" id="nav-cf">
+            <div class="nav-item sub-item" data-perm="finance:reports:read" onclick="navigate('cf')" id="nav-cf">
               <span class="nav-item-icon"><img src="assets/Cash Flow Icon.svg" style="width:18px;height:18px;vertical-align:middle;"></span> Cash Flow
             </div>
           </div>
@@ -1971,26 +1971,26 @@ body.light .global-search-results, body.light .split-btn-menu {
         <span class="nav-toggle" id="toggle-sales">&#8722;</span>
       </div>
       <div class="nav-section-body" id="section-body-sales">
-        <div class="nav-item" onclick="navigate('sales-leads')" id="nav-sales-leads">
+        <div class="nav-item" data-perm="sales:crm:read" onclick="navigate('sales-leads')" id="nav-sales-leads">
           <span class="nav-item-icon">👥</span> Sales Leads
         </div>
-        <div class="nav-item" onclick="navigate('pipeline')" id="nav-pipeline">
+        <div class="nav-item" data-perm="sales:crm:read" onclick="navigate('pipeline')" id="nav-pipeline">
           <span class="nav-item-icon">🎯</span> Pipeline
         </div>
-        <div class="nav-item" onclick="navigate('crm-activities')" id="nav-crm-activities">
+        <div class="nav-item" data-perm="sales:crm:read" onclick="navigate('crm-activities')" id="nav-crm-activities">
           <span class="nav-item-icon">📅</span> Activities
         </div>
-        <div class="nav-item" onclick="navigate('crm-tasks')" id="nav-crm-tasks">
+        <div class="nav-item" data-perm="sales:crm:read" onclick="navigate('crm-tasks')" id="nav-crm-tasks">
           <span class="nav-item-icon">✅</span> Tasks
         </div>
-        <div class="nav-item" onclick="navigate('crm-team-members')" id="nav-crm-team-members">
+        <div class="nav-item" data-perm="sales:crm:read" onclick="navigate('crm-team-members')" id="nav-crm-team-members">
           <span class="nav-item-icon">👷</span> Team Members
         </div>
-        <div class="nav-item" onclick="navigate('quotations')" id="nav-quotations">
+        <div class="nav-item" data-perm="sales:quotes:read" onclick="navigate('quotations')" id="nav-quotations">
           <span class="nav-item-icon">📝</span> Quotations
           <span class="nav-badge" id="badge-quotations">0</span>
         </div>
-        <div class="nav-item" onclick="navigate('clients')" id="nav-clients">
+        <div class="nav-item" data-perm="sales:clients:read" onclick="navigate('clients')" id="nav-clients">
           <span class="nav-item-icon">👤</span> Clients
         </div>
       </div>
@@ -2001,18 +2001,18 @@ body.light .global-search-results, body.light .split-btn-menu {
         <span class="nav-toggle" id="toggle-operations">&#8722;</span>
       </div>
       <div class="nav-section-body" id="section-body-operations">
-        <div class="nav-item" onclick="navigate('work-orders')" id="nav-work-orders">
+        <div class="nav-item" data-perm="ops:work-orders:read" onclick="navigate('work-orders')" id="nav-work-orders">
           <span class="nav-item-icon">🔧</span> Work Orders
           <span class="nav-badge" id="badge-work-orders" style="display:none;">0</span>
         </div>
-        <div class="nav-item" onclick="navigate('job-costing')" id="nav-job-costing">
+        <div class="nav-item" data-perm="ops:costing:read" onclick="navigate('job-costing')" id="nav-job-costing">
           <span class="nav-item-icon">💰</span> Job Costing
         </div>
-        <div class="nav-item" onclick="navigate('delivery-notes')" id="nav-delivery-notes">
+        <div class="nav-item" data-perm="ops:delivery:read" onclick="navigate('delivery-notes')" id="nav-delivery-notes">
           <span class="nav-item-icon">🚚</span> Delivery Notes
           <span class="nav-badge" id="badge-delivery-notes">0</span>
         </div>
-        <div class="nav-item" id="nav-job-config" onclick="navigate('job-config')" style="display:none;">
+        <div class="nav-item" data-perm="admin:settings" id="nav-job-config" onclick="navigate('job-config')" style="display:none;">
           <span class="nav-item-icon">⚙️</span> Job Config
         </div>
       </div>
@@ -2023,13 +2023,17 @@ body.light .global-search-results, body.light .split-btn-menu {
         <span class="nav-toggle" id="toggle-setup">&#8722;</span>
       </div>
       <div class="nav-section-body" id="section-body-setup">
-        <div class="nav-item" onclick="navigate('companies')" id="nav-companies">
+        <div class="nav-item" data-perm="admin:companies" onclick="navigate('companies')" id="nav-companies">
           <span class="nav-item-icon">🏢</span> Companies
         </div>
-        <div class="nav-item" onclick="navigate('user-management')" id="nav-user-management">
+        <div class="nav-item" data-perm="admin:users" onclick="navigate('user-management')" id="nav-user-management">
           <span class="nav-item-icon">👥</span> User Management
         </div>
-        <div class="nav-item" onclick="navigate('settings')" id="nav-settings">
+        <div class="nav-item" data-perm="admin:roles" onclick="navigate('role-management')" id="nav-role-management">
+  <span class="nav-icon">🔐</span>
+  <span class="nav-label">Role Management</span>
+</div>
+        <div class="nav-item" data-perm="admin:settings" onclick="navigate('settings')" id="nav-settings">
           <span class="nav-item-icon">⚙️</span> Settings
         </div>
       </div>
@@ -3567,62 +3571,13 @@ body.light .global-search-results, body.light .split-btn-menu {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
           <div class="field-group" style="margin-bottom:0;">
             <label class="field-label">Role</label>
-            <select id="um-edit-role" class="field-input" onchange="umEditRoleChanged()">
-              <option value="user">User</option>
-              <option value="sales">Sales</option>
-              <option value="admin">Admin</option>
-              <option value="super_admin">Super Admin</option>
+            <select id="um-edit-role" class="field-input">
+              <!-- populated by openEditPermissionsModal() -->
             </select>
           </div>
           <div class="field-group" style="margin-bottom:0;">
             <label class="field-label">Company</label>
             <select id="um-edit-company" class="field-input"></select>
-          </div>
-        </div>
-        <div id="um-edit-modules-section" class="field-group">
-          <label class="field-label">Module Access</label>
-          <div style="font-size:11px;color:var(--text-3);margin-bottom:10px;">Applies to non-admin roles. Admins have full access.</div>
-          <div style="display:flex;flex-direction:column;gap:10px;">
-            <div>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;">
-                <input type="checkbox" id="um-edit-mod-finance" onchange="umEditModuleToggle('finance')"> Finance
-              </label>
-              <div id="um-edit-mod-finance-children" style="margin-left:20px;margin-top:6px;display:flex;flex-direction:column;gap:5px;">
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
-                  <input type="checkbox" id="um-edit-mod-finance-ar"> AR &amp; Credit Notes
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
-                  <input type="checkbox" id="um-edit-mod-finance-ap"> AP &amp; Vendors
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
-                  <input type="checkbox" id="um-edit-mod-finance-bank"> Bank &amp; Cash
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
-                  <input type="checkbox" id="um-edit-mod-finance-ledger"> Ledger (Journal Entries, CoA)
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
-                  <input type="checkbox" id="um-edit-mod-finance-reports"> Reports (P&amp;L, Balance Sheet, etc.)
-                </label>
-              </div>
-            </div>
-            <div>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;">
-                <input type="checkbox" id="um-edit-mod-sales" onchange="umEditModuleToggle('sales')"> Sales
-              </label>
-              <div id="um-edit-mod-sales-children" style="margin-left:20px;margin-top:6px;display:flex;flex-direction:column;gap:5px;">
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
-                  <input type="checkbox" id="um-edit-mod-sales-crm"> CRM (Leads, Pipeline, Activities, Tasks)
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
-                  <input type="checkbox" id="um-edit-mod-sales-orders"> Orders (Quotations, Clients)
-                </label>
-              </div>
-            </div>
-            <div>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;">
-                <input type="checkbox" id="um-edit-mod-operations"> Operations
-              </label>
-            </div>
           </div>
         </div>
         <div id="um-edit-error" style="color:var(--red);font-size:12px;min-height:16px;"></div>
@@ -3632,6 +3587,22 @@ body.light .global-search-results, body.light .split-btn-menu {
         <button class="btn btn-primary" id="um-edit-save-btn" onclick="saveEditPermissions()">Save Changes</button>
       </div>
     </div>
+  </div>
+</div>
+
+<div id="view-role-management" class="view-section" style="display:none;">
+  <div class="view-header">
+    <h2 class="view-title">Role Management</h2>
+    <p class="view-subtitle" id="rm-subtitle"></p>
+  </div>
+  <div class="view-toolbar" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+    <div></div>
+    <button class="btn btn-primary" onclick="openCreateRoleModal()">+ New Role</button>
+  </div>
+  <div id="rm-roles-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:2rem;"></div>
+  <div id="rm-users-section" style="display:none;">
+    <h3 style="font-size:14px;font-weight:600;margin-bottom:0.75rem;" id="rm-users-title">Users with this role</h3>
+    <div id="rm-users-list"></div>
   </div>
 </div>
 
@@ -5504,6 +5475,61 @@ body.light .global-search-results, body.light .split-btn-menu {
   </div>
 </div>
 
+<!-- ── ROLE EDIT MODAL ─────────────────────────────────────────────── -->
+<div id="modal-role-edit" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal('modal-role-edit')">
+  <div class="modal" style="max-width:640px;width:95%;max-height:90vh;overflow-y:auto;">
+    <div class="modal-header">
+      <h3 id="role-modal-title">New Role</h3>
+      <button class="modal-close" onclick="closeModal('modal-role-edit')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="role-edit-id">
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label class="form-label">Role name</label>
+        <input type="text" id="role-edit-name" class="form-input" placeholder="e.g. AR Officer">
+      </div>
+      <div id="role-perm-matrix"></div>
+      <div class="form-group" style="margin-top:1rem;">
+        <label class="form-label">Admin permissions</label>
+        <div id="role-admin-perms" style="display:flex;flex-wrap:wrap;gap:12px;margin-top:6px;"></div>
+      </div>
+      <p id="role-edit-error" style="color:var(--red);font-size:13px;margin-top:8px;"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-role-edit')">Cancel</button>
+      <button class="btn btn-primary" id="role-edit-save-btn" onclick="saveRole()">Save Role</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── USER OVERRIDES MODAL ────────────────────────────────────── -->
+<div id="modal-user-overrides" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal('modal-user-overrides')">
+  <div class="modal" style="max-width:520px;width:95%;max-height:90vh;overflow-y:auto;">
+    <div class="modal-header">
+      <h3>Permission overrides — <span id="overrides-user-name"></span></h3>
+      <button class="modal-close" onclick="closeModal('modal-user-overrides')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--text-2);margin-bottom:1rem;">
+        Overrides modify individual permissions on top of the user's role.
+        Checked = explicitly granted. Unchecked = explicitly denied.
+        Leave a permission out to inherit from the role.
+      </p>
+      <input type="hidden" id="overrides-user-id">
+      <input type="hidden" id="overrides-company-id">
+      <div id="overrides-matrix"></div>
+      <p id="overrides-error" style="color:var(--red);font-size:13px;margin-top:8px;"></p>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between;">
+      <button class="btn btn-ghost btn-danger" onclick="clearUserOverrides()">Clear all overrides</button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-ghost" onclick="closeModal('modal-user-overrides')">Cancel</button>
+        <button class="btn btn-primary" id="overrides-save-btn" onclick="saveUserOverrides()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════════════════════
 //  TERRAN GROUP ERP — Finance Module
@@ -5528,19 +5554,56 @@ const Q = {
 
 // ── STATE ────────────────────────────────────────────────────────
 let currentUser      = null;
+let _perms           = {};   // flat permission map built at login + company switch
+let _rmRoles = [];
 
-// ── ROLE HELPERS ──────────────────────────────────────────────────
-function isSuperAdmin() { return currentUser?.role === 'super_admin'; }
-function isAdmin()      { return currentUser?.role === 'admin' || isSuperAdmin(); }
-function isSales()      { return currentUser?.role === 'sales'; }
-function isUser()       { return currentUser?.role === 'user'; }
-function canPost()      { return isAdmin(); }
-function canVoid()      { return isAdmin(); }
-function canApprove()   { return isAdmin(); }
-function canDelete()    { return isAdmin(); }
-function canSettings()  { return isAdmin(); }
-function canFinance()   { return isAdmin(); }  // AP, Bank, CoA, Journal, Reports
-function canViewAR()    { return !isUser() || isAdmin(); } // sales can view AR
+// ── ROLE HELPERS (thin wrappers — delegate to can()) ──────────────
+// Phase 3 bridge: these wrappers preserve existing call sites.
+// canPost/canVoid/canApprove are intentionally permissive (check either AR or AP);
+// nav data-perm attributes provide the outer module guard.
+// Phase 4 will replace individual call sites with direct can() calls.
+function isSuperAdmin() { return can('admin:companies'); }
+function isAdmin()      { return can('admin:users') || can('admin:settings'); }
+function isSales()      { return can('sales:quotes:write') && !can('admin:users'); }
+function isUser()       { return !can('admin:users') && !can('sales:quotes:write'); }
+function canPost()      { return canAny('finance:ar:write','finance:ap:write'); }
+function canVoid()      { return canAny('finance:ar:void','finance:ap:void'); }
+function canApprove()   { return canAny('finance:ar:approve','finance:ap:approve'); }
+function canDelete()    { return can('admin:settings'); }
+function canSettings()  { return can('admin:settings'); }
+function canFinance()   { return canAny('finance:ar:read','finance:ap:read','finance:bank:read','finance:ledger:read','finance:reports:read'); }
+function canViewAR()    { return can('finance:ar:read'); }
+
+// ── PERMISSION ENGINE ─────────────────────────────────────────────
+// _perms is populated by buildPerms() at login and on every company switch.
+// can(perm) is the single source of truth for access checks.
+function buildPerms(rolePermissions = {}, overrides = {}) {
+  _perms = { ...rolePermissions, ...overrides };
+}
+function can(perm)        { return _perms[perm] === true; }
+function canAny(...perms) { return perms.some(p => can(p)); }
+
+async function loadAndBuildPerms() {
+  if (!currentUser || !currentCompany) return;
+  try {
+    const rows = await sbGet(
+      'erp_user_company_roles',
+      `user_id=eq.${currentUser.id}&company_id=eq.${currentCompany.id}&select=*,erp_roles(*)&limit=1`
+    );
+    if (rows.length) {
+      const assignment = rows[0];
+      const rolePerms  = assignment.erp_roles?.permissions || {};
+      const overrides  = assignment.permission_overrides   || {};
+      buildPerms(rolePerms, overrides);
+    } else {
+      buildPerms({}, {});   // no assignment found — deny everything
+    }
+  } catch(e) {
+    console.warn('loadAndBuildPerms failed:', e.message);
+    buildPerms({}, {});
+  }
+}
+
 let currentCompany   = null;
 let companies        = [];
 let accounts         = [];
@@ -5556,6 +5619,29 @@ let editingAccountId = null;
 let _accessToken     = null;
 
 // ── GLOBAL UTILITIES ─────────────────────────────────────────────
+const PERMISSION_MATRIX = [
+  { group: 'Finance', rows: [
+    { label: 'AR',           atoms: ['finance:ar:read','finance:ar:write','finance:ar:approve','finance:ar:void'] },
+    { label: 'AP',           atoms: ['finance:ap:read','finance:ap:write','finance:ap:approve','finance:ap:void'] },
+    { label: 'Bank',         atoms: ['finance:bank:read','finance:bank:write', null, null] },
+    { label: 'Ledger / CoA', atoms: ['finance:ledger:read','finance:ledger:write','finance:coa:read','finance:coa:write'] },
+    { label: 'Reports',      atoms: ['finance:reports:read', null, null, null] },
+  ]},
+  { group: 'Sales', rows: [
+    { label: 'CRM',           atoms: ['sales:crm:read','sales:crm:write', null, null] },
+    { label: 'Quotes',        atoms: ['sales:quotes:read','sales:quotes:write','sales:quotes:approve', null] },
+    { label: 'Orders',        atoms: ['sales:orders:read','sales:orders:write','sales:orders:approve', null] },
+    { label: 'Clients',       atoms: ['sales:clients:read','sales:clients:write', null, null] },
+    { label: 'Vendors',       atoms: ['sales:vendors:read','sales:vendors:write', null, null] },
+    { label: 'Deliveries',    atoms: ['sales:deliveries:read','sales:deliveries:write', null, null] },
+  ]},
+  { group: 'Operations', rows: [
+    { label: 'Work Orders',  atoms: ['ops:work-orders:read','ops:work-orders:write','ops:work-orders:approve', null] },
+    { label: 'Job Costing',  atoms: ['ops:costing:read','ops:costing:write', null, null] },
+    { label: 'Deliveries',   atoms: ['ops:delivery:read','ops:delivery:write', null, null] },
+  ]},
+];
+const ADMIN_PERMS = ['admin:users','admin:settings','admin:roles','admin:companies'];
 const CURRENCY_SYMBOLS = { TTD: 'TT$', USD: 'US$', GYD: 'G$' };
 function fmt(amount, currency) {
   const sym = CURRENCY_SYMBOLS[currency] || (currency ? currency + ' ' : '$');
@@ -5810,7 +5896,10 @@ async function initApp() {
   ]);
   await checkAndRefreshRates();
 
-  // Apply nav visibility based on role
+  // Build permission map for current user + company before rendering nav
+  await loadAndBuildPerms();
+
+  // Apply nav visibility based on permissions
   applyRoleNav();
   restoreNavState();
   refreshNotifBadge();
@@ -5819,97 +5908,17 @@ async function initApp() {
 }
 
 function applyRoleNav() {
-  const role = currentUser?.role;
-  const financeOnly  = ['nav-coa','nav-journal','nav-ap','nav-bank','nav-pl','nav-bs','nav-tb','nav-aged-ap','nav-companies','nav-settings'];
-  const adminOnly    = ['nav-user-management'];
-  const salesVisible = ['nav-dashboard','nav-quotations','nav-ar','nav-aged-ar','nav-clients','nav-sales-leads','nav-pipeline','nav-crm-activities','nav-crm-tasks','nav-crm-team-members'];
+  // Show/hide nav items based on data-perm attribute
+  document.querySelectorAll('.nav-item[data-perm]').forEach(el => {
+    el.style.display = can(el.dataset.perm) ? '' : 'none';
+  });
 
-  if (role === 'sales') {
-    document.querySelectorAll('.nav-item[id^="nav-"]').forEach(el => {
-      el.style.display = salesVisible.includes(el.id) ? '' : 'none';
-    });
-  } else if (role === 'user') {
-    financeOnly.forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.style.display = 'none';
-    });
-    adminOnly.forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.style.display = 'none';
-    });
-  }
-  // admin and super_admin see everything
-
-  // Operations: Job Config is admin-only
-  const jobConfigEl = document.getElementById('nav-job-config');
-  if (jobConfigEl) jobConfigEl.style.display = isAdmin() ? '' : 'none';
-
-  // User Management is admin-only
-  const userMgmtEl = document.getElementById('nav-user-management');
-  if (userMgmtEl && !isAdmin()) userMgmtEl.style.display = 'none';
-
-  // Hide Finance > Reports sub-section header if all its items are hidden
+  // Hide Finance section header if all finance sub-items are hidden
   const subSec = document.getElementById('sub-section-finance-reports');
   if (subSec) {
     const anyVisible = Array.from(subSec.querySelectorAll('.nav-item'))
                            .some(el => el.style.display !== 'none');
     subSec.style.display = anyVisible ? '' : 'none';
-  }
-
-  // Module-based section visibility (non-admin users only)
-  if (!isAdmin()) {
-    const u = currentUser;
-    const sectionMap = {
-      finance:    u?.module_finance,
-      sales:      u?.module_sales,
-      operations: u?.module_operations,
-    };
-    Object.entries(sectionMap).forEach(([section, allowed]) => {
-      const el = document.querySelector(`.sidebar-section[data-section="${section}"]`);
-      if (el) el.style.display = (allowed === false) ? 'none' : '';
-    });
-
-    // Sub-module: Finance individual nav items
-    if (u?.module_finance !== false) {
-      const finMap = {
-        'nav-ar':             u?.module_finance_ar      !== false,
-        'nav-credit-notes':   u?.module_finance_ar      !== false,
-        'nav-ap':             u?.module_finance_ap      !== false,
-        'nav-vendors':        u?.module_finance_ap      !== false,
-        'nav-bank':           u?.module_finance_bank    !== false,
-        'nav-journal':        u?.module_finance_ledger  !== false,
-        'nav-coa':            u?.module_finance_ledger  !== false,
-        'nav-aged-ar':        u?.module_finance_reports !== false,
-        'nav-aged-ap':        u?.module_finance_reports !== false,
-        'nav-pl':             u?.module_finance_reports !== false,
-        'nav-bs':             u?.module_finance_reports !== false,
-        'nav-tb':             u?.module_finance_reports !== false,
-        'nav-cf':             u?.module_finance_reports !== false,
-      };
-      Object.entries(finMap).forEach(([id, visible]) => {
-        const el = document.getElementById(id);
-        if (el) el.style.display = visible ? '' : 'none';
-      });
-      // Hide Reports sub-section header if all report items are hidden
-      const reportsSec = document.getElementById('sub-section-finance-reports');
-      if (reportsSec) reportsSec.style.display = (u?.module_finance_reports !== false) ? '' : 'none';
-    }
-
-    // Sub-module: Sales individual nav items
-    if (u?.module_sales !== false) {
-      const salMap = {
-        'nav-sales-leads':      u?.module_sales_crm    !== false,
-        'nav-pipeline':         u?.module_sales_crm    !== false,
-        'nav-crm-activities':   u?.module_sales_crm    !== false,
-        'nav-crm-tasks':        u?.module_sales_crm    !== false,
-        'nav-quotations':       u?.module_sales_orders !== false,
-        'nav-clients':          u?.module_sales_orders !== false,
-      };
-      Object.entries(salMap).forEach(([id, visible]) => {
-        const el = document.getElementById(id);
-        if (el) el.style.display = visible ? '' : 'none';
-      });
-    }
   }
 }
 
@@ -5993,6 +6002,8 @@ async function switchCompany(id) {
     sbGet('contacts', Q.contacts()).catch(() => []),
     sbGet('bank_accounts', Q.bankAccounts()).catch(() => []),
   ]);
+  await loadAndBuildPerms();
+  applyRoleNav();
   await loadViewData(currentView);
   showToast('Switched to ' + (currentCompany.trading_name || currentCompany.name), 'info');
 }
@@ -6150,7 +6161,293 @@ async function loadViewData(view) {
     case 'work-orders': await loadJobCards(); break;
     case 'job-costing': renderJobCostingPlaceholder(); break;
     case 'user-management': await loadUserManagement(); break;
+    case 'role-management': await loadRoleManagement(); break;
     case 'job-config': await loadJobConfig(); break;
+  }
+}
+
+async function loadRoleManagement() {
+  document.getElementById('rm-subtitle').textContent =
+    currentCompany?.trading_name || currentCompany?.name || '';
+  document.getElementById('rm-users-section').style.display = 'none';
+  document.getElementById('rm-roles-grid').innerHTML = '<p style="color:var(--text-2);">Loading…</p>';
+  try {
+    _rmRoles = await sbGet('erp_roles',
+      `or=(company_id.is.null,company_id.eq.${currentCompany.id})&order=is_system.desc,name.asc`
+    );
+    renderRoleCards();
+  } catch(e) {
+    document.getElementById('rm-roles-grid').innerHTML =
+      `<p style="color:var(--red);">Error: ${escHTML(e.message)}</p>`;
+  }
+}
+
+function renderRoleCards() {
+  const grid = document.getElementById('rm-roles-grid');
+  grid.innerHTML = _rmRoles.map(role => {
+    const permCount = Object.keys(role.permissions || {}).length;
+    const isSystem  = role.is_system;
+    const badge     = isSystem
+      ? `<span style="font-size:11px;font-weight:600;color:var(--text-2);background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:1px 7px;">System</span>`
+      : `<span style="font-size:11px;font-weight:600;color:var(--blue);background:var(--blue)18;border:1px solid var(--blue)33;border-radius:4px;padding:1px 7px;">Custom</span>`;
+    const actions = isSystem
+      ? `<span style="font-size:13px;color:var(--text-2);">🔒</span>`
+      : `<button class="btn btn-ghost btn-sm" onclick="openEditRoleModal('${role.id}')">Edit</button>
+         <button class="btn btn-ghost btn-sm btn-danger" onclick="deleteRole('${role.id}')">Delete</button>`;
+    return `
+      <div class="card" style="padding:1rem;cursor:pointer;" onclick="showRoleUsers('${escHTML(role.id)}')">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          ${badge}
+          ${actions}
+        </div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:3px;">${escHTML(role.name)}</div>
+        <div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">
+          ${permCount} permission${permCount !== 1 ? 's' : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function showRoleUsers(roleId) {
+  const role = _rmRoles.find(r => r.id === roleId);
+  if (!role) return;
+  const section = document.getElementById('rm-users-section');
+  const title   = document.getElementById('rm-users-title');
+  const list    = document.getElementById('rm-users-list');
+  title.textContent = `Users assigned "${role.name}"`;
+  title.dataset.roleId = roleId;
+  list.innerHTML = '<p style="color:var(--text-2);">Loading…</p>';
+  section.style.display = '';
+  try {
+    const rows = await sbGet('erp_user_company_roles',
+      `role_id=eq.${roleId}&company_id=eq.${currentCompany.id}&select=*,erp_users(id,full_name,email)&order=erp_users(full_name)`
+    );
+    list.innerHTML = rows.length
+      ? rows.map(r => `
+          <div class="table-row" style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);">
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:500;">${escHTML(r.erp_users?.full_name || '—')}</div>
+              <div style="font-size:12px;color:var(--text-2);">${escHTML(r.erp_users?.email || '')}</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="openUserOverridesModal('${r.user_id}','${r.company_id}')">
+              Overrides ${Object.keys(r.permission_overrides||{}).length > 0 ? `<span style="background:var(--gold)22;color:var(--gold);border-radius:3px;padding:0 4px;font-size:10px;">${Object.keys(r.permission_overrides).length}</span>` : ''}
+            </button>
+          </div>`).join('')
+      : '<p style="color:var(--text-2);font-size:13px;">No users assigned this role for this company.</p>';
+  } catch(e) {
+    list.innerHTML = `<p style="color:var(--red);">Error: ${escHTML(e.message)}</p>`;
+  }
+}
+
+async function deleteRole(roleId) {
+  const role = _rmRoles.find(r => r.id === roleId);
+  if (!role || role.is_system) return;
+  if (!confirm(`Delete role "${role.name}"? Users assigned this role will lose their access.`)) return;
+  try {
+    await sb(`erp_roles?id=eq.${roleId}`, { method: 'DELETE', prefer: 'return=minimal' });
+    showToast('Role deleted.', 'success');
+    await loadRoleManagement();
+  } catch(e) {
+    showToast(e.message, 'error');
+  }
+}
+
+function openCreateRoleModal() {
+  document.getElementById('role-modal-title').textContent = 'New role';
+  document.getElementById('role-edit-id').value = '';
+  document.getElementById('role-edit-name').value = '';
+  document.getElementById('role-edit-error').textContent = '';
+  renderPermMatrix({});
+  document.getElementById('modal-role-edit').style.display = 'flex';
+}
+
+function openEditRoleModal(roleId) {
+  const role = _rmRoles.find(r => r.id === roleId);
+  if (!role || role.is_system) return;
+  document.getElementById('role-modal-title').textContent = `Edit role: ${role.name}`;
+  document.getElementById('role-edit-id').value = roleId;
+  document.getElementById('role-edit-name').value = role.name;
+  document.getElementById('role-edit-error').textContent = '';
+  renderPermMatrix(role.permissions || {});
+  document.getElementById('modal-role-edit').style.display = 'flex';
+}
+
+function renderPermMatrix(currentPerms) {
+  const matrixEl = document.getElementById('role-perm-matrix');
+  const cols = ['Read','Write','Approve','Void'];
+  let html = `<table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead><tr>
+      <th style="text-align:left;padding:6px 8px;color:var(--text-2);font-weight:500;border-bottom:1px solid var(--border);">Module</th>
+      ${cols.map(c=>`<th style="text-align:center;width:72px;padding:6px 4px;color:var(--text-2);font-weight:500;border-bottom:1px solid var(--border);">${c}</th>`).join('')}
+    </tr></thead><tbody>`;
+  for (const group of PERMISSION_MATRIX) {
+    html += `<tr><td colspan="5" style="padding:8px 8px 4px;font-size:11px;font-weight:600;color:var(--text-2);background:var(--surface-2);text-transform:uppercase;letter-spacing:0.05em;">${group.group}</td></tr>`;
+    for (const row of group.rows) {
+      html += `<tr style="border-bottom:1px solid var(--border)22;">
+        <td style="padding:7px 8px;">${escHTML(row.label)}</td>
+        ${row.atoms.map(atom => atom
+          ? `<td style="text-align:center;"><input type="checkbox" data-perm-atom="${escHTML(atom)}" ${currentPerms[atom] ? 'checked' : ''}></td>`
+          : `<td style="text-align:center;color:var(--text-2);">—</td>`
+        ).join('')}
+      </tr>`;
+    }
+  }
+  html += '</tbody></table>';
+  matrixEl.innerHTML = html;
+
+  const adminEl = document.getElementById('role-admin-perms');
+  adminEl.innerHTML = ADMIN_PERMS.map(atom => {
+    const label = atom.replace('admin:','');
+    return `<label style="display:flex;align-items:center;gap:5px;font-size:13px;">
+      <input type="checkbox" data-perm-atom="${escHTML(atom)}" ${currentPerms[atom] ? 'checked' : ''}>
+      ${escHTML(label)}
+    </label>`;
+  }).join('');
+}
+
+async function saveRole() {
+  const roleId  = document.getElementById('role-edit-id').value;
+  const name    = document.getElementById('role-edit-name').value.trim();
+  const errEl   = document.getElementById('role-edit-error');
+  const saveBtn = document.getElementById('role-edit-save-btn');
+  errEl.textContent = '';
+  if (!name) { errEl.textContent = 'Role name is required.'; return; }
+
+  const permissions = {};
+  document.querySelectorAll('#modal-role-edit [data-perm-atom]').forEach(cb => {
+    if (cb.checked) permissions[cb.dataset.permAtom] = true;
+  });
+
+  saveBtn.textContent = 'Saving…'; saveBtn.disabled = true;
+  try {
+    if (roleId) {
+      await sbPatchWhere('erp_roles', `id=eq.${roleId}`, { name, permissions });
+    } else {
+      await sbPost('erp_roles', {
+        name,
+        permissions,
+        company_id: currentCompany.id,
+        created_by: currentUser.id,
+      });
+    }
+    showToast(roleId ? 'Role updated.' : 'Role created.', 'success');
+    closeModal('modal-role-edit');
+    await loadRoleManagement();
+  } catch(e) {
+    errEl.textContent = e.message;
+  } finally {
+    saveBtn.textContent = 'Save Role'; saveBtn.disabled = false;
+  }
+}
+
+async function openUserOverridesModal(userId, companyId) {
+  const errEl = document.getElementById('overrides-error');
+  errEl.textContent = '';
+  document.getElementById('overrides-user-id').value    = userId;
+  document.getElementById('overrides-company-id').value = companyId;
+  document.getElementById('modal-user-overrides').style.display = 'flex';
+  document.getElementById('overrides-matrix').innerHTML = 'Loading…';
+
+  try {
+    const [rows, users] = await Promise.all([
+      sbGet('erp_user_company_roles',
+        `user_id=eq.${userId}&company_id=eq.${companyId}&select=permission_overrides,erp_roles(permissions)&limit=1`),
+      sbGet('erp_users', `id=eq.${userId}&select=full_name&limit=1`),
+    ]);
+    const assignment    = rows[0] || {};
+    const rolePerms     = assignment.erp_roles?.permissions || {};
+    const currentOver   = assignment.permission_overrides   || {};
+    document.getElementById('overrides-user-name').textContent =
+      users[0]?.full_name || userId;
+    renderOverridesMatrix(rolePerms, currentOver);
+  } catch(e) {
+    document.getElementById('overrides-matrix').innerHTML =
+      `<p style="color:var(--red);">Error: ${escHTML(e.message)}</p>`;
+  }
+}
+
+function renderOverridesMatrix(rolePerms, currentOverrides) {
+  const matrixEl = document.getElementById('overrides-matrix');
+
+  let html = '<div style="display:grid;gap:4px;">';
+  for (const group of PERMISSION_MATRIX) {
+    html += `<div style="font-size:11px;font-weight:600;color:var(--text-2);padding:8px 0 2px;text-transform:uppercase;letter-spacing:0.05em;">${group.group}</div>`;
+    for (const row of group.rows) {
+      for (const atom of row.atoms.filter(Boolean)) {
+        const isOverridden = atom in currentOverrides;
+        const overrideVal  = currentOverrides[atom];
+        const roleDefault  = rolePerms[atom] === true;
+        html += `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;">
+          <input type="checkbox"
+            data-override-atom="${escHTML(atom)}"
+            data-has-override="${isOverridden}"
+            ${overrideVal === true ? 'checked' : ''}>
+          <span style="flex:1;font-size:13px;">${escHTML(atom)}</span>
+          <span style="font-size:11px;color:var(--text-2);">role: ${roleDefault ? '✓' : '✗'}</span>
+        </label>`;
+      }
+    }
+  }
+  html += '<div style="font-size:11px;font-weight:600;color:var(--text-2);padding:8px 0 2px;text-transform:uppercase;letter-spacing:0.05em;">Admin</div>';
+  for (const atom of ADMIN_PERMS) {
+    const isOverridden = atom in currentOverrides;
+    const overrideVal  = currentOverrides[atom];
+    const roleDefault  = rolePerms[atom] === true;
+    html += `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;">
+      <input type="checkbox"
+        data-override-atom="${escHTML(atom)}"
+        data-has-override="${isOverridden}"
+        ${overrideVal === true ? 'checked' : ''}>
+      <span style="flex:1;font-size:13px;">${escHTML(atom)}</span>
+      <span style="font-size:11px;color:var(--text-2);">role: ${roleDefault ? '✓' : '✗'}</span>
+    </label>`;
+  }
+  html += '</div>';
+  matrixEl.innerHTML = html;
+}
+
+async function saveUserOverrides() {
+  const userId    = document.getElementById('overrides-user-id').value;
+  const companyId = document.getElementById('overrides-company-id').value;
+  const saveBtn   = document.getElementById('overrides-save-btn');
+  const errEl     = document.getElementById('overrides-error');
+  errEl.textContent = '';
+  saveBtn.textContent = 'Saving…'; saveBtn.disabled = true;
+
+  const permission_overrides = {};
+  document.querySelectorAll('#modal-user-overrides [data-override-atom]').forEach(cb => {
+    permission_overrides[cb.dataset.overrideAtom] = cb.checked;
+  });
+
+  try {
+    await sbPatchWhere('erp_user_company_roles',
+      `user_id=eq.${userId}&company_id=eq.${companyId}`,
+      { permission_overrides }
+    );
+    showToast('Overrides saved.', 'success');
+    closeModal('modal-user-overrides');
+    const roleTitle = document.getElementById('rm-users-title');
+    if (roleTitle?.dataset?.roleId) await showRoleUsers(roleTitle.dataset.roleId);
+  } catch(e) {
+    errEl.textContent = e.message;
+  } finally {
+    saveBtn.textContent = 'Save'; saveBtn.disabled = false;
+  }
+}
+
+async function clearUserOverrides() {
+  const userId    = document.getElementById('overrides-user-id').value;
+  const companyId = document.getElementById('overrides-company-id').value;
+  if (!confirm('Remove all permission overrides for this user?')) return;
+  try {
+    await sbPatchWhere('erp_user_company_roles',
+      `user_id=eq.${userId}&company_id=eq.${companyId}`,
+      { permission_overrides: {} }
+    );
+    showToast('Overrides cleared.', 'success');
+    closeModal('modal-user-overrides');
+  } catch(e) {
+    showToast(e.message, 'error');
   }
 }
 
@@ -6268,15 +6565,6 @@ function umModuleToggle(mod) {
   });
 }
 
-function umEditModuleToggle(mod) {
-  const parentChecked = document.getElementById(`um-edit-mod-${mod}`).checked;
-  const children = document.getElementById(`um-edit-mod-${mod}-children`);
-  if (!children) return;
-  children.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-    cb.disabled = !parentChecked;
-    if (!parentChecked) cb.checked = false;
-  });
-}
 
 function umFormatModules(u) {
   const parts = [];
@@ -6305,43 +6593,36 @@ function umFormatModules(u) {
     : '<span style="color:var(--red);font-size:11px;">None</span>';
 }
 
-function openEditPermissionsModal(authUserId) {
+async function openEditPermissionsModal(authUserId) {
   const u = _umAllUsers.find(x => x.auth_user_id === authUserId);
   if (!u) return;
-
-  document.getElementById('um-edit-auth-id').value = authUserId;
+  document.getElementById('um-edit-auth-id').value    = authUserId;
   document.getElementById('um-edit-user-name').textContent = u.full_name || u.email || 'User';
-  document.getElementById('um-edit-role').value = u.role || 'user';
   document.getElementById('um-edit-error').textContent = '';
 
   // Populate company dropdown
   const coSel = document.getElementById('um-edit-company');
-  coSel.innerHTML = companies.map(c => `<option value="${escHTML(c.id)}">${escHTML(c.trading_name || c.name)}</option>`).join('');
+  coSel.innerHTML = companies.map(c =>
+    `<option value="${escHTML(c.id)}">${escHTML(c.trading_name || c.name)}</option>`
+  ).join('');
   coSel.value = u.company_id || '';
 
-  // Module parent flags
-  document.getElementById('um-edit-mod-finance').checked    = u.module_finance    !== false;
-  document.getElementById('um-edit-mod-sales').checked      = u.module_sales      !== false;
-  document.getElementById('um-edit-mod-operations').checked = u.module_operations !== false;
+  // Load roles for the dropdown (system roles + company-scoped roles for current company)
+  const roles = await sbGet('erp_roles',
+    `or=(company_id.is.null,company_id.eq.${currentCompany.id})&order=is_system.desc,name.asc`
+  ).catch(() => []);
 
-  // Finance sub-flags
-  const finChildren = document.getElementById('um-edit-mod-finance-children');
-  const finEnabled  = u.module_finance !== false;
-  finChildren.querySelectorAll('input').forEach(cb => cb.disabled = !finEnabled);
-  document.getElementById('um-edit-mod-finance-ar').checked      = u.module_finance_ar      !== false;
-  document.getElementById('um-edit-mod-finance-ap').checked      = u.module_finance_ap      !== false;
-  document.getElementById('um-edit-mod-finance-bank').checked    = u.module_finance_bank    !== false;
-  document.getElementById('um-edit-mod-finance-ledger').checked  = u.module_finance_ledger  !== false;
-  document.getElementById('um-edit-mod-finance-reports').checked = u.module_finance_reports !== false;
+  const roleSel = document.getElementById('um-edit-role');
+  roleSel.innerHTML = roles.map(r =>
+    `<option value="${escHTML(r.id)}">${escHTML(r.name)}</option>`
+  ).join('');
 
-  // Sales sub-flags
-  const salChildren = document.getElementById('um-edit-mod-sales-children');
-  const salEnabled  = u.module_sales !== false;
-  salChildren.querySelectorAll('input').forEach(cb => cb.disabled = !salEnabled);
-  document.getElementById('um-edit-mod-sales-crm').checked    = u.module_sales_crm    !== false;
-  document.getElementById('um-edit-mod-sales-orders').checked = u.module_sales_orders !== false;
+  // Find existing assignment for this user at the currently selected company
+  const assignments = await sbGet('erp_user_company_roles',
+    `user_id=eq.${u.id}&company_id=eq.${currentCompany.id}&limit=1`
+  ).catch(() => []);
+  if (assignments.length) roleSel.value = assignments[0].role_id;
 
-  umEditRoleChanged();
   document.getElementById('um-edit-modal').style.display = 'flex';
 }
 
@@ -6349,36 +6630,42 @@ function closeEditPermissionsModal() {
   document.getElementById('um-edit-modal').style.display = 'none';
 }
 
-function umEditRoleChanged() {
-  const role = document.getElementById('um-edit-role')?.value;
-  const modSec = document.getElementById('um-edit-modules-section');
-  if (modSec) modSec.style.opacity = (role === 'admin' || role === 'super_admin') ? '0.4' : '1';
-}
 
 async function saveEditPermissions() {
   const authUserId = document.getElementById('um-edit-auth-id').value;
-  const role       = document.getElementById('um-edit-role').value;
   const company_id = document.getElementById('um-edit-company').value;
+  const role_id    = document.getElementById('um-edit-role').value;
   const errEl      = document.getElementById('um-edit-error');
   const saveBtn    = document.getElementById('um-edit-save-btn');
   errEl.textContent = '';
   saveBtn.textContent = 'Saving…'; saveBtn.disabled = true;
 
+  const u = _umAllUsers.find(x => x.auth_user_id === authUserId);
+  if (!u) { errEl.textContent = 'User not found.'; saveBtn.textContent = 'Save Changes'; saveBtn.disabled = false; return; }
+
   try {
-    await sbPatchWhere('erp_users', `auth_user_id=eq.${authUserId}`, {
-      role,
-      company_id,
-      module_finance:          document.getElementById('um-edit-mod-finance').checked,
-      module_sales:            document.getElementById('um-edit-mod-sales').checked,
-      module_operations:       document.getElementById('um-edit-mod-operations').checked,
-      module_finance_ar:       document.getElementById('um-edit-mod-finance-ar').checked,
-      module_finance_ap:       document.getElementById('um-edit-mod-finance-ap').checked,
-      module_finance_bank:     document.getElementById('um-edit-mod-finance-bank').checked,
-      module_finance_ledger:   document.getElementById('um-edit-mod-finance-ledger').checked,
-      module_finance_reports:  document.getElementById('um-edit-mod-finance-reports').checked,
-      module_sales_crm:        document.getElementById('um-edit-mod-sales-crm').checked,
-      module_sales_orders:     document.getElementById('um-edit-mod-sales-orders').checked,
-    });
+    // Update company assignment
+    await sbPatchWhere('erp_users', `auth_user_id=eq.${authUserId}`, { company_id });
+
+    // Upsert erp_user_company_roles
+    const existing = await sbGet('erp_user_company_roles',
+      `user_id=eq.${u.id}&company_id=eq.${company_id}&limit=1`
+    ).catch(() => []);
+
+    if (existing.length) {
+      await sbPatchWhere('erp_user_company_roles',
+        `user_id=eq.${u.id}&company_id=eq.${company_id}`,
+        { role_id }
+      );
+    } else {
+      await sbPost('erp_user_company_roles', {
+        user_id:              u.id,
+        company_id,
+        role_id,
+        permission_overrides: {},
+      });
+    }
+
     showToast('Permissions updated.', 'success');
     closeEditPermissionsModal();
     await loadUserManagement();
