@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-22 · Session 33*
+*Last updated: 2026-06-22 · Session 34*
 
 ---
 
@@ -15,10 +15,42 @@
 
 ---
 
+## Session 34 — RBAC RLS infinite recursion fix
+
+**Date:** 2026-06-22
+**Branch / PRs:** [PR #86](https://github.com/brandonr2630/meridian-erp/pull/86) · [PR #87](https://github.com/brandonr2630/meridian-erp/pull/87)
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| `erp_user_company_roles` RLS policies | Replaced inline self-referential EXISTS subqueries with `user_has_perm()` SECURITY DEFINER helper | All three policies (`ucr_select_own`, `ucr_insert`, `ucr_update`) contained inline EXISTS subqueries that queried `erp_user_company_roles` from within an `erp_user_company_roles` policy — causing infinite recursion on every login. PR #86's two-query `loadAndBuildPerms` surfaced this via the debug toasts. |
+| `user_has_perm(perm text)` DB function | New SECURITY DEFINER helper | Checks whether the current user has a given permission atom by joining `erp_users → erp_user_company_roles → erp_roles`. Runs as definer (superuser), bypassing RLS — no recursion. `REVOKE` from anon/public; `GRANT` to authenticated. Applied via migration `fix_ucr_rls_infinite_recursion_use_secdef_helper`. |
+| Debug toasts removed from `loadAndBuildPerms` | Cleanup — PR #87 | "RBAC debug: loaded 40 permissions" confirmed green. Removed all three diagnostic `showToast` paths. |
+
+### DB migrations applied (production)
+
+- `fix_ucr_rls_infinite_recursion_use_secdef_helper`
+
+### Root cause chain (Sessions 33–34)
+
+1. Phase 4 dropped `erp_users.role` column → `is_super_admin()` and `my_company_ids()` broke (Session 33 fixed)
+2. PostgREST embedded join `erp_roles(*)` silently returned null → `loadAndBuildPerms` got `buildPerms({},{})` (Session 33 fixed with two-query approach + debug toasts)
+3. Two-query fix hit the actual DB call → RLS policy on `erp_user_company_roles` self-references `erp_user_company_roles` → infinite recursion (Session 34 fixed with `user_has_perm()`)
+
+### Outstanding
+
+- **Enable leaked password protection** — Supabase Dashboard → Authentication → Passwords (manual toggle only)
+- **Job → Invoice link** — completed job's costing summary pre-fills a Meridian invoice (Session 21)
+- **Job Cards PDF** — printable job card / work order report
+- **Work Orders in Client 360** — requires adding `contact_id` FK to `jobs` table
+
+---
+
 ## Session 33 — RBAC Phase 4 cutover bug fixes
 
 **Date:** 2026-06-22
-**Branch / PR:** [PR #86](https://github.com/brandonr2630/meridian-erp/pull/86) ← **PENDING MERGE**
+**Branch / PR:** [PR #86](https://github.com/brandonr2630/meridian-erp/pull/86)
 
 ### What Changed
 
@@ -28,21 +60,14 @@
 | `my_company_ids()` DB function | Rewrote to use `erp_user_company_roles` | Was querying dead `user_company_access` table. Fixed to `SELECT ucr.company_id FROM erp_users eu JOIN erp_user_company_roles ucr ON ucr.user_id = eu.id WHERE eu.auth_user_id = auth.uid()`. Applied via Supabase migration. |
 | `erp_roles` SELECT RLS policy | `auth.role()='authenticated'` → `auth.uid() IS NOT NULL` | `auth.role()` reads `request.jwt.claim.role` which can be null in some Supabase JWT configurations. `auth.uid() IS NOT NULL` is universally reliable. Applied via Supabase migration. |
 | `loadAndBuildPerms()` | Split embedded join into two explicit queries | PostgREST embedded join `erp_roles(*)` was silently returning null (schema cache + RLS interaction). Now: (1) fetch UCR row, (2) fetch `erp_roles` by `id`. Prevents `buildPerms({},{})` silent fallback. |
-| Debug toasts in `loadAndBuildPerms` | Temporary — shows which step fails | Will surface "RBAC debug: loaded N permissions" (green) or specific failure path (red) as a toast on login. Remove after root cause confirmed. |
 
 ### DB migrations applied (production)
 
 - `fix_is_super_admin_and_my_company_ids_drop_role_column_ref`
 - `fix_erp_roles_select_policy_use_uid_not_null`
 
-### Status
-
-PR #86 created but **not yet merged** — deploys the two-query `loadAndBuildPerms` fix + debug toasts. Merge it, hard-refresh, confirm toast shows "RBAC debug: loaded 40 permissions" (green), then remove the debug toasts in a follow-up PR.
-
 ### Outstanding
 
-- **PR #86 merge** — required before nav visibility is confirmed fixed
-- **Remove debug toasts** — after PR #86 confirms the fix works
 - **Enable leaked password protection** — Supabase Dashboard → Authentication → Passwords (manual toggle only)
 - **Job → Invoice link** — completed job's costing summary pre-fills a Meridian invoice (Session 21)
 - **Job Cards PDF** — printable job card / work order report
@@ -986,8 +1011,6 @@ Items are grouped by theme and ordered by suggested priority within each group. 
 
 ### To Do
 
-- [ ] **Merge PR #86** — RBAC nav fix; confirms or surfaces remaining issue via debug toasts
-- [ ] **Remove debug toasts** — `loadAndBuildPerms` has temporary `showToast` diagnostics; delete after fix confirmed
 - [ ] **Enable leaked password protection** — Supabase Dashboard → Authentication → Passwords. Cannot be set via SQL/MCP — requires a manual dashboard toggle.
 - [ ] **Job → Invoice link** — completed job's costing summary pre-fills a Meridian invoice (Session 21)
 - [ ] **Job Cards PDF** — printable job card / work order report for the workshop floor
