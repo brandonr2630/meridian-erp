@@ -5846,7 +5846,10 @@ async function initApp() {
   ]);
   await checkAndRefreshRates();
 
-  // Apply nav visibility based on role
+  // Build permission map for current user + company before rendering nav
+  await loadAndBuildPerms();
+
+  // Apply nav visibility based on permissions
   applyRoleNav();
   restoreNavState();
   refreshNotifBadge();
@@ -6029,6 +6032,8 @@ async function switchCompany(id) {
     sbGet('contacts', Q.contacts()).catch(() => []),
     sbGet('bank_accounts', Q.bankAccounts()).catch(() => []),
   ]);
+  await loadAndBuildPerms();
+  applyRoleNav();
   await loadViewData(currentView);
   showToast('Switched to ' + (currentCompany.trading_name || currentCompany.name), 'info');
 }
