@@ -3571,62 +3571,13 @@ body.light .global-search-results, body.light .split-btn-menu {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
           <div class="field-group" style="margin-bottom:0;">
             <label class="field-label">Role</label>
-            <select id="um-edit-role" class="field-input" onchange="umEditRoleChanged()">
-              <option value="user">User</option>
-              <option value="sales">Sales</option>
-              <option value="admin">Admin</option>
-              <option value="super_admin">Super Admin</option>
+            <select id="um-edit-role" class="field-input">
+              <!-- populated by openEditPermissionsModal() -->
             </select>
           </div>
           <div class="field-group" style="margin-bottom:0;">
             <label class="field-label">Company</label>
             <select id="um-edit-company" class="field-input"></select>
-          </div>
-        </div>
-        <div id="um-edit-modules-section" class="field-group">
-          <label class="field-label">Module Access</label>
-          <div style="font-size:11px;color:var(--text-3);margin-bottom:10px;">Applies to non-admin roles. Admins have full access.</div>
-          <div style="display:flex;flex-direction:column;gap:10px;">
-            <div>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;">
-                <input type="checkbox" id="um-edit-mod-finance" onchange="umEditModuleToggle('finance')"> Finance
-              </label>
-              <div id="um-edit-mod-finance-children" style="margin-left:20px;margin-top:6px;display:flex;flex-direction:column;gap:5px;">
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
-                  <input type="checkbox" id="um-edit-mod-finance-ar"> AR &amp; Credit Notes
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
-                  <input type="checkbox" id="um-edit-mod-finance-ap"> AP &amp; Vendors
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
-                  <input type="checkbox" id="um-edit-mod-finance-bank"> Bank &amp; Cash
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
-                  <input type="checkbox" id="um-edit-mod-finance-ledger"> Ledger (Journal Entries, CoA)
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
-                  <input type="checkbox" id="um-edit-mod-finance-reports"> Reports (P&amp;L, Balance Sheet, etc.)
-                </label>
-              </div>
-            </div>
-            <div>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;">
-                <input type="checkbox" id="um-edit-mod-sales" onchange="umEditModuleToggle('sales')"> Sales
-              </label>
-              <div id="um-edit-mod-sales-children" style="margin-left:20px;margin-top:6px;display:flex;flex-direction:column;gap:5px;">
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
-                  <input type="checkbox" id="um-edit-mod-sales-crm"> CRM (Leads, Pipeline, Activities, Tasks)
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
-                  <input type="checkbox" id="um-edit-mod-sales-orders"> Orders (Quotations, Clients)
-                </label>
-              </div>
-            </div>
-            <div>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;">
-                <input type="checkbox" id="um-edit-mod-operations"> Operations
-              </label>
-            </div>
           </div>
         </div>
         <div id="um-edit-error" style="color:var(--red);font-size:12px;min-height:16px;"></div>
@@ -6614,15 +6565,6 @@ function umModuleToggle(mod) {
   });
 }
 
-function umEditModuleToggle(mod) {
-  const parentChecked = document.getElementById(`um-edit-mod-${mod}`).checked;
-  const children = document.getElementById(`um-edit-mod-${mod}-children`);
-  if (!children) return;
-  children.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-    cb.disabled = !parentChecked;
-    if (!parentChecked) cb.checked = false;
-  });
-}
 
 function umFormatModules(u) {
   const parts = [];
@@ -6651,43 +6593,36 @@ function umFormatModules(u) {
     : '<span style="color:var(--red);font-size:11px;">None</span>';
 }
 
-function openEditPermissionsModal(authUserId) {
+async function openEditPermissionsModal(authUserId) {
   const u = _umAllUsers.find(x => x.auth_user_id === authUserId);
   if (!u) return;
-
-  document.getElementById('um-edit-auth-id').value = authUserId;
+  document.getElementById('um-edit-auth-id').value    = authUserId;
   document.getElementById('um-edit-user-name').textContent = u.full_name || u.email || 'User';
-  document.getElementById('um-edit-role').value = u.role || 'user';
   document.getElementById('um-edit-error').textContent = '';
 
   // Populate company dropdown
   const coSel = document.getElementById('um-edit-company');
-  coSel.innerHTML = companies.map(c => `<option value="${escHTML(c.id)}">${escHTML(c.trading_name || c.name)}</option>`).join('');
+  coSel.innerHTML = companies.map(c =>
+    `<option value="${escHTML(c.id)}">${escHTML(c.trading_name || c.name)}</option>`
+  ).join('');
   coSel.value = u.company_id || '';
 
-  // Module parent flags
-  document.getElementById('um-edit-mod-finance').checked    = u.module_finance    !== false;
-  document.getElementById('um-edit-mod-sales').checked      = u.module_sales      !== false;
-  document.getElementById('um-edit-mod-operations').checked = u.module_operations !== false;
+  // Load roles for the dropdown (system roles + company-scoped roles for current company)
+  const roles = await sbGet('erp_roles',
+    `or=(company_id.is.null,company_id.eq.${currentCompany.id})&order=is_system.desc,name.asc`
+  ).catch(() => []);
 
-  // Finance sub-flags
-  const finChildren = document.getElementById('um-edit-mod-finance-children');
-  const finEnabled  = u.module_finance !== false;
-  finChildren.querySelectorAll('input').forEach(cb => cb.disabled = !finEnabled);
-  document.getElementById('um-edit-mod-finance-ar').checked      = u.module_finance_ar      !== false;
-  document.getElementById('um-edit-mod-finance-ap').checked      = u.module_finance_ap      !== false;
-  document.getElementById('um-edit-mod-finance-bank').checked    = u.module_finance_bank    !== false;
-  document.getElementById('um-edit-mod-finance-ledger').checked  = u.module_finance_ledger  !== false;
-  document.getElementById('um-edit-mod-finance-reports').checked = u.module_finance_reports !== false;
+  const roleSel = document.getElementById('um-edit-role');
+  roleSel.innerHTML = roles.map(r =>
+    `<option value="${escHTML(r.id)}">${escHTML(r.name)}</option>`
+  ).join('');
 
-  // Sales sub-flags
-  const salChildren = document.getElementById('um-edit-mod-sales-children');
-  const salEnabled  = u.module_sales !== false;
-  salChildren.querySelectorAll('input').forEach(cb => cb.disabled = !salEnabled);
-  document.getElementById('um-edit-mod-sales-crm').checked    = u.module_sales_crm    !== false;
-  document.getElementById('um-edit-mod-sales-orders').checked = u.module_sales_orders !== false;
+  // Find existing assignment for this user at the currently selected company
+  const assignments = await sbGet('erp_user_company_roles',
+    `user_id=eq.${u.id}&company_id=eq.${currentCompany.id}&limit=1`
+  ).catch(() => []);
+  if (assignments.length) roleSel.value = assignments[0].role_id;
 
-  umEditRoleChanged();
   document.getElementById('um-edit-modal').style.display = 'flex';
 }
 
@@ -6695,36 +6630,42 @@ function closeEditPermissionsModal() {
   document.getElementById('um-edit-modal').style.display = 'none';
 }
 
-function umEditRoleChanged() {
-  const role = document.getElementById('um-edit-role')?.value;
-  const modSec = document.getElementById('um-edit-modules-section');
-  if (modSec) modSec.style.opacity = (role === 'admin' || role === 'super_admin') ? '0.4' : '1';
-}
 
 async function saveEditPermissions() {
   const authUserId = document.getElementById('um-edit-auth-id').value;
-  const role       = document.getElementById('um-edit-role').value;
   const company_id = document.getElementById('um-edit-company').value;
+  const role_id    = document.getElementById('um-edit-role').value;
   const errEl      = document.getElementById('um-edit-error');
   const saveBtn    = document.getElementById('um-edit-save-btn');
   errEl.textContent = '';
   saveBtn.textContent = 'Saving…'; saveBtn.disabled = true;
 
+  const u = _umAllUsers.find(x => x.auth_user_id === authUserId);
+  if (!u) { errEl.textContent = 'User not found.'; saveBtn.textContent = 'Save Changes'; saveBtn.disabled = false; return; }
+
   try {
-    await sbPatchWhere('erp_users', `auth_user_id=eq.${authUserId}`, {
-      role,
-      company_id,
-      module_finance:          document.getElementById('um-edit-mod-finance').checked,
-      module_sales:            document.getElementById('um-edit-mod-sales').checked,
-      module_operations:       document.getElementById('um-edit-mod-operations').checked,
-      module_finance_ar:       document.getElementById('um-edit-mod-finance-ar').checked,
-      module_finance_ap:       document.getElementById('um-edit-mod-finance-ap').checked,
-      module_finance_bank:     document.getElementById('um-edit-mod-finance-bank').checked,
-      module_finance_ledger:   document.getElementById('um-edit-mod-finance-ledger').checked,
-      module_finance_reports:  document.getElementById('um-edit-mod-finance-reports').checked,
-      module_sales_crm:        document.getElementById('um-edit-mod-sales-crm').checked,
-      module_sales_orders:     document.getElementById('um-edit-mod-sales-orders').checked,
-    });
+    // Update company assignment
+    await sbPatchWhere('erp_users', `auth_user_id=eq.${authUserId}`, { company_id });
+
+    // Upsert erp_user_company_roles
+    const existing = await sbGet('erp_user_company_roles',
+      `user_id=eq.${u.id}&company_id=eq.${company_id}&limit=1`
+    ).catch(() => []);
+
+    if (existing.length) {
+      await sbPatchWhere('erp_user_company_roles',
+        `user_id=eq.${u.id}&company_id=eq.${company_id}`,
+        { role_id }
+      );
+    } else {
+      await sbPost('erp_user_company_roles', {
+        user_id:              u.id,
+        company_id,
+        role_id,
+        permission_overrides: {},
+      });
+    }
+
     showToast('Permissions updated.', 'success');
     closeEditPermissionsModal();
     await loadUserManagement();
