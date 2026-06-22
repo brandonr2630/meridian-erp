@@ -5586,18 +5586,15 @@ function canAny(...perms) { return perms.some(p => can(p)); }
 async function loadAndBuildPerms() {
   if (!currentUser || !currentCompany) return;
   try {
-    const rows = await sbGet(
+    const ucr = await sbGet(
       'erp_user_company_roles',
-      `user_id=eq.${currentUser.id}&company_id=eq.${currentCompany.id}&select=*,erp_roles(*)&limit=1`
+      `user_id=eq.${currentUser.id}&company_id=eq.${currentCompany.id}&select=role_id,permission_overrides&limit=1`
     );
-    if (rows.length) {
-      const assignment = rows[0];
-      const rolePerms  = assignment.erp_roles?.permissions || {};
-      const overrides  = assignment.permission_overrides   || {};
-      buildPerms(rolePerms, overrides);
-    } else {
-      buildPerms({}, {});   // no assignment found — deny everything
-    }
+    if (!ucr.length) { buildPerms({}, {}); return; }
+    const { role_id, permission_overrides } = ucr[0];
+    const roles = await sbGet('erp_roles', `id=eq.${role_id}&select=permissions&limit=1`);
+    const rolePerms = roles[0]?.permissions || {};
+    buildPerms(rolePerms, permission_overrides || {});
   } catch(e) {
     console.warn('loadAndBuildPerms failed:', e.message);
     buildPerms({}, {});
