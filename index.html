@@ -5530,18 +5530,22 @@ const Q = {
 let currentUser      = null;
 let _perms           = {};   // flat permission map built at login + company switch
 
-// ── ROLE HELPERS ──────────────────────────────────────────────────
-function isSuperAdmin() { return currentUser?.role === 'super_admin'; }
-function isAdmin()      { return currentUser?.role === 'admin' || isSuperAdmin(); }
-function isSales()      { return currentUser?.role === 'sales'; }
-function isUser()       { return currentUser?.role === 'user'; }
-function canPost()      { return isAdmin(); }
-function canVoid()      { return isAdmin(); }
-function canApprove()   { return isAdmin(); }
-function canDelete()    { return isAdmin(); }
-function canSettings()  { return isAdmin(); }
-function canFinance()   { return isAdmin(); }  // AP, Bank, CoA, Journal, Reports
-function canViewAR()    { return !isUser() || isAdmin(); } // sales can view AR
+// ── ROLE HELPERS (thin wrappers — delegate to can()) ──────────────
+// Phase 3 bridge: these wrappers preserve existing call sites.
+// canPost/canVoid/canApprove are intentionally permissive (check either AR or AP);
+// nav data-perm attributes provide the outer module guard.
+// Phase 4 will replace individual call sites with direct can() calls.
+function isSuperAdmin() { return can('admin:companies'); }
+function isAdmin()      { return can('admin:users') || can('admin:settings'); }
+function isSales()      { return can('sales:quotes:write') && !can('admin:users'); }
+function isUser()       { return !can('admin:users') && !can('sales:quotes:write'); }
+function canPost()      { return canAny('finance:ar:write','finance:ap:write'); }
+function canVoid()      { return canAny('finance:ar:void','finance:ap:void'); }
+function canApprove()   { return canAny('finance:ar:approve','finance:ap:approve'); }
+function canDelete()    { return can('admin:settings'); }
+function canSettings()  { return can('admin:settings'); }
+function canFinance()   { return canAny('finance:ar:read','finance:ap:read','finance:bank:read','finance:ledger:read','finance:reports:read'); }
+function canViewAR()    { return can('finance:ar:read'); }
 
 // ── PERMISSION ENGINE ─────────────────────────────────────────────
 // _perms is populated by buildPerms() at login and on every company switch.
