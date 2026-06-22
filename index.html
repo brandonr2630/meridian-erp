@@ -5524,6 +5524,33 @@ body.light .global-search-results, body.light .split-btn-menu {
   </div>
 </div>
 
+<!-- ── ROLE EDIT MODAL ─────────────────────────────────────────────── -->
+<div id="modal-role-edit" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal('modal-role-edit')">
+  <div class="modal" style="max-width:640px;width:95%;max-height:90vh;overflow-y:auto;">
+    <div class="modal-header">
+      <h3 id="role-modal-title">New Role</h3>
+      <button class="modal-close" onclick="closeModal('modal-role-edit')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="role-edit-id">
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label class="form-label">Role name</label>
+        <input type="text" id="role-edit-name" class="form-input" placeholder="e.g. AR Officer">
+      </div>
+      <div id="role-perm-matrix"></div>
+      <div class="form-group" style="margin-top:1rem;">
+        <label class="form-label">Admin permissions</label>
+        <div id="role-admin-perms" style="display:flex;flex-wrap:wrap;gap:12px;margin-top:6px;"></div>
+      </div>
+      <p id="role-edit-error" style="color:var(--red);font-size:13px;margin-top:8px;"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-role-edit')">Cancel</button>
+      <button class="btn btn-primary" id="role-edit-save-btn" onclick="saveRole()">Save Role</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════════════════════
 //  TERRAN GROUP ERP — Finance Module
@@ -5613,6 +5640,29 @@ let editingAccountId = null;
 let _accessToken     = null;
 
 // ── GLOBAL UTILITIES ─────────────────────────────────────────────
+const PERMISSION_MATRIX = [
+  { group: 'Finance', rows: [
+    { label: 'AR',           atoms: ['finance:ar:read','finance:ar:write','finance:ar:approve','finance:ar:void'] },
+    { label: 'AP',           atoms: ['finance:ap:read','finance:ap:write','finance:ap:approve','finance:ap:void'] },
+    { label: 'Bank',         atoms: ['finance:bank:read','finance:bank:write', null, null] },
+    { label: 'Ledger / CoA', atoms: ['finance:ledger:read','finance:ledger:write','finance:coa:read','finance:coa:write'] },
+    { label: 'Reports',      atoms: ['finance:reports:read', null, null, null] },
+  ]},
+  { group: 'Sales', rows: [
+    { label: 'CRM',           atoms: ['sales:crm:read','sales:crm:write', null, null] },
+    { label: 'Quotes',        atoms: ['sales:quotes:read','sales:quotes:write','sales:quotes:approve', null] },
+    { label: 'Orders',        atoms: ['sales:orders:read','sales:orders:write','sales:orders:approve', null] },
+    { label: 'Clients',       atoms: ['sales:clients:read','sales:clients:write', null, null] },
+    { label: 'Vendors',       atoms: ['sales:vendors:read','sales:vendors:write', null, null] },
+    { label: 'Deliveries',    atoms: ['sales:deliveries:read','sales:deliveries:write', null, null] },
+  ]},
+  { group: 'Operations', rows: [
+    { label: 'Work Orders',  atoms: ['ops:work-orders:read','ops:work-orders:write','ops:work-orders:approve', null] },
+    { label: 'Job Costing',  atoms: ['ops:costing:read','ops:costing:write', null, null] },
+    { label: 'Deliveries',   atoms: ['ops:delivery:read','ops:delivery:write', null, null] },
+  ]},
+];
+const ADMIN_PERMS = ['admin:users','admin:settings','admin:roles','admin:companies'];
 const CURRENCY_SYMBOLS = { TTD: 'TT$', USD: 'US$', GYD: 'G$' };
 function fmt(amount, currency) {
   const sym = CURRENCY_SYMBOLS[currency] || (currency ? currency + ' ' : '$');
@@ -6220,6 +6270,94 @@ async function deleteRole(roleId) {
     await loadRoleManagement();
   } catch(e) {
     showToast(e.message, 'error');
+  }
+}
+
+function openCreateRoleModal() {
+  document.getElementById('role-modal-title').textContent = 'New role';
+  document.getElementById('role-edit-id').value = '';
+  document.getElementById('role-edit-name').value = '';
+  document.getElementById('role-edit-error').textContent = '';
+  renderPermMatrix({});
+  document.getElementById('modal-role-edit').style.display = 'flex';
+}
+
+function openEditRoleModal(roleId) {
+  const role = _rmRoles.find(r => r.id === roleId);
+  if (!role || role.is_system) return;
+  document.getElementById('role-modal-title').textContent = `Edit role: ${role.name}`;
+  document.getElementById('role-edit-id').value = roleId;
+  document.getElementById('role-edit-name').value = role.name;
+  document.getElementById('role-edit-error').textContent = '';
+  renderPermMatrix(role.permissions || {});
+  document.getElementById('modal-role-edit').style.display = 'flex';
+}
+
+function renderPermMatrix(currentPerms) {
+  const matrixEl = document.getElementById('role-perm-matrix');
+  const cols = ['Read','Write','Approve','Void'];
+  let html = `<table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead><tr>
+      <th style="text-align:left;padding:6px 8px;color:var(--text-2);font-weight:500;border-bottom:1px solid var(--border);">Module</th>
+      ${cols.map(c=>`<th style="text-align:center;width:72px;padding:6px 4px;color:var(--text-2);font-weight:500;border-bottom:1px solid var(--border);">${c}</th>`).join('')}
+    </tr></thead><tbody>`;
+  for (const group of PERMISSION_MATRIX) {
+    html += `<tr><td colspan="5" style="padding:8px 8px 4px;font-size:11px;font-weight:600;color:var(--text-2);background:var(--surface-2);text-transform:uppercase;letter-spacing:0.05em;">${group.group}</td></tr>`;
+    for (const row of group.rows) {
+      html += `<tr style="border-bottom:1px solid var(--border)22;">
+        <td style="padding:7px 8px;">${escHTML(row.label)}</td>
+        ${row.atoms.map(atom => atom
+          ? `<td style="text-align:center;"><input type="checkbox" data-perm-atom="${escHTML(atom)}" ${currentPerms[atom] ? 'checked' : ''}></td>`
+          : `<td style="text-align:center;color:var(--text-2);">—</td>`
+        ).join('')}
+      </tr>`;
+    }
+  }
+  html += '</tbody></table>';
+  matrixEl.innerHTML = html;
+
+  const adminEl = document.getElementById('role-admin-perms');
+  adminEl.innerHTML = ADMIN_PERMS.map(atom => {
+    const label = atom.replace('admin:','');
+    return `<label style="display:flex;align-items:center;gap:5px;font-size:13px;">
+      <input type="checkbox" data-perm-atom="${escHTML(atom)}" ${currentPerms[atom] ? 'checked' : ''}>
+      ${escHTML(label)}
+    </label>`;
+  }).join('');
+}
+
+async function saveRole() {
+  const roleId  = document.getElementById('role-edit-id').value;
+  const name    = document.getElementById('role-edit-name').value.trim();
+  const errEl   = document.getElementById('role-edit-error');
+  const saveBtn = document.getElementById('role-edit-save-btn');
+  errEl.textContent = '';
+  if (!name) { errEl.textContent = 'Role name is required.'; return; }
+
+  const permissions = {};
+  document.querySelectorAll('#modal-role-edit [data-perm-atom]').forEach(cb => {
+    if (cb.checked) permissions[cb.dataset.permAtom] = true;
+  });
+
+  saveBtn.textContent = 'Saving…'; saveBtn.disabled = true;
+  try {
+    if (roleId) {
+      await sbPatchWhere('erp_roles', `id=eq.${roleId}`, { name, permissions });
+    } else {
+      await sbPost('erp_roles', {
+        name,
+        permissions,
+        company_id: currentCompany.id,
+        created_by: currentUser.id,
+      });
+    }
+    showToast(roleId ? 'Role updated.' : 'Role created.', 'success');
+    closeModal('modal-role-edit');
+    await loadRoleManagement();
+  } catch(e) {
+    errEl.textContent = e.message;
+  } finally {
+    saveBtn.textContent = 'Save Role'; saveBtn.disabled = false;
   }
 }
 
