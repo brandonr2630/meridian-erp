@@ -2029,6 +2029,10 @@ body.light .global-search-results, body.light .split-btn-menu {
         <div class="nav-item" data-perm="admin:users" onclick="navigate('user-management')" id="nav-user-management">
           <span class="nav-item-icon">👥</span> User Management
         </div>
+        <div class="nav-item" data-perm="admin:roles" onclick="navigate('role-management')" id="nav-role-management">
+  <span class="nav-icon">🔐</span>
+  <span class="nav-label">Role Management</span>
+</div>
         <div class="nav-item" data-perm="admin:settings" onclick="navigate('settings')" id="nav-settings">
           <span class="nav-item-icon">⚙️</span> Settings
         </div>
@@ -3632,6 +3636,22 @@ body.light .global-search-results, body.light .split-btn-menu {
         <button class="btn btn-primary" id="um-edit-save-btn" onclick="saveEditPermissions()">Save Changes</button>
       </div>
     </div>
+  </div>
+</div>
+
+<div id="view-role-management" class="view-section" style="display:none;">
+  <div class="view-header">
+    <h2 class="view-title">Role Management</h2>
+    <p class="view-subtitle" id="rm-subtitle"></p>
+  </div>
+  <div class="view-toolbar" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+    <div></div>
+    <button class="btn btn-primary" onclick="openCreateRoleModal()">+ New Role</button>
+  </div>
+  <div id="rm-roles-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:2rem;"></div>
+  <div id="rm-users-section" style="display:none;">
+    <h3 style="font-size:14px;font-weight:600;margin-bottom:0.75rem;" id="rm-users-title">Users with this role</h3>
+    <div id="rm-users-list"></div>
   </div>
 </div>
 
@@ -6111,8 +6131,15 @@ async function loadViewData(view) {
     case 'work-orders': await loadJobCards(); break;
     case 'job-costing': renderJobCostingPlaceholder(); break;
     case 'user-management': await loadUserManagement(); break;
+    case 'role-management': await loadRoleManagement(); break;
     case 'job-config': await loadJobConfig(); break;
   }
+}
+
+async function loadRoleManagement() {
+  document.getElementById('rm-subtitle').textContent =
+    currentCompany?.trading_name || currentCompany?.name || '';
+  document.getElementById('rm-roles-grid').innerHTML = '<p style="color:var(--text-2)">Loading roles…</p>';
 }
 
 let _umAllUsers = [];
