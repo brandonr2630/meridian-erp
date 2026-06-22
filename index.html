@@ -1911,28 +1911,28 @@ body.light .global-search-results, body.light .split-btn-menu {
             <span class="nav-sub-toggle" id="toggle-finance-transactions">&#8722;</span>
           </div>
           <div class="nav-sub-body" id="sub-body-finance-transactions">
-            <div class="nav-item sub-item" onclick="navigate('ar')" id="nav-ar">
+            <div class="nav-item sub-item" data-perm="finance:ar:read" onclick="navigate('ar')" id="nav-ar">
               <span class="nav-item-icon"><img src="assets/Acc Receivables Icon.svg" style="width:18px;height:18px;vertical-align:middle;"></span> Accounts Receivable
               <span class="nav-badge" id="badge-ar">0</span>
             </div>
-            <div class="nav-item sub-item" onclick="navigate('credit-notes')" id="nav-credit-notes">
+            <div class="nav-item sub-item" data-perm="finance:ar:read" onclick="navigate('credit-notes')" id="nav-credit-notes">
               <span class="nav-item-icon"><img src="assets/Credit Note.svg" style="width:18px;height:18px;vertical-align:middle;"></span> Credit Notes
               <span class="nav-badge" id="badge-credit-notes">0</span>
             </div>
-            <div class="nav-item sub-item" onclick="navigate('ap')" id="nav-ap">
+            <div class="nav-item sub-item" data-perm="finance:ap:read" onclick="navigate('ap')" id="nav-ap">
               <span class="nav-item-icon"><img src="assets/Acc Payables Icon.svg" style="width:18px;height:18px;vertical-align:middle;"></span> Accounts Payable
               <span class="nav-badge" id="badge-ap">0</span>
             </div>
-            <div class="nav-item sub-item" onclick="navigate('vendors')" id="nav-vendors">
+            <div class="nav-item sub-item" data-perm="finance:ap:read" onclick="navigate('vendors')" id="nav-vendors">
               <span class="nav-item-icon">🏭</span> Vendors
             </div>
-            <div class="nav-item sub-item" onclick="navigate('bank')" id="nav-bank">
+            <div class="nav-item sub-item" data-perm="finance:bank:read" onclick="navigate('bank')" id="nav-bank">
               <span class="nav-item-icon">🏦</span> Bank & Cash
             </div>
-            <div class="nav-item sub-item" onclick="navigate('journal')" id="nav-journal">
+            <div class="nav-item sub-item" data-perm="finance:ledger:read" onclick="navigate('journal')" id="nav-journal">
               <span class="nav-item-icon">📓</span> Journal Entries
             </div>
-            <div class="nav-item sub-item" onclick="navigate('coa')" id="nav-coa">
+            <div class="nav-item sub-item" data-perm="finance:coa:read" onclick="navigate('coa')" id="nav-coa">
               <span class="nav-item-icon">📋</span> Chart of Accounts
             </div>
           </div>
@@ -1943,22 +1943,22 @@ body.light .global-search-results, body.light .split-btn-menu {
             <span class="nav-sub-toggle" id="toggle-finance-reports">&#8722;</span>
           </div>
           <div class="nav-sub-body" id="sub-body-finance-reports">
-            <div class="nav-item sub-item" onclick="navigate('aged-ar')" id="nav-aged-ar">
+            <div class="nav-item sub-item" data-perm="finance:ar:read" onclick="navigate('aged-ar')" id="nav-aged-ar">
               <span class="nav-item-icon">⏱️</span> Aged Receivables
             </div>
-            <div class="nav-item sub-item" onclick="navigate('aged-ap')" id="nav-aged-ap">
+            <div class="nav-item sub-item" data-perm="finance:ap:read" onclick="navigate('aged-ap')" id="nav-aged-ap">
               <span class="nav-item-icon">⏳</span> Aged Payables
             </div>
-            <div class="nav-item sub-item" onclick="navigate('pl')" id="nav-pl">
+            <div class="nav-item sub-item" data-perm="finance:reports:read" onclick="navigate('pl')" id="nav-pl">
               <span class="nav-item-icon">📈</span> Profit & Loss
             </div>
-            <div class="nav-item sub-item" onclick="navigate('bs')" id="nav-bs">
+            <div class="nav-item sub-item" data-perm="finance:reports:read" onclick="navigate('bs')" id="nav-bs">
               <span class="nav-item-icon">⚖️</span> Balance Sheet
             </div>
-            <div class="nav-item sub-item" onclick="navigate('tb')" id="nav-tb">
+            <div class="nav-item sub-item" data-perm="finance:reports:read" onclick="navigate('tb')" id="nav-tb">
               <span class="nav-item-icon">🗂️</span> Trial Balance
             </div>
-            <div class="nav-item sub-item" onclick="navigate('cf')" id="nav-cf">
+            <div class="nav-item sub-item" data-perm="finance:reports:read" onclick="navigate('cf')" id="nav-cf">
               <span class="nav-item-icon"><img src="assets/Cash Flow Icon.svg" style="width:18px;height:18px;vertical-align:middle;"></span> Cash Flow
             </div>
           </div>
@@ -1971,26 +1971,26 @@ body.light .global-search-results, body.light .split-btn-menu {
         <span class="nav-toggle" id="toggle-sales">&#8722;</span>
       </div>
       <div class="nav-section-body" id="section-body-sales">
-        <div class="nav-item" onclick="navigate('sales-leads')" id="nav-sales-leads">
+        <div class="nav-item" data-perm="sales:crm:read" onclick="navigate('sales-leads')" id="nav-sales-leads">
           <span class="nav-item-icon">👥</span> Sales Leads
         </div>
-        <div class="nav-item" onclick="navigate('pipeline')" id="nav-pipeline">
+        <div class="nav-item" data-perm="sales:crm:read" onclick="navigate('pipeline')" id="nav-pipeline">
           <span class="nav-item-icon">🎯</span> Pipeline
         </div>
-        <div class="nav-item" onclick="navigate('crm-activities')" id="nav-crm-activities">
+        <div class="nav-item" data-perm="sales:crm:read" onclick="navigate('crm-activities')" id="nav-crm-activities">
           <span class="nav-item-icon">📅</span> Activities
         </div>
-        <div class="nav-item" onclick="navigate('crm-tasks')" id="nav-crm-tasks">
+        <div class="nav-item" data-perm="sales:crm:read" onclick="navigate('crm-tasks')" id="nav-crm-tasks">
           <span class="nav-item-icon">✅</span> Tasks
         </div>
-        <div class="nav-item" onclick="navigate('crm-team-members')" id="nav-crm-team-members">
+        <div class="nav-item" data-perm="sales:crm:read" onclick="navigate('crm-team-members')" id="nav-crm-team-members">
           <span class="nav-item-icon">👷</span> Team Members
         </div>
-        <div class="nav-item" onclick="navigate('quotations')" id="nav-quotations">
+        <div class="nav-item" data-perm="sales:quotes:read" onclick="navigate('quotations')" id="nav-quotations">
           <span class="nav-item-icon">📝</span> Quotations
           <span class="nav-badge" id="badge-quotations">0</span>
         </div>
-        <div class="nav-item" onclick="navigate('clients')" id="nav-clients">
+        <div class="nav-item" data-perm="sales:clients:read" onclick="navigate('clients')" id="nav-clients">
           <span class="nav-item-icon">👤</span> Clients
         </div>
       </div>
@@ -2001,18 +2001,18 @@ body.light .global-search-results, body.light .split-btn-menu {
         <span class="nav-toggle" id="toggle-operations">&#8722;</span>
       </div>
       <div class="nav-section-body" id="section-body-operations">
-        <div class="nav-item" onclick="navigate('work-orders')" id="nav-work-orders">
+        <div class="nav-item" data-perm="ops:work-orders:read" onclick="navigate('work-orders')" id="nav-work-orders">
           <span class="nav-item-icon">🔧</span> Work Orders
           <span class="nav-badge" id="badge-work-orders" style="display:none;">0</span>
         </div>
-        <div class="nav-item" onclick="navigate('job-costing')" id="nav-job-costing">
+        <div class="nav-item" data-perm="ops:costing:read" onclick="navigate('job-costing')" id="nav-job-costing">
           <span class="nav-item-icon">💰</span> Job Costing
         </div>
-        <div class="nav-item" onclick="navigate('delivery-notes')" id="nav-delivery-notes">
+        <div class="nav-item" data-perm="ops:delivery:read" onclick="navigate('delivery-notes')" id="nav-delivery-notes">
           <span class="nav-item-icon">🚚</span> Delivery Notes
           <span class="nav-badge" id="badge-delivery-notes">0</span>
         </div>
-        <div class="nav-item" id="nav-job-config" onclick="navigate('job-config')" style="display:none;">
+        <div class="nav-item" data-perm="admin:settings" id="nav-job-config" onclick="navigate('job-config')" style="display:none;">
           <span class="nav-item-icon">⚙️</span> Job Config
         </div>
       </div>
@@ -2023,13 +2023,13 @@ body.light .global-search-results, body.light .split-btn-menu {
         <span class="nav-toggle" id="toggle-setup">&#8722;</span>
       </div>
       <div class="nav-section-body" id="section-body-setup">
-        <div class="nav-item" onclick="navigate('companies')" id="nav-companies">
+        <div class="nav-item" data-perm="admin:companies" onclick="navigate('companies')" id="nav-companies">
           <span class="nav-item-icon">🏢</span> Companies
         </div>
-        <div class="nav-item" onclick="navigate('user-management')" id="nav-user-management">
+        <div class="nav-item" data-perm="admin:users" onclick="navigate('user-management')" id="nav-user-management">
           <span class="nav-item-icon">👥</span> User Management
         </div>
-        <div class="nav-item" onclick="navigate('settings')" id="nav-settings">
+        <div class="nav-item" data-perm="admin:settings" onclick="navigate('settings')" id="nav-settings">
           <span class="nav-item-icon">⚙️</span> Settings
         </div>
       </div>
@@ -5858,97 +5858,17 @@ async function initApp() {
 }
 
 function applyRoleNav() {
-  const role = currentUser?.role;
-  const financeOnly  = ['nav-coa','nav-journal','nav-ap','nav-bank','nav-pl','nav-bs','nav-tb','nav-aged-ap','nav-companies','nav-settings'];
-  const adminOnly    = ['nav-user-management'];
-  const salesVisible = ['nav-dashboard','nav-quotations','nav-ar','nav-aged-ar','nav-clients','nav-sales-leads','nav-pipeline','nav-crm-activities','nav-crm-tasks','nav-crm-team-members'];
+  // Show/hide nav items based on data-perm attribute
+  document.querySelectorAll('.nav-item[data-perm]').forEach(el => {
+    el.style.display = can(el.dataset.perm) ? '' : 'none';
+  });
 
-  if (role === 'sales') {
-    document.querySelectorAll('.nav-item[id^="nav-"]').forEach(el => {
-      el.style.display = salesVisible.includes(el.id) ? '' : 'none';
-    });
-  } else if (role === 'user') {
-    financeOnly.forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.style.display = 'none';
-    });
-    adminOnly.forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.style.display = 'none';
-    });
-  }
-  // admin and super_admin see everything
-
-  // Operations: Job Config is admin-only
-  const jobConfigEl = document.getElementById('nav-job-config');
-  if (jobConfigEl) jobConfigEl.style.display = isAdmin() ? '' : 'none';
-
-  // User Management is admin-only
-  const userMgmtEl = document.getElementById('nav-user-management');
-  if (userMgmtEl && !isAdmin()) userMgmtEl.style.display = 'none';
-
-  // Hide Finance > Reports sub-section header if all its items are hidden
+  // Hide Finance section header if all finance sub-items are hidden
   const subSec = document.getElementById('sub-section-finance-reports');
   if (subSec) {
     const anyVisible = Array.from(subSec.querySelectorAll('.nav-item'))
                            .some(el => el.style.display !== 'none');
     subSec.style.display = anyVisible ? '' : 'none';
-  }
-
-  // Module-based section visibility (non-admin users only)
-  if (!isAdmin()) {
-    const u = currentUser;
-    const sectionMap = {
-      finance:    u?.module_finance,
-      sales:      u?.module_sales,
-      operations: u?.module_operations,
-    };
-    Object.entries(sectionMap).forEach(([section, allowed]) => {
-      const el = document.querySelector(`.sidebar-section[data-section="${section}"]`);
-      if (el) el.style.display = (allowed === false) ? 'none' : '';
-    });
-
-    // Sub-module: Finance individual nav items
-    if (u?.module_finance !== false) {
-      const finMap = {
-        'nav-ar':             u?.module_finance_ar      !== false,
-        'nav-credit-notes':   u?.module_finance_ar      !== false,
-        'nav-ap':             u?.module_finance_ap      !== false,
-        'nav-vendors':        u?.module_finance_ap      !== false,
-        'nav-bank':           u?.module_finance_bank    !== false,
-        'nav-journal':        u?.module_finance_ledger  !== false,
-        'nav-coa':            u?.module_finance_ledger  !== false,
-        'nav-aged-ar':        u?.module_finance_reports !== false,
-        'nav-aged-ap':        u?.module_finance_reports !== false,
-        'nav-pl':             u?.module_finance_reports !== false,
-        'nav-bs':             u?.module_finance_reports !== false,
-        'nav-tb':             u?.module_finance_reports !== false,
-        'nav-cf':             u?.module_finance_reports !== false,
-      };
-      Object.entries(finMap).forEach(([id, visible]) => {
-        const el = document.getElementById(id);
-        if (el) el.style.display = visible ? '' : 'none';
-      });
-      // Hide Reports sub-section header if all report items are hidden
-      const reportsSec = document.getElementById('sub-section-finance-reports');
-      if (reportsSec) reportsSec.style.display = (u?.module_finance_reports !== false) ? '' : 'none';
-    }
-
-    // Sub-module: Sales individual nav items
-    if (u?.module_sales !== false) {
-      const salMap = {
-        'nav-sales-leads':      u?.module_sales_crm    !== false,
-        'nav-pipeline':         u?.module_sales_crm    !== false,
-        'nav-crm-activities':   u?.module_sales_crm    !== false,
-        'nav-crm-tasks':        u?.module_sales_crm    !== false,
-        'nav-quotations':       u?.module_sales_orders !== false,
-        'nav-clients':          u?.module_sales_orders !== false,
-      };
-      Object.entries(salMap).forEach(([id, visible]) => {
-        const el = document.getElementById(id);
-        if (el) el.style.display = visible ? '' : 'none';
-      });
-    }
   }
 }
 
