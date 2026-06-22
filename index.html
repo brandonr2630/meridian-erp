@@ -5549,6 +5549,7 @@ const Q = {
 // ── STATE ────────────────────────────────────────────────────────
 let currentUser      = null;
 let _perms           = {};   // flat permission map built at login + company switch
+let _rmRoles = [];
 
 // ── ROLE HELPERS (thin wrappers — delegate to can()) ──────────────
 // Phase 3 bridge: these wrappers preserve existing call sites.
@@ -6139,7 +6140,87 @@ async function loadViewData(view) {
 async function loadRoleManagement() {
   document.getElementById('rm-subtitle').textContent =
     currentCompany?.trading_name || currentCompany?.name || '';
-  document.getElementById('rm-roles-grid').innerHTML = '<p style="color:var(--text-2)">Loading roles…</p>';
+  document.getElementById('rm-users-section').style.display = 'none';
+  document.getElementById('rm-roles-grid').innerHTML = '<p style="color:var(--text-2);">Loading…</p>';
+  try {
+    _rmRoles = await sbGet('erp_roles',
+      `or=(company_id.is.null,company_id.eq.${currentCompany.id})&order=is_system.desc,name.asc`
+    );
+    renderRoleCards();
+  } catch(e) {
+    document.getElementById('rm-roles-grid').innerHTML =
+      `<p style="color:var(--red);">Error: ${escHTML(e.message)}</p>`;
+  }
+}
+
+function renderRoleCards() {
+  const grid = document.getElementById('rm-roles-grid');
+  grid.innerHTML = _rmRoles.map(role => {
+    const permCount = Object.keys(role.permissions || {}).length;
+    const isSystem  = role.is_system;
+    const badge     = isSystem
+      ? `<span style="font-size:11px;font-weight:600;color:var(--text-2);background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:1px 7px;">System</span>`
+      : `<span style="font-size:11px;font-weight:600;color:var(--blue);background:var(--blue)18;border:1px solid var(--blue)33;border-radius:4px;padding:1px 7px;">Custom</span>`;
+    const actions = isSystem
+      ? `<span style="font-size:13px;color:var(--text-2);">🔒</span>`
+      : `<button class="btn btn-ghost btn-sm" onclick="openEditRoleModal('${role.id}')">Edit</button>
+         <button class="btn btn-ghost btn-sm btn-danger" onclick="deleteRole('${role.id}')">Delete</button>`;
+    return `
+      <div class="card" style="padding:1rem;cursor:pointer;" onclick="showRoleUsers('${escHTML(role.id)}')">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          ${badge}
+          ${actions}
+        </div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:3px;">${escHTML(role.name)}</div>
+        <div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">
+          ${permCount} permission${permCount !== 1 ? 's' : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function showRoleUsers(roleId) {
+  const role = _rmRoles.find(r => r.id === roleId);
+  if (!role) return;
+  const section = document.getElementById('rm-users-section');
+  const title   = document.getElementById('rm-users-title');
+  const list    = document.getElementById('rm-users-list');
+  title.textContent = `Users assigned "${role.name}"`;
+  title.dataset.roleId = roleId;
+  list.innerHTML = '<p style="color:var(--text-2);">Loading…</p>';
+  section.style.display = '';
+  try {
+    const rows = await sbGet('erp_user_company_roles',
+      `role_id=eq.${roleId}&company_id=eq.${currentCompany.id}&select=*,erp_users(id,full_name,email)&order=erp_users(full_name)`
+    );
+    list.innerHTML = rows.length
+      ? rows.map(r => `
+          <div class="table-row" style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);">
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:500;">${escHTML(r.erp_users?.full_name || '—')}</div>
+              <div style="font-size:12px;color:var(--text-2);">${escHTML(r.erp_users?.email || '')}</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="openUserOverridesModal('${r.user_id}','${r.company_id}')">
+              Overrides ${Object.keys(r.permission_overrides||{}).length > 0 ? `<span style="background:var(--gold)22;color:var(--gold);border-radius:3px;padding:0 4px;font-size:10px;">${Object.keys(r.permission_overrides).length}</span>` : ''}
+            </button>
+          </div>`).join('')
+      : '<p style="color:var(--text-2);font-size:13px;">No users assigned this role for this company.</p>';
+  } catch(e) {
+    list.innerHTML = `<p style="color:var(--red);">Error: ${escHTML(e.message)}</p>`;
+  }
+}
+
+async function deleteRole(roleId) {
+  const role = _rmRoles.find(r => r.id === roleId);
+  if (!role || role.is_system) return;
+  if (!confirm(`Delete role "${role.name}"? Users assigned this role will lose their access.`)) return;
+  try {
+    await sb(`erp_roles?id=eq.${roleId}`, { method: 'DELETE', prefer: 'return=minimal' });
+    showToast('Role deleted.', 'success');
+    await loadRoleManagement();
+  } catch(e) {
+    showToast(e.message, 'error');
+  }
 }
 
 let _umAllUsers = [];
