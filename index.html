@@ -2338,6 +2338,10 @@ body.light .global-search-results, body.light .split-btn-menu {
             <input type="date" class="filter-select" id="ar-date-from" onchange="filterAR()" style="width:140px">
             <span style="font-size:12px;color:var(--text-3)">–</span>
             <input type="date" class="filter-select" id="ar-date-to" onchange="filterAR()" style="width:140px">
+            <select class="filter-select" id="ar-contact-filter" onchange="filterAR()" style="min-width:140px;max-width:200px;">
+              <option value="">All Clients</option>
+            </select>
+            <button id="ar-email-stmt-btn" class="btn btn-ghost btn-sm" style="display:none;white-space:nowrap;" onclick="_emailARStatement()">✉️ Statement</button>
           </div>
           <div id="ar-table-wrap"><div class="page-loading"><div class="loading-spinner"></div> Loading...</div></div>
         </div>
@@ -12047,6 +12051,15 @@ async function loadAR() {
 
     arPage = 0;
     renderARTable(invoices, contactMap);
+    // Populate AR contact filter
+    const sel = document.getElementById('ar-contact-filter');
+    if (sel) {
+      const used = new Set(invoices.map(i => i.contact_id));
+      const opts = contacts.filter(c => used.has(c.id))
+        .sort((a,b) => (a.trading_name||a.name).localeCompare(b.trading_name||b.name));
+      sel.innerHTML = '<option value="">All Clients</option>' +
+        opts.map(c => `<option value="${c.id}">${escHTML(c.trading_name||c.name)}</option>`).join('');
+    }
   } catch(e) { showToast('AR load error: ' + e.message, 'error'); }
   finally { arWrap.style.opacity = ''; arWrap.style.pointerEvents = ''; }
 }
@@ -12130,6 +12143,7 @@ function filterAR() {
   const status  = document.getElementById('ar-status-filter').value;
   const dateFrom = document.getElementById('ar-date-from').value;
   const dateTo   = document.getElementById('ar-date-to').value;
+  const contactId = (document.getElementById('ar-contact-filter') || {}).value || '';
   const contactMap = {};
   contacts.forEach(c => { contactMap[c.id] = (c.trading_name || c.name).toLowerCase(); });
   const filtered = invoices.filter(inv => {
@@ -12140,9 +12154,12 @@ function filterAR() {
     const d = (inv.invoice_date||'').slice(0,10);
     if (dateFrom && d < dateFrom) return false;
     if (dateTo   && d > dateTo)   return false;
+    if (contactId && inv.contact_id !== contactId) return false;
     return true;
   });
   renderARTable(filtered, Object.fromEntries(contacts.map(c => [c.id, c.trading_name || c.name])));
+  const emailBtn = document.getElementById('ar-email-stmt-btn');
+  if (emailBtn) emailBtn.style.display = contactId ? 'inline-flex' : 'none';
 }
 
 async function postInvoice(id) {
@@ -14476,6 +14493,95 @@ async function generatePDFBase64(source) {
     </div>
   </div>`;
 }
+
+  function buildARStatementHTML(contact, invoices, company) {
+    const co  = company || {};
+    const c   = contact || {};
+    const today = new Date().toLocaleDateString('en-TT', { year:'numeric', month:'long', day:'numeric' });
+
+    const fmtAmt = (n, cur) => {
+      const sym = cur === 'USD' ? 'US$' : cur === 'GYD' ? 'G$' : 'TT$';
+      return sym + (parseFloat(n)||0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    };
+
+    // Only show invoices with invoice numbers (posted/paid/overdue/partial)
+    const rows = invoices.filter(i => i.invoice_no).sort((a,b) => (a.invoice_date||'') < (b.invoice_date||'') ? -1 : 1);
+
+    const totalsByCurrency = {};
+    rows.forEach(i => {
+      const bal = parseFloat(i.balance_due||0);
+      if (!totalsByCurrency[i.currency]) totalsByCurrency[i.currency] = 0;
+      totalsByCurrency[i.currency] += bal;
+    });
+
+    const coHeader = `
+      <div style="display:flex;align-items:center;gap:16px;border-bottom:2px solid #222;padding-bottom:10px;margin-bottom:14px;">
+        ${co.logo_url ? `<img src="${co.logo_url}" style="height:48px;object-fit:contain;" alt="">` : ''}
+        <div>
+          <div style="font-size:18px;font-weight:700;">${escHTML(co.name||'')}</div>
+          <div style="font-size:11px;color:#555;">${[co.address_1,co.address_2,co.city,co.country].filter(Boolean).map(escHTML).join(', ')}</div>
+          ${co.phone ? `<div style="font-size:11px;color:#555;">Tel: ${escHTML(co.phone)}</div>` : ''}
+          ${co.vat_no ? `<div style="font-size:11px;color:#555;">VAT Reg: ${escHTML(co.vat_no)}</div>` : ''}
+        </div>
+      </div>`;
+
+    const clientBlock = `
+      <div style="margin-bottom:14px;">
+        <div style="font-size:13px;font-weight:700;">${escHTML(c.trading_name||c.name||'—')}</div>
+        ${c.address_1 ? `<div style="font-size:11px;color:#444;">${escHTML(c.address_1)}</div>` : ''}
+        ${c.city || c.country ? `<div style="font-size:11px;color:#444;">${escHTML([c.city,c.country].filter(Boolean).join(', '))}</div>` : ''}
+        ${c.email ? `<div style="font-size:11px;color:#444;">${escHTML(c.email)}</div>` : ''}
+      </div>
+      <div style="font-size:14px;font-weight:700;text-align:center;margin-bottom:14px;text-transform:uppercase;letter-spacing:1px;">Account Statement as of ${today}</div>`;
+
+    const invoiceRows = rows.length ? rows.map(i => `<tr>
+      <td style="border:1px solid #ccc;padding:4px 8px;font-family:monospace;font-size:11px;">${escHTML(i.invoice_no)}</td>
+      <td style="border:1px solid #ccc;padding:4px 8px;font-size:11px;">${i.invoice_date||'—'}</td>
+      <td style="border:1px solid #ccc;padding:4px 8px;font-size:11px;">${i.due_date||'—'}</td>
+      <td style="border:1px solid #ccc;padding:4px 8px;font-size:11px;">${i.currency}</td>
+      <td style="border:1px solid #ccc;padding:4px 8px;text-align:right;font-size:11px;">${fmtAmt(i.total, i.currency)}</td>
+      <td style="border:1px solid #ccc;padding:4px 8px;text-align:right;font-size:11px;">${fmtAmt((parseFloat(i.total||0)-parseFloat(i.balance_due||0)), i.currency)}</td>
+      <td style="border:1px solid #ccc;padding:4px 8px;text-align:right;font-size:11px;${parseFloat(i.balance_due||0)>0?'font-weight:700;':''}color:${parseFloat(i.balance_due||0)>0?'#c0392b':'#27ae60'};">${fmtAmt(i.balance_due, i.currency)}</td>
+      <td style="border:1px solid #ccc;padding:4px 8px;"><span style="background:${i.status==='paid'?'#27ae60':i.status==='overdue'?'#c0392b':'#e67e22'};color:#fff;border-radius:3px;padding:1px 5px;font-size:10px;">${escHTML(i.status)}</span></td>
+    </tr>`).join('') : `<tr><td colspan="8" style="text-align:center;padding:12px;font-size:11px;color:#888;">No invoices on record.</td></tr>`;
+
+    const totalsBlock = Object.entries(totalsByCurrency).length
+      ? Object.entries(totalsByCurrency).map(([cur, bal]) =>
+          `<div style="margin-top:4px;"><strong>Total Balance Due (${cur}):</strong> ${fmtAmt(bal, cur)}</div>`
+        ).join('')
+      : `<div style="margin-top:4px;"><strong>Total Balance Due:</strong> ${fmtAmt(0, co.currency||'TTD')}</div>`;
+
+    return `<div style="font-family:Arial,sans-serif;font-size:12px;color:#222;padding:20px;max-width:794px;background:#fff;">
+      ${coHeader}
+      ${clientBlock}
+      <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
+        <thead><tr style="background:#f0f0f0;">
+          <th style="border:1px solid #ccc;padding:4px 8px;text-align:left;font-size:11px;">Invoice No.</th>
+          <th style="border:1px solid #ccc;padding:4px 8px;text-align:left;font-size:11px;">Date</th>
+          <th style="border:1px solid #ccc;padding:4px 8px;text-align:left;font-size:11px;">Due Date</th>
+          <th style="border:1px solid #ccc;padding:4px 8px;font-size:11px;">Currency</th>
+          <th style="border:1px solid #ccc;padding:4px 8px;text-align:right;font-size:11px;">Total</th>
+          <th style="border:1px solid #ccc;padding:4px 8px;text-align:right;font-size:11px;">Paid</th>
+          <th style="border:1px solid #ccc;padding:4px 8px;text-align:right;font-size:11px;">Balance</th>
+          <th style="border:1px solid #ccc;padding:4px 8px;font-size:11px;">Status</th>
+        </tr></thead>
+        <tbody>${invoiceRows}</tbody>
+      </table>
+      <div style="text-align:right;padding:8px 0;border-top:2px solid #222;font-size:13px;">
+        ${totalsBlock}
+      </div>
+      <div style="margin-top:16px;font-size:10px;color:#888;text-align:center;">
+        This is a computer-generated statement. Please contact us if you have any discrepancies.
+      </div>
+    </div>`;
+  }
+
+  function _emailARStatement() {
+    const sel = document.getElementById('ar-contact-filter');
+    const contactId = sel ? sel.value : '';
+    if (!contactId) { showToast('Select a client to email a statement.', 'error'); return; }
+    openEmailDocument('ar-statement', contactId);
+  }
 
   async function _buildEmailPDF(type, id) {
     const staging = document.getElementById('email-pdf-staging');
