@@ -3003,6 +3003,16 @@ body.light .global-search-results, body.light .split-btn-menu {
             <div style="margin-top:6px;font-size:10px;color:var(--text-3);" id="inv-counter-status"></div>
           </div>
         </div>
+        <!-- Notifications -->
+        <div class="section-card">
+          <div class="section-card-header">
+            <div class="section-card-title">Email Notifications</div>
+          </div>
+          <div class="section-card-body">
+            <p style="font-size:12px;color:var(--text-3);margin:0 0 12px;">Control which events trigger an email notification to you. Admins see additional company-wide alerts.</p>
+            <div id="settings-notif-wrap"><div class="page-loading"><div class="loading-spinner"></div> Loading...</div></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -9875,8 +9885,60 @@ async function loadSettings() {
 
     await loadInvoiceCounterSettings();
     await loadSettingsBankAccounts();
+    await loadSettingsNotifications();
     syncFontSliders();
   } catch(e) { showToast('Settings load error: ' + e.message, 'error'); }
+}
+
+async function loadSettingsNotifications() {
+  const wrap = document.getElementById('settings-notif-wrap');
+  if (!wrap) return;
+  try {
+    const [types, prefs] = await Promise.all([
+      sbGet('notification_types', 'enabled=eq.true&order=event_key'),
+      sbGet('notification_preferences', `user_id=eq.${currentUser.id}`)
+    ]);
+    const admin   = isAdmin();
+    const visible = admin ? types : types.filter(t => t.recipient === 'direct');
+    const prefMap = {};
+    prefs.forEach(p => { prefMap[p.event_key] = p.enabled; });
+    if (!visible.length) {
+      wrap.innerHTML = '<div class="table-empty">No notification types available.</div>';
+      return;
+    }
+    wrap.innerHTML = `<table class="data-table" style="max-width:560px;">
+      <thead><tr><th>Notification</th><th style="width:80px;text-align:center;">Enabled</th></tr></thead>
+      <tbody>${visible.map(t => {
+        const checked    = prefMap[t.event_key] !== false;
+        const adminBadge = t.recipient === 'role:admin'
+          ? ' <span style="font-size:9px;color:var(--gold);font-weight:600;">ADMIN</span>' : '';
+        return `<tr>
+          <td style="font-size:13px;">${escHTML(t.label)}${adminBadge}</td>
+          <td style="text-align:center;">
+            <input type="checkbox" ${checked ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer;accent-color:var(--gold);"
+              onchange="toggleNotificationPref('${escHTML(t.event_key)}', this.checked)">
+          </td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+  } catch(e) {
+    wrap.innerHTML = '<div class="table-empty" style="color:var(--red);">Error loading notification preferences.</div>';
+  }
+}
+
+async function toggleNotificationPref(eventKey, enabled) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/notification_preferences`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${_accessToken}`,
+        'apikey': SUPABASE_KEY,
+        'Prefer': 'resolution=merge-duplicates,return=minimal'
+      },
+      body: JSON.stringify({ user_id: currentUser.id, event_key: eventKey, enabled })
+    });
+  } catch(e) { showToast('Failed to save notification preference.', 'error'); }
 }
 
 async function loadInvoiceCounterSettings() {
