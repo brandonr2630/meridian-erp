@@ -10400,7 +10400,7 @@ async function openInvoiceReceiptHistory(invoiceId) {
               <td><span class="badge badge-${voided ? 'void' : 'paid'}">${voided ? 'voided' : 'posted'}</span></td>
               <td class="right">
                 ${!voided
-                  ? `<div style="display:flex;gap:4px;justify-content:flex-end;"><button class="btn btn-ghost btn-sm btn-icon" onclick="closeModal('modal-invoice-receipts');openReceiptPDF('${r.id}')" style="font-size:15px;padding:4px 7px;" title="Print Receipt" aria-label="Print Receipt">🖨</button>${canVoid() ? `<button class="btn btn-danger btn-sm" onclick="voidARReceipt('${r.id}','${invoiceId}')">Void</button>` : ''}</div>`
+                  ? `<div style="display:flex;gap:4px;justify-content:flex-end;"><button class="btn btn-ghost btn-sm btn-icon" onclick="closeModal('modal-invoice-receipts');openReceiptPDF('${r.id}')" style="font-size:15px;padding:4px 7px;" title="Print Receipt" aria-label="Print Receipt">🖨</button><button class="btn btn-ghost btn-sm btn-icon" onclick="openEmailDocument('receipt','${r.id}')" title="Email Receipt" aria-label="Email Receipt" style="font-size:15px;padding:4px 7px;">✉️</button>${canVoid() ? `<button class="btn btn-danger btn-sm" onclick="voidARReceipt('${r.id}','${invoiceId}')">Void</button>` : ''}</div>`
                   : `<span style="font-size:10px;color:var(--text-3);">Voided</span>`}
               </td>
             </tr>`;
@@ -12103,6 +12103,7 @@ function renderARTable(invs, contactMap) {
           <td><span class="badge badge-${inv.status}">${inv.status}</span></td>
           <td class="right" style="white-space:nowrap;">
             <button class="btn btn-ghost btn-sm btn-icon" onclick="openInvoicePDF('${inv.id}')" title="Preview / Print" aria-label="Preview / Print" style="font-size:16px;padding:4px 8px;">🖨</button>
+            <button class="btn btn-ghost btn-sm btn-icon" onclick="openEmailDocument('invoice','${inv.id}')" title="Email Invoice" aria-label="Email Invoice" style="font-size:15px;padding:4px 8px;">✉️</button>
             ${inv.status === 'draft' ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="openEditInvoice('${inv.id}')" title="Edit" aria-label="Edit invoice">✏️</button>` : ''}
             ${inv.status === 'draft' ? `<button class="btn btn-outline btn-sm" onclick="postInvoice('${inv.id}')">Post</button>` : ''}
             ${inv.status === 'draft' ? `<button class="btn btn-danger btn-sm" onclick="deleteDocument('invoice','${inv.id}','${inv.invoice_no||'this draft invoice'}')">Delete</button>` : ''}
@@ -12279,6 +12280,7 @@ function renderQuotationsTable(quos, contactMap, leadMap) {
           <td><span class="badge badge-${q.status}">${q.status}</span></td>
           <td class="right" style="white-space:nowrap;">
             <button class="btn btn-ghost btn-sm btn-icon" onclick="openQuoPDF('${q.id}')" title="Preview PDF" aria-label="Preview PDF" style="font-size:15px;padding:4px 7px;">🖨</button>
+            <button class="btn btn-ghost btn-sm btn-icon" onclick="openEmailDocument('quotation','${q.id}')" title="Email Quotation" aria-label="Email Quotation" style="font-size:15px;padding:4px 7px;">✉️</button>
             <button class="btn btn-ghost btn-sm" onclick="openQuoStatusModal('${q.id}')">Status</button>
             ${q.status === 'draft' ? `<button class="btn btn-outline btn-sm" onclick="openEditQuotation('${q.id}')">Edit</button>` : ''}
             ${q.status !== 'converted' && q.status !== 'draft' ? `<button class="btn btn-outline btn-sm" onclick="convertQuoToInvoice('${q.id}')">→ Invoice</button>` : ''}
@@ -13246,6 +13248,7 @@ function renderDNTable(dns, contactMap) {
           <td><span class="badge badge-${d.status}">${d.status}</span></td>
           <td class="right" style="white-space:nowrap;">
             ${d.dn_no ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="openDNPDF('${d.id}')" title="Preview" aria-label="Preview delivery note" style="font-size:15px;padding:4px 7px;">🖨</button>` : ''}
+            ${d.dn_no ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="openEmailDocument('delivery-note','${d.id}')" title="Email Delivery Note" aria-label="Email Delivery Note" style="font-size:15px;padding:4px 7px;">✉️</button>` : ''}
             <button class="btn btn-ghost btn-sm" onclick="openDNStatusModal('${d.id}')">Status</button>
             ${d.status === 'delivered' ? `<button class="btn btn-outline btn-sm" onclick="convertDNToInvoice('${d.id}')">→ Invoice</button>` : ''}
             ${d.status === 'draft' ? `<button class="btn btn-danger btn-sm" onclick="deleteDocument('delivery_note','${d.id}','${d.dn_no||'this draft delivery note'}')">Delete</button>` : ''}
@@ -13521,6 +13524,7 @@ function renderCNTable(cns, contactMap) {
           <td><span class="badge badge-${cn.status}">${cn.status}</span></td>
           <td class="right" style="white-space:nowrap;">
             ${cn.cn_no ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="openCNPDF('${cn.id}')" title="Preview" aria-label="Preview credit note" style="font-size:15px;padding:4px 7px;">🖨</button>` : ''}
+            ${cn.cn_no ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="openEmailDocument('credit-note','${cn.id}')" title="Email Credit Note" aria-label="Email Credit Note" style="font-size:15px;padding:4px 7px;">✉️</button>` : ''}
             ${cn.status === 'draft' ? `<button class="btn btn-primary btn-sm" onclick="postCreditNote('${cn.id}')">Post</button>` : ''}
             ${cn.status === 'draft' ? `<button class="btn btn-danger btn-sm" onclick="deleteDocument('credit_note','${cn.id}','${cn.cn_no||'this draft credit note'}')">Delete</button>` : ''}
             ${cn.status === 'posted' ? `<button class="btn btn-ghost btn-sm" onclick="voidCreditNote('${cn.id}')">Void</button>` : ''}
