@@ -8526,11 +8526,16 @@ function jcAppendArchivedRow(d) {
   const div = document.createElement('div');
   div.id = rid;
   div.style.cssText = 'display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px;color:var(--text-3);';
-  div.innerHTML = `
-    <span style="width:110px;flex-shrink:0">${d.drawing_no  || '—'}</span>
-    <span style="flex:1">${d.drawing_title || '—'}</span>
-    <span style="width:70px;flex-shrink:0">${d.revision_no  || '—'}</span>
-    <span style="width:100px;flex-shrink:0">${d.date || '—'}</span>`;
+  const mkSpan = (text, style) => {
+    const s = document.createElement('span');
+    s.style.cssText = style;
+    s.textContent = text || '—';
+    return s;
+  };
+  div.appendChild(mkSpan(d.drawing_no,    'width:110px;flex-shrink:0'));
+  div.appendChild(mkSpan(d.drawing_title, 'flex:1'));
+  div.appendChild(mkSpan(d.revision_no,   'width:70px;flex-shrink:0'));
+  div.appendChild(mkSpan(d.date,          'width:100px;flex-shrink:0'));
 
   const restoreBtn = document.createElement('button');
   restoreBtn.className = 'btn btn-ghost btn-sm';
