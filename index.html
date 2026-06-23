@@ -3462,7 +3462,6 @@ body.light .global-search-results, body.light .split-btn-menu {
             <tr>
               <th>Name</th>
               <th>Role</th>
-              <th>Modules</th>
               <th>Company</th>
               <th>Last Login</th>
               <th>Status</th>
@@ -3470,107 +3469,55 @@ body.light .global-search-results, body.light .split-btn-menu {
             </tr>
           </thead>
           <tbody id="um-tbody">
-            <tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>
+            <tr><td colspan="6" style="text-align:center;color:var(--text-3);padding:32px;">Loading…</td></tr>
           </tbody>
         </table>
       </div>
     </div>
   </div>
 
-  <!-- Create User Modal -->
-  <div class="modal" id="um-modal" style="display:none;">
-    <div class="modal-content" style="max-width:520px;">
-      <div class="modal-header">
-        <div class="modal-title">Add User</div>
-        <button class="btn btn-ghost" onclick="closeUserModal()">✕</button>
+</div>
+
+<!-- ── CREATE USER MODAL ── -->
+<div class="modal-overlay" id="modal-create-user" onclick="if(event.target===this)closeModal('modal-create-user')">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header">
+      <div class="modal-title">Add User</div>
+      <button class="modal-close" onclick="closeModal('modal-create-user')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field-group">
+        <label class="field-label">Full Name *</label>
+        <input type="text" id="um-name" class="field-input" placeholder="Jane Smith">
       </div>
-      <div class="modal-body">
-        <div class="field-group">
-          <label class="field-label">Full Name *</label>
-          <input type="text" id="um-name" class="field-input" placeholder="Jane Smith">
-        </div>
-        <div class="field-group">
-          <label class="field-label">Email *</label>
-          <input type="email" id="um-email" class="field-input" placeholder="jane@example.com">
-        </div>
-        <div class="field-group">
-          <label class="field-label">Temporary Password *</label>
-          <input type="password" id="um-password" class="field-input" placeholder="Min. 8 characters">
-          <div style="font-size:11px;color:var(--text-3);margin-top:4px;">User will be prompted to change this on first login.</div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-          <div class="field-group">
-            <label class="field-label">Role *</label>
-            <select id="um-role" class="field-input" onchange="umRoleChanged()">
-              <option value="user">User</option>
-              <option value="sales">Sales</option>
-              <option value="admin">Admin</option>
-              <option value="super_admin">Super Admin</option>
-            </select>
-          </div>
-          <div class="field-group">
-            <label class="field-label">Company *</label>
-            <select id="um-company" class="field-input"></select>
-          </div>
-        </div>
-        <div id="um-modules-section" class="field-group">
-          <label class="field-label">Module Access</label>
-          <div style="font-size:11px;color:var(--text-3);margin-bottom:10px;">Applies to non-admin roles. Admins have full access.</div>
-          <div style="display:flex;flex-direction:column;gap:10px;">
-            <!-- Finance -->
-            <div>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;">
-                <input type="checkbox" id="um-mod-finance" checked onchange="umModuleToggle('finance')"> Finance
-              </label>
-              <div id="um-mod-finance-children" style="margin-left:20px;margin-top:6px;display:flex;flex-direction:column;gap:5px;">
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
-                  <input type="checkbox" id="um-mod-finance-ar" checked> AR &amp; Credit Notes
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
-                  <input type="checkbox" id="um-mod-finance-ap" checked> AP &amp; Vendors
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
-                  <input type="checkbox" id="um-mod-finance-bank" checked> Bank &amp; Cash
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
-                  <input type="checkbox" id="um-mod-finance-ledger" checked> Ledger (Journal Entries, CoA)
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
-                  <input type="checkbox" id="um-mod-finance-reports" checked> Reports (P&amp;L, Balance Sheet, etc.)
-                </label>
-              </div>
-            </div>
-            <!-- Sales -->
-            <div>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;">
-                <input type="checkbox" id="um-mod-sales" checked onchange="umModuleToggle('sales')"> Sales
-              </label>
-              <div id="um-mod-sales-children" style="margin-left:20px;margin-top:6px;display:flex;flex-direction:column;gap:5px;">
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
-                  <input type="checkbox" id="um-mod-sales-crm" checked> CRM (Leads, Pipeline, Activities, Tasks)
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-2);">
-                  <input type="checkbox" id="um-mod-sales-orders" checked> Orders (Quotations, Clients)
-                </label>
-              </div>
-            </div>
-            <!-- Operations -->
-            <div>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;">
-                <input type="checkbox" id="um-mod-operations" checked> Operations
-              </label>
-            </div>
-          </div>
-        </div>
-        <div id="um-error" style="color:var(--red);font-size:12px;min-height:16px;"></div>
+      <div class="field-group">
+        <label class="field-label">Email *</label>
+        <input type="email" id="um-email" class="field-input" placeholder="jane@example.com">
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-outline" onclick="closeUserModal()">Cancel</button>
-        <button class="btn btn-primary" id="um-save-btn" onclick="saveNewUser()">Create User</button>
+      <div class="field-group">
+        <label class="field-label">Temporary Password *</label>
+        <input type="password" id="um-password" class="field-input" placeholder="Min. 8 characters">
+        <div style="font-size:11px;color:var(--text-3);margin-top:4px;">User will be prompted to change this on first login.</div>
       </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="field-group" style="margin-bottom:0;">
+          <label class="field-label">Role *</label>
+          <select id="um-role" class="field-input">
+            <!-- populated by openCreateUserModal() from erp_roles -->
+          </select>
+        </div>
+        <div class="field-group" style="margin-bottom:0;">
+          <label class="field-label">Company *</label>
+          <select id="um-company" class="field-input"></select>
+        </div>
+      </div>
+      <div id="um-error" style="color:var(--red);font-size:12px;min-height:16px;margin-top:12px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-create-user')">Cancel</button>
+      <button class="btn btn-primary" id="um-save-btn" onclick="saveNewUser()">Create User</button>
     </div>
   </div>
-
 </div>
 
 <!-- ── EDIT PERMISSIONS MODAL ── -->
@@ -6479,23 +6426,28 @@ let _umAllUsers = [];
 async function loadUserManagement() {
   if (!isAdmin()) { showToast('Admin access required.', 'error'); return; }
   const tbody = document.getElementById('um-tbody');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;"><div class="loading-spinner" style="margin:0 auto;"></div></td></tr>';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-3);padding:32px;"><div class="loading-spinner" style="margin:0 auto;"></div></td></tr>';
 
   try {
-    const query = isSuperAdmin()
+    const userQuery = isSuperAdmin()
       ? 'order=full_name'
       : `company_id=eq.${currentCompany.id}&order=full_name`;
-    _umAllUsers = await sbGet('erp_users', query);
+    const [users, assignments] = await Promise.all([
+      sbGet('erp_users', userQuery),
+      sbGet('erp_user_company_roles',
+        `company_id=eq.${currentCompany.id}&select=user_id,role_id,erp_roles(name)`),
+    ]);
+    // Merge RBAC role name onto each user record
+    const roleMap = {};
+    assignments.forEach(a => { roleMap[a.user_id] = { role_id: a.role_id, role_name: a.erp_roles?.name || '—' }; });
+    _umAllUsers = users.map(u => ({ ...u, _rbac: roleMap[u.id] || {} }));
 
-    // Populate company dropdown
     const coSel = document.getElementById('um-company');
     if (coSel) {
       coSel.innerHTML = companies.map(c => `<option value="${escHTML(c.id)}">${escHTML(c.trading_name || c.name)}</option>`).join('');
     }
-
     const sub = document.getElementById('um-subtitle');
     if (sub) sub.textContent = `${_umAllUsers.length} user${_umAllUsers.length !== 1 ? 's' : ''} · ${currentCompany.trading_name || currentCompany.name}`;
-
     umRenderTable(_umAllUsers);
   } catch(e) {
     showToast('Failed to load users: ' + e.message, 'error');
@@ -6506,7 +6458,7 @@ function umFilterUsers(q) {
   const f = q.toLowerCase();
   const filtered = _umAllUsers.filter(u =>
     (u.full_name || '').toLowerCase().includes(f) ||
-    (u.role || '').toLowerCase().includes(f)
+    (u._rbac?.role_name || '').toLowerCase().includes(f)
   );
   umRenderTable(filtered);
 }
@@ -6515,35 +6467,29 @@ function umRenderTable(users) {
   const tbody = document.getElementById('um-tbody');
   if (!tbody) return;
   if (!users.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px;">No users found.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-3);padding:32px;">No users found.</td></tr>';
     return;
   }
-
-  const roleColors = { super_admin: 'var(--gold)', admin: 'var(--blue)', sales: 'var(--green)', user: 'var(--text-2)' };
-  const roleLabels = { super_admin: 'Super Admin', admin: 'Admin', sales: 'Sales', user: 'User' };
-
   tbody.innerHTML = users.map(u => {
     const co = companies.find(c => c.id === u.company_id);
     const coName = co ? (co.trading_name || co.name) : '—';
     const lastLogin = u.last_login ? new Date(u.last_login).toLocaleDateString() : 'Never';
-    const roleBadge = `<span style="font-size:11px;font-weight:600;color:${roleColors[u.role]||'var(--text-2)'};background:${roleColors[u.role]||'var(--text-2)'}18;border:1px solid ${roleColors[u.role]||'var(--text-2)'}33;border-radius:4px;padding:2px 7px;">${roleLabels[u.role]||u.role}</span>`;
-    const isAdminRole = u.role === 'admin' || u.role === 'super_admin';
-    const modules = isAdminRole
-      ? '<span style="color:var(--text-3);font-size:11px;">All</span>'
-      : umFormatModules(u);
+    const roleName = u._rbac?.role_name || '—';
+    const roleBadge = roleName !== '—'
+      ? `<span style="font-size:11px;font-weight:600;color:var(--gold);background:var(--gold)18;border:1px solid var(--gold)33;border-radius:4px;padding:2px 7px;">${escHTML(roleName)}</span>`
+      : `<span style="font-size:11px;color:var(--text-3);">No role</span>`;
     const statusDot = u.is_active
       ? `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--green);">● Active</span>`
       : `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-3);">● Inactive</span>`;
     const isSelf = currentUser && u.auth_user_id === currentUser.auth_user_id;
     const actions = isSelf ? `<span style="font-size:11px;color:var(--text-3);">Current</span>` : `
-      <button class="btn btn-ghost" style="padding:3px 8px;font-size:11px;" onclick="openEditPermissionsModal('${u.auth_user_id}')">Edit</button>
+      <button class="btn btn-ghost" style="padding:3px 8px;font-size:11px;" onclick="openEditPermissionsModal('${u.auth_user_id}')">Edit Role</button>
       <button class="btn btn-ghost" style="padding:3px 8px;font-size:11px;" onclick="toggleUserActive('${u.auth_user_id}',${u.is_active})">${u.is_active ? 'Deactivate' : 'Activate'}</button>
       <button class="btn btn-ghost" style="padding:3px 8px;font-size:11px;color:var(--red);" onclick="removeUser('${u.auth_user_id}','${escHTML(u.full_name||'this user')}')">Remove</button>
     `;
     return `<tr>
       <td style="font-weight:500;">${escHTML(u.full_name || '—')}</td>
       <td>${roleBadge}</td>
-      <td style="font-size:12px;color:var(--text-2);">${modules}</td>
       <td style="font-size:12px;color:var(--text-2);">${escHTML(coName)}</td>
       <td style="font-size:12px;color:var(--text-2);">${lastLogin}</td>
       <td>${statusDot}</td>
@@ -6552,68 +6498,32 @@ function umRenderTable(users) {
   }).join('');
 }
 
-function openCreateUserModal() {
+async function openCreateUserModal() {
   if (!isAdmin()) return;
-  document.getElementById('um-name').value = '';
-  document.getElementById('um-email').value = '';
+  document.getElementById('um-name').value    = '';
+  document.getElementById('um-email').value   = '';
   document.getElementById('um-password').value = '';
-  document.getElementById('um-role').value = 'user';
-  ['finance','sales','operations'].forEach(m => {
-    const el = document.getElementById(`um-mod-${m}`);
-    if (el) el.checked = true;
-  });
-  ['finance-ar','finance-ap','finance-bank','finance-ledger','finance-reports','sales-crm','sales-orders'].forEach(m => {
-    const el = document.getElementById(`um-mod-${m}`);
-    if (el) { el.checked = true; el.disabled = false; }
-  });
-  umModuleToggle('finance');
-  umModuleToggle('sales');
   document.getElementById('um-error').textContent = '';
-  umRoleChanged();
-  document.getElementById('um-modal').style.display = 'flex';
-}
 
-function closeUserModal() {
-  document.getElementById('um-modal').style.display = 'none';
-}
-
-function umModuleToggle(mod) {
-  const parentChecked = document.getElementById(`um-mod-${mod}`).checked;
-  const children = document.getElementById(`um-mod-${mod}-children`);
-  if (!children) return;
-  children.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-    cb.disabled = !parentChecked;
-    if (!parentChecked) cb.checked = false;
-    else cb.checked = true;
-  });
-}
-
-
-function umFormatModules(u) {
-  const parts = [];
-  if (u.module_finance) {
-    const subs = [
-      u.module_finance_ar      !== false && 'AR',
-      u.module_finance_ap      !== false && 'AP',
-      u.module_finance_bank    !== false && 'Bank',
-      u.module_finance_ledger  !== false && 'Ledger',
-      u.module_finance_reports !== false && 'Reports',
-    ].filter(Boolean);
-    const allSubs = subs.length === 5;
-    parts.push(allSubs ? 'Finance' : `Finance (${subs.join(', ')})`);
+  // Populate company dropdown
+  const coSel = document.getElementById('um-company');
+  if (coSel) {
+    coSel.innerHTML = companies.map(c =>
+      `<option value="${escHTML(c.id)}"${c.id === currentCompany.id ? ' selected' : ''}>${escHTML(c.trading_name || c.name)}</option>`
+    ).join('');
   }
-  if (u.module_sales) {
-    const subs = [
-      u.module_sales_crm    !== false && 'CRM',
-      u.module_sales_orders !== false && 'Orders',
-    ].filter(Boolean);
-    const allSubs = subs.length === 2;
-    parts.push(allSubs ? 'Sales' : `Sales (${subs.join(', ')})`);
-  }
-  if (u.module_operations) parts.push('Operations');
-  return parts.length
-    ? `<span style="font-size:12px;">${parts.join(' · ')}</span>`
-    : '<span style="color:var(--red);font-size:11px;">None</span>';
+
+  // Populate role dropdown from erp_roles
+  const roleSel = document.getElementById('um-role');
+  roleSel.innerHTML = '<option value="">Loading…</option>';
+  const roles = await sbGet('erp_roles',
+    `or=(company_id.is.null,company_id.eq.${currentCompany.id})&order=is_system.desc,name.asc`
+  ).catch(() => []);
+  roleSel.innerHTML = roles.length
+    ? roles.map(r => `<option value="${escHTML(r.id)}">${escHTML(r.name)}</option>`).join('')
+    : '<option value="">No roles found</option>';
+
+  document.getElementById('modal-create-user').classList.add('show');
 }
 
 async function openEditPermissionsModal(authUserId) {
@@ -6699,35 +6609,19 @@ async function saveEditPermissions() {
   }
 }
 
-function umRoleChanged() {
-  const role = document.getElementById('um-role')?.value;
-  const modSec = document.getElementById('um-modules-section');
-  if (modSec) modSec.style.opacity = (role === 'admin' || role === 'super_admin') ? '0.4' : '1';
-}
-
 async function saveNewUser() {
-  const name     = document.getElementById('um-name').value.trim();
-  const email    = document.getElementById('um-email').value.trim().toLowerCase();
-  const password = document.getElementById('um-password').value;
-  const role     = document.getElementById('um-role').value;
+  const name       = document.getElementById('um-name').value.trim();
+  const email      = document.getElementById('um-email').value.trim().toLowerCase();
+  const password   = document.getElementById('um-password').value;
+  const role_id    = document.getElementById('um-role').value;
   const company_id = document.getElementById('um-company').value;
-  const errEl    = document.getElementById('um-error');
-  const saveBtn  = document.getElementById('um-save-btn');
+  const errEl      = document.getElementById('um-error');
+  const saveBtn    = document.getElementById('um-save-btn');
 
   errEl.textContent = '';
   if (!name || !email || !password) { errEl.textContent = 'Name, email and password are required.'; return; }
-  if (password.length < 8) { errEl.textContent = 'Password must be at least 8 characters.'; return; }
-
-  const module_finance    = document.getElementById('um-mod-finance').checked;
-  const module_sales      = document.getElementById('um-mod-sales').checked;
-  const module_operations = document.getElementById('um-mod-operations').checked;
-  const module_finance_ar      = document.getElementById('um-mod-finance-ar').checked;
-  const module_finance_ap      = document.getElementById('um-mod-finance-ap').checked;
-  const module_finance_bank    = document.getElementById('um-mod-finance-bank').checked;
-  const module_finance_ledger  = document.getElementById('um-mod-finance-ledger').checked;
-  const module_finance_reports = document.getElementById('um-mod-finance-reports').checked;
-  const module_sales_crm       = document.getElementById('um-mod-sales-crm').checked;
-  const module_sales_orders    = document.getElementById('um-mod-sales-orders').checked;
+  if (password.length < 8)          { errEl.textContent = 'Password must be at least 8 characters.'; return; }
+  if (!role_id)                      { errEl.textContent = 'Select a role.'; return; }
 
   saveBtn.textContent = 'Creating…'; saveBtn.disabled = true;
 
@@ -6739,18 +6633,12 @@ async function saveNewUser() {
         'Content-Type': 'application/json',
         'apikey': SUPABASE_KEY,
       },
-      body: JSON.stringify({
-        name, email, password, role, company_id,
-        module_finance, module_sales, module_operations,
-        module_finance_ar, module_finance_ap, module_finance_bank,
-        module_finance_ledger, module_finance_reports,
-        module_sales_crm, module_sales_orders,
-      })
+      body: JSON.stringify({ name, email, password, role_id, company_id }),
     });
     const data = await res.json();
     if (!res.ok || data.error) throw new Error(data.error || 'Failed to create user.');
     showToast(`User "${name}" created successfully.`, 'success');
-    closeUserModal();
+    closeModal('modal-create-user');
     await loadUserManagement();
   } catch(e) {
     errEl.textContent = e.message;
