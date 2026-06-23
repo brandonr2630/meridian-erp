@@ -1,6 +1,36 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-22 · Session 36*
+*Last updated: 2026-06-23 · Session 37*
+
+---
+
+## Session 37 — User Management RBAC re-architecture + Edit User
+
+**Date:** 2026-06-23
+**PRs:** [#95](https://github.com/brandonr2630/meridian-erp/pull/95) · [#96](https://github.com/brandonr2630/meridian-erp/pull/96) · [#97](https://github.com/brandonr2630/meridian-erp/pull/97) — all merged
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| `index.html` — `#modal-create-user` | Full RBAC re-arch (PR #95) | Moved outside `#view-user-management` as `modal-overlay`. Removed hardcoded role dropdown (User/Sales/Admin/Super Admin) and all Finance/Sales/Operations module checkboxes. Role dropdown now dynamically populated from `erp_roles` via `openCreateUserModal()`. |
+| `index.html` — Dead functions removed (PR #95) | Deleted | `closeUserModal`, `umRoleChanged`, `umModuleToggle`, `umFormatModules` — all predated Phase 4 RBAC and are gone. |
+| `index.html` — `loadUserManagement()` (PR #95) | Parallel fetch | Fetches `erp_users` + `erp_user_company_roles?select=user_id,role_id,erp_roles(name)` in parallel; merges `_rbac.role_name` onto each user. |
+| `index.html` — `umRenderTable()` (PR #95) | Updated | Shows `_rbac.role_name` badge; Modules column removed (6 cols total). |
+| `index.html` — `saveNewUser()` (PR #95) | Rewritten | Sends `{ name, email, password, role_id, company_id }` only. |
+| `create-erp-user` Edge Function | v5 deployed | v4 bug: `erp_users.email` is NOT NULL but was not inserted → "Failed to create ERP user profile". Fixed by including `email` in insert payload. Also improved error messages to surface the actual Postgres detail. |
+| `index.html` — `#modal-edit-user` (PR #96) | New modal | Root-level `modal-overlay`; fields: Name, Email, New Password (blank = no change), Company. |
+| `index.html` — `openEditUserModal()` (PR #96) | New function | Pre-fills from `_umAllUsers` cache (synchronous; no DB round-trip). |
+| `index.html` — `saveEditUser()` (PR #96) | New function | Patches `erp_users` directly for name/company; calls `update-erp-user` Edge Function only when email or password actually changed. |
+| `update-erp-user` Edge Function | v1 deployed | Validates caller via `user_has_perm('admin:users')` RPC; updates Supabase Auth user via `PUT /auth/v1/admin/users/:id` (service role). |
+| `index.html` — `NO_UPDATED_AT` set (PR #97) | Bug fix | `erp_users` has no `updated_at` column; added to `NO_UPDATED_AT` so `sbPatchWhere` stops injecting it. Was causing "Could not find the 'updated_at' column of 'erp_users' in the schema cache" on Edit Role and Edit User saves. |
+| `index.html` — `umRenderTable()` actions (PR #96) | **Edit** button added | "Edit" button opens `#modal-edit-user`; placed before "Edit Role" in the actions cell. |
+
+### Notes
+
+- `erp_users` has no `updated_at` — never patch it with one. Already excluded via `NO_UPDATED_AT`.
+- `create-erp-user` v5 rolls back (deletes auth user) if the `erp_users` insert fails, preventing orphaned auth accounts.
+- Role assignment failure during user creation is non-fatal — user exists with no role; admin can fix via **Edit Role**.
 
 ---
 
