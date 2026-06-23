@@ -1,6 +1,72 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-23 · Session 37*
+*Last updated: 2026-06-23 · Session 38*
+
+---
+
+## Session 38 — Work Orders table heading fix + Drawing PDF Upload
+
+**Date:** 2026-06-23
+**PRs:** [#99](https://github.com/brandonr2630/meridian-erp/pull/99) · [#100](https://github.com/brandonr2630/meridian-erp/pull/100) — both merged
+
+### What Changed
+
+#### PR #99 — Work Orders dashboard table heading fix
+
+| Item | Change | Detail |
+|------|--------|--------|
+| `index.html` — Work Orders `<thead>` | Missing "Location" `<th>` restored | "Location" (workshop/site) column had no heading, shifting "Priority" and all subsequent headings one column right; last column was headingless. `<th style="width:100px">Location</th>` added in correct position. |
+| `index.html` — Work Orders `<thead>` | All column headings center-justified | `style="text-align:center"` added to each `<th>` in the Work Orders dashboard table. |
+
+#### PR #100 — Drawing Control Register: PDF upload, view, archive, hard delete
+
+New feature: each row in the Drawing Control Register can now have a PDF attached, viewed via signed URL, soft-archived, restored, or permanently deleted (admin-only).
+
+**Supabase changes** (applied via MCP):
+
+| Item | Change |
+|------|--------|
+| `job_drawings` table | New table replacing `jobs.drawings` JSONB for all new operations. Columns: `id`, `job_id` (FK→jobs CASCADE), `company_id`, `drawing_no`, `drawing_title`, `revision_no`, `date`, `source` (default 'Client'), `storage_key`, `archived`, `archived_at`, `archived_by`, `created_at`, `updated_at`, `created_by`. |
+| `is_company_admin(cid UUID)` | New SECURITY DEFINER function. Checks `admin:users` OR `admin:settings` permission for calling user in given company. `search_path = public, pg_temp`. Mirrors client-side `isAdmin()`. |
+| RLS policies | 5 policies on `job_drawings`: SELECT active (members), SELECT archived (admins), INSERT (members), UPDATE (members + WITH CHECK), DELETE archived (admins). All use `IN (SELECT my_company_ids())` — not `= ANY()` which fails on this project. |
+| Indexes | `idx_job_drawings_job_id`, `idx_job_drawings_company_job (company_id, job_id)` |
+| `job-drawings` storage bucket | Private bucket, 20 MB limit, PDF only. 3 storage RLS policies: upload (members), view/sign (members), delete (admins). |
+| JSONB migration | Existing `jobs.drawings` JSONB rows migrated to `job_drawings` rows at migration time. |
+
+**index.html changes:**
+
+| Area | Change |
+|------|--------|
+| CSS | `.btn-upload-pdf`, `.btn-view-pdf`, `.btn-replace-pdf`, `.jc-dr-pdf-cell` — new rules |
+| `jcOpenJob()` | `Promise.all` expanded to include `job_drawings` fetch as 7th element |
+| After `jcPopulateForm()` | Renders active and archived drawing rows from DB |
+| `jcResetForm()` | Clears archived section (hide, clear innerHTML, reset count to 0) |
+| `jcPopulateForm()` | Removed old `parse(row['Drawings Detail']).forEach(d => jcAddDrawingRow(d))` call |
+| `jcCollectFormData()` | Drawings collection uses `tr[data-drawing-id]` selector; collects snake_case fields with DB `id` |
+| `jcSaveJobData()` | PATCHes drawing field edits via `Promise.all` before returning `savedId`; no longer serializes to `jobs.drawings` JSONB |
+| Drawing register `<thead>` | New **PDF** column inserted between Source and ✕; archived section HTML added below "+ Add Drawing" button |
+| `jcAddDrawingRow(d)` | Fully rewritten to take DB row object; renders PDF cell with Upload/View state |
+| `jcSetDrawingRowHasFile(rid, storageKey)` | Helper — swaps Upload button to View + Replace on a row |
+| `jcAddNewDrawingRow()` | Guards on `jcCurrentJobId`, INSERTs to DB, renders returned row |
+| `jcUploadDrawingPdf(drawingId, rid, fileInput)` | Validates PDF + ≤20 MB, uploads to Storage, PATCHes `storage_key` |
+| `jcViewDrawingPdf(storageKey)` | POST to sign endpoint, opens signed URL in new tab |
+| `jcArchiveDrawing(drawingId, rid)` | Confirm, PATCH `archived=true/archived_at/archived_by`, move row to archived section |
+| `jcRenderArchivedDrawings()` / `jcAppendArchivedRow()` | Renders archived section; XSS-safe via `mkSpan()` helper using `textContent` |
+| `jcToggleArchivedDrawings()` | Collapse/expand archived section |
+| `jcRestoreDrawing(drawingId, archivedRid)` | PATCH `archived=false`, move back to active register |
+| `jcHardDeleteDrawing(drawingId, storageKey, archivedRid)` | Typed-`DELETE` confirm, storage DELETE, row DELETE (admin-only) |
+
+**Docs committed to master:**
+- `docs/superpowers/specs/2026-06-23-drawing-pdf-upload-design.md`
+- `docs/superpowers/plans/2026-06-23-drawing-pdf-upload.md`
+
+### Notes
+
+- `job_drawings` has `updated_at` — `sbPatch()` auto-injection works fine.
+- RLS uses `IN (SELECT my_company_ids())` throughout — `= ANY(my_company_ids())` fails on this Supabase project.
+- `jobs.drawings` JSONB column left in place but ignored by JS going forward.
+- Storage objects become orphaned when a job is deleted (CASCADE removes DB rows only — no automatic storage cleanup).
+- XSS: `jcAppendArchivedRow` originally interpolated user data into `innerHTML`; fixed via `mkSpan()` helper using `textContent`.
 
 ---
 
@@ -1134,4 +1200,5 @@ Items are grouped by theme and ordered by suggested priority within each group. 
 - [ ] **Job → Invoice link** — completed job's costing summary pre-fills a Meridian invoice (Session 21)
 - [ ] **Job Cards PDF** — printable job card / work order report for the workshop floor
 - [ ] **Work Orders in Client 360** — add `contact_id` FK to `jobs` table then wire into `loadClient360()`
+- [ ] **Orphaned storage cleanup** — job deletion cascades DB rows but leaves `job-drawings` storage objects; consider a Supabase Edge Function or pg trigger to delete storage objects when a job is deleted
 
