@@ -1,6 +1,62 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-22 · Session 34*
+*Last updated: 2026-06-22 · Session 35*
+
+---
+
+## Session 35 — Email Delivery + Notification System
+
+**Date:** 2026-06-22
+**Branch:** `feat/email-delivery` (open PR pending)
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| `supabase/migrations/20260622_email_delivery.sql` | New migration (applied) | Adds `companies.send_from_email`, `notification_types` (7 seeded rows), `notification_preferences`, `notification_log` tables; `overdue_notified_at` on `crm_tasks`, `jobs`, `invoices`; RLS policies |
+| `supabase/functions/send-document-email/` | New Edge Function (deployed ACTIVE) | Validates caller JWT → resolves company → strips data URI prefix → calls Resend API with PDF attachment. Falls back to `accounts@terranresources.com` if `send_from_email` unset |
+| `supabase/functions/send-notification/` | New Edge Function (deployed ACTIVE) | Handles 7 notification event types; cron auth (source=cron requires SERVICE_ROLE_KEY bearer); preference opt-out check; interpolates `{{double_brace}}` templates; logs all sends to `notification_log` |
+| `index.html` — html2pdf.js | `_loadHtml2Pdf()` + `generatePDFBase64(source)` | Lazy CDN loader; A4/scale:2; accepts DOM element or HTML string; returns data URI. Off-screen staging div `#email-pdf-staging` at line 4583 |
+| `index.html` — Email modal | `#modal-send-email` | To / Subject / Message fields; pre-filled from `_resolveEmailMeta(type, id)`; send button calls `sendEmailDocument()` |
+| `index.html` — Email functions | `openEmailDocument`, `_resolveEmailMeta`, `_buildEmailPDF`, `sendEmailDocument` | Core email flow. `_buildEmailPDF` handles 7 doc types (invoice, quotation, delivery-note, credit-note, receipt, work-order, ar-statement) |
+| `index.html` — ✉️ buttons | AR, Quotations, DN, CN, Receipt tables | 5 email buttons added next to existing 🖨 buttons |
+| `index.html` — Work Order Receipt | `buildWorkOrderReceiptHTML(job, labour, materials, consumables, company)` | Renders labour/materials/consumables tables + sign-off block. ✉️ button in WO dashboard for Completed/Invoiced jobs (stopPropagation) |
+| `index.html` — AR Statement | `buildARStatementHTML(contact, invoices, company)` + contact filter | Contact filter dropdown `#ar-contact-filter` in AR toolbar; `#ar-email-stmt-btn` visible when contact selected; `_emailARStatement()` helper |
+| `index.html` — Settings | `send_from_email` field in Company Settings modal | Load / save / reset wired to `erp-co-send-from` input |
+| `index.html` — Notification triggers | `_sendNotification()` + 3 trigger sites | `task.assigned` in `saveTask()`; `deal.won`/`deal.lost` in `saveOpportunity()` + `quickMarkOpp()` |
+| `index.html` — Notification prefs UI | `loadSettingsNotifications()` + `toggleNotificationPref()` | "Email Notifications" section in Settings; toggle grid; admin sees all 7 types, non-admin sees 5 (direct only); upsert via `resolution=merge-duplicates` |
+| `supabase/migrations/20260622_pg_cron_overdue_notifications.sql` | Manual-apply SQL file | pg_cron jobs for overdue tasks (07:00), jobs (07:05), invoices (07:10) UTC daily. One-shot via `overdue_notified_at`. **Replace `{SERVICE_ROLE_KEY}` before applying.** |
+
+### DB migrations applied (production)
+
+- `20260622_email_delivery` — notification tables, sentinels, `send_from_email`
+
+### Manual steps remaining (Task 1)
+
+1. Verify `terranresources.com` + `q2m.io` in [Resend dashboard](https://resend.com/domains) (DNS TXT records)
+2. Create Resend API key → add as `RESEND_API_KEY` in Supabase → Edge Functions → Secrets
+3. Apply `supabase/migrations/20260622_pg_cron_overdue_notifications.sql` in Supabase SQL Editor after replacing `{SERVICE_ROLE_KEY}`
+4. Set `send_from_email` per company in ERP → ERP Companies → Edit → "Send From Email" field
+
+### Notes
+
+- `job.assigned` trigger skipped — jobs form uses free-text `accepted_by`, no user UUID linkage
+- Work-order + AR-statement email paths in `_buildEmailPDF` were forward references (added in Tasks 7+8 — both now resolved)
+- Edge Functions deployed with `verify_jwt: false` (functions do their own JWT validation internally)
+
+### Outstanding (carried forward)
+
+- **Enable leaked password protection** — Supabase Dashboard → Authentication → Passwords
+- **Job → Invoice link** — completed job pre-fills Meridian invoice (Session 21)
+- **Job Cards PDF** — printable work order report
+- **Work Orders in Client 360** — requires `contact_id` FK on `jobs`
+
+---
+
+## Session 34 — RBAC RLS infinite recursion fix
+
+**Date:** 2026-06-22
+**Branch / PRs:** [PR #86](https://github.com/brandonr2630/meridian-erp/pull/86) · [PR #87](https://github.com/brandonr2630/meridian-erp/pull/87)
 
 ---
 

@@ -2338,6 +2338,10 @@ body.light .global-search-results, body.light .split-btn-menu {
             <input type="date" class="filter-select" id="ar-date-from" onchange="filterAR()" style="width:140px">
             <span style="font-size:12px;color:var(--text-3)">–</span>
             <input type="date" class="filter-select" id="ar-date-to" onchange="filterAR()" style="width:140px">
+            <select class="filter-select" id="ar-contact-filter" onchange="filterAR()" style="min-width:140px;max-width:200px;">
+              <option value="">All Clients</option>
+            </select>
+            <button id="ar-email-stmt-btn" class="btn btn-ghost btn-sm" style="display:none;white-space:nowrap;" onclick="_emailARStatement()">✉️ Statement</button>
           </div>
           <div id="ar-table-wrap"><div class="page-loading"><div class="loading-spinner"></div> Loading...</div></div>
         </div>
@@ -2997,6 +3001,16 @@ body.light .global-search-results, body.light .split-btn-menu {
             </div>
             <div style="margin-top:10px;font-size:11px;color:var(--text-3);">Preview: <span class="mono" id="inv-counter-preview" style="color:var(--gold);">INV-1000</span></div>
             <div style="margin-top:6px;font-size:10px;color:var(--text-3);" id="inv-counter-status"></div>
+          </div>
+        </div>
+        <!-- Notifications -->
+        <div class="section-card">
+          <div class="section-card-header">
+            <div class="section-card-title">Email Notifications</div>
+          </div>
+          <div class="section-card-body">
+            <p style="font-size:12px;color:var(--text-3);margin:0 0 12px;">Control which events trigger an email notification to you. Admins see additional company-wide alerts.</p>
+            <div id="settings-notif-wrap"><div class="page-loading"><div class="loading-spinner"></div> Loading...</div></div>
           </div>
         </div>
       </div>
@@ -4579,6 +4593,9 @@ body.light .global-search-results, body.light .split-btn-menu {
   </div>
 </div>
 
+<!-- Email PDF staging — off-screen render target for html2pdf.js -->
+<div id="email-pdf-staging" style="position:absolute;left:-9999px;top:0;width:794px;background:#fff;font-family:Arial,sans-serif;"></div>
+
 <!-- ── PDF PREVIEW MODAL ── -->
 <div class="modal-overlay" id="modal-pdf-preview" onclick="if(event.target===this)closeModal('modal-pdf-preview')">
   <div class="modal modal-xl" style="max-width:min(900px,95vw);">
@@ -5068,6 +5085,7 @@ body.light .global-search-results, body.light .split-btn-menu {
         <div class="field"><label class="field-label">VAT Registration No.</label><input type="text" id="erp-co-vat" class="mono" placeholder="Shown on invoice if present"></div>
         <div class="field"><label class="field-label">Phone</label><input type="tel" id="erp-co-phone"></div>
         <div class="field"><label class="field-label">Email</label><input type="email" id="erp-co-email"></div>
+        <div class="field"><label class="field-label">Send From Email <span style="font-size:10px;color:var(--text-3);font-weight:400;">(Resend verified address)</span></label><input type="email" id="erp-co-send-from" placeholder="e.g. accounts@terranresources.com"></div>
       </div>
 
       <!-- Address -->
@@ -5614,6 +5632,7 @@ let _taskNotifs      = [];
 let _financialNotifCount = 0;
 let editingAccountId = null;
 let _accessToken     = null;
+let _emailDocMeta = null; // { type, id, to, subject, filename }
 
 // ── GLOBAL UTILITIES ─────────────────────────────────────────────
 const PERMISSION_MATRIX = [
@@ -7395,7 +7414,7 @@ function jcRenderDashTable(jobs) {
       <td style="font-size:11px;">${escHTML(j.location||'—')}</td>
       <td style="font-family:'DM Mono',monospace;font-size:11px;">${j.date_received||'—'}</td>
       <td style="font-family:'DM Mono',monospace;font-size:11px;">${dueCell}</td>
-      <td style="color:var(--text-2);">${desc}</td>
+      <td style="color:var(--text-2);">${desc}${(j.status==='Completed'||j.status==='Invoiced')?`<button class="btn btn-ghost btn-sm btn-icon" onclick="event.stopPropagation();openEmailDocument('work-order','${j.id}')" title="Email Receipt" style="font-size:13px;padding:2px 5px;margin-left:6px;vertical-align:middle;">✉️</button>`:''}</td>
     </tr>`;
   }).join('');
 }
@@ -9680,7 +9699,7 @@ function openAddCompany() {
   document.getElementById('modal-erp-company-title').textContent = 'Add Company';
   document.getElementById('save-erp-company-btn').textContent = 'Save Company';
   ['erp-co-code','erp-co-name','erp-co-trading','erp-co-tin','erp-co-vat',
-   'erp-co-phone','erp-co-email','erp-co-line1','erp-co-line2','erp-co-line3',
+   'erp-co-phone','erp-co-email','erp-co-send-from','erp-co-line1','erp-co-line2','erp-co-line3',
    'erp-co-country','erp-co-postal','erp-co-bank'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('erp-co-currency').value = 'TTD';
   document.getElementById('erp-co-pdf-size').value  = 'letter';
@@ -9708,6 +9727,7 @@ async function openEditErpCompany(id) {
     document.getElementById('erp-co-vat').value      = c.vat_reg || '';
     document.getElementById('erp-co-phone').value    = c.phone || '';
     document.getElementById('erp-co-email').value    = c.email || '';
+    document.getElementById('erp-co-send-from').value = c.send_from_email || '';
     document.getElementById('erp-co-line1').value    = c.address_line1 || '';
     document.getElementById('erp-co-line2').value    = c.address_line2 || '';
     document.getElementById('erp-co-line3').value    = c.address_line3 || '';
@@ -9772,6 +9792,7 @@ async function saveErpCompany() {
       vat_reg:        document.getElementById('erp-co-vat').value || null,
       phone:          document.getElementById('erp-co-phone').value || null,
       email:          document.getElementById('erp-co-email').value || null,
+      send_from_email: document.getElementById('erp-co-send-from').value.trim() || null,
       address_line1:  document.getElementById('erp-co-line1').value || null,
       address_line2:  document.getElementById('erp-co-line2').value || null,
       address_line3:  document.getElementById('erp-co-line3').value || null,
@@ -9864,8 +9885,60 @@ async function loadSettings() {
 
     await loadInvoiceCounterSettings();
     await loadSettingsBankAccounts();
+    await loadSettingsNotifications();
     syncFontSliders();
   } catch(e) { showToast('Settings load error: ' + e.message, 'error'); }
+}
+
+async function loadSettingsNotifications() {
+  const wrap = document.getElementById('settings-notif-wrap');
+  if (!wrap) return;
+  try {
+    const [types, prefs] = await Promise.all([
+      sbGet('notification_types', 'enabled=eq.true&order=event_key'),
+      sbGet('notification_preferences', `user_id=eq.${currentUser.id}`)
+    ]);
+    const admin   = isAdmin();
+    const visible = admin ? types : types.filter(t => t.recipient === 'direct');
+    const prefMap = {};
+    prefs.forEach(p => { prefMap[p.event_key] = p.enabled; });
+    if (!visible.length) {
+      wrap.innerHTML = '<div class="table-empty">No notification types available.</div>';
+      return;
+    }
+    wrap.innerHTML = `<table class="data-table" style="max-width:560px;">
+      <thead><tr><th>Notification</th><th style="width:80px;text-align:center;">Enabled</th></tr></thead>
+      <tbody>${visible.map(t => {
+        const checked    = prefMap[t.event_key] !== false;
+        const adminBadge = t.recipient === 'role:admin'
+          ? ' <span style="font-size:9px;color:var(--gold);font-weight:600;">ADMIN</span>' : '';
+        return `<tr>
+          <td style="font-size:13px;">${escHTML(t.label)}${adminBadge}</td>
+          <td style="text-align:center;">
+            <input type="checkbox" ${checked ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer;accent-color:var(--gold);"
+              onchange="toggleNotificationPref('${escHTML(t.event_key)}', this.checked)">
+          </td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+  } catch(e) {
+    wrap.innerHTML = '<div class="table-empty" style="color:var(--red);">Error loading notification preferences.</div>';
+  }
+}
+
+async function toggleNotificationPref(eventKey, enabled) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/notification_preferences`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${_accessToken}`,
+        'apikey': SUPABASE_KEY,
+        'Prefer': 'resolution=merge-duplicates,return=minimal'
+      },
+      body: JSON.stringify({ user_id: currentUser.id, event_key: eventKey, enabled })
+    });
+  } catch(e) { showToast('Failed to save notification preference.', 'error'); }
 }
 
 async function loadInvoiceCounterSettings() {
@@ -10396,7 +10469,7 @@ async function openInvoiceReceiptHistory(invoiceId) {
               <td><span class="badge badge-${voided ? 'void' : 'paid'}">${voided ? 'voided' : 'posted'}</span></td>
               <td class="right">
                 ${!voided
-                  ? `<div style="display:flex;gap:4px;justify-content:flex-end;"><button class="btn btn-ghost btn-sm btn-icon" onclick="closeModal('modal-invoice-receipts');openReceiptPDF('${r.id}')" style="font-size:15px;padding:4px 7px;" title="Print Receipt" aria-label="Print Receipt">🖨</button>${canVoid() ? `<button class="btn btn-danger btn-sm" onclick="voidARReceipt('${r.id}','${invoiceId}')">Void</button>` : ''}</div>`
+                  ? `<div style="display:flex;gap:4px;justify-content:flex-end;"><button class="btn btn-ghost btn-sm btn-icon" onclick="closeModal('modal-invoice-receipts');openReceiptPDF('${r.id}')" style="font-size:15px;padding:4px 7px;" title="Print Receipt" aria-label="Print Receipt">🖨</button><button class="btn btn-ghost btn-sm btn-icon" onclick="openEmailDocument('receipt','${r.id}')" title="Email Receipt" aria-label="Email Receipt" style="font-size:15px;padding:4px 7px;">✉️</button>${canVoid() ? `<button class="btn btn-danger btn-sm" onclick="voidARReceipt('${r.id}','${invoiceId}')">Void</button>` : ''}</div>`
                   : `<span style="font-size:10px;color:var(--text-3);">Voided</span>`}
               </td>
             </tr>`;
@@ -12043,6 +12116,15 @@ async function loadAR() {
 
     arPage = 0;
     renderARTable(invoices, contactMap);
+    // Populate AR contact filter
+    const sel = document.getElementById('ar-contact-filter');
+    if (sel) {
+      const used = new Set(invoices.map(i => i.contact_id));
+      const opts = contacts.filter(c => used.has(c.id))
+        .sort((a,b) => (a.trading_name||a.name).localeCompare(b.trading_name||b.name));
+      sel.innerHTML = '<option value="">All Clients</option>' +
+        opts.map(c => `<option value="${c.id}">${escHTML(c.trading_name||c.name)}</option>`).join('');
+    }
   } catch(e) { showToast('AR load error: ' + e.message, 'error'); }
   finally { arWrap.style.opacity = ''; arWrap.style.pointerEvents = ''; }
 }
@@ -12099,6 +12181,7 @@ function renderARTable(invs, contactMap) {
           <td><span class="badge badge-${inv.status}">${inv.status}</span></td>
           <td class="right" style="white-space:nowrap;">
             <button class="btn btn-ghost btn-sm btn-icon" onclick="openInvoicePDF('${inv.id}')" title="Preview / Print" aria-label="Preview / Print" style="font-size:16px;padding:4px 8px;">🖨</button>
+            <button class="btn btn-ghost btn-sm btn-icon" onclick="openEmailDocument('invoice','${inv.id}')" title="Email Invoice" aria-label="Email Invoice" style="font-size:15px;padding:4px 8px;">✉️</button>
             ${inv.status === 'draft' ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="openEditInvoice('${inv.id}')" title="Edit" aria-label="Edit invoice">✏️</button>` : ''}
             ${inv.status === 'draft' ? `<button class="btn btn-outline btn-sm" onclick="postInvoice('${inv.id}')">Post</button>` : ''}
             ${inv.status === 'draft' ? `<button class="btn btn-danger btn-sm" onclick="deleteDocument('invoice','${inv.id}','${inv.invoice_no||'this draft invoice'}')">Delete</button>` : ''}
@@ -12125,6 +12208,7 @@ function filterAR() {
   const status  = document.getElementById('ar-status-filter').value;
   const dateFrom = document.getElementById('ar-date-from').value;
   const dateTo   = document.getElementById('ar-date-to').value;
+  const contactId = (document.getElementById('ar-contact-filter') || {}).value || '';
   const contactMap = {};
   contacts.forEach(c => { contactMap[c.id] = (c.trading_name || c.name).toLowerCase(); });
   const filtered = invoices.filter(inv => {
@@ -12135,9 +12219,12 @@ function filterAR() {
     const d = (inv.invoice_date||'').slice(0,10);
     if (dateFrom && d < dateFrom) return false;
     if (dateTo   && d > dateTo)   return false;
+    if (contactId && inv.contact_id !== contactId) return false;
     return true;
   });
   renderARTable(filtered, Object.fromEntries(contacts.map(c => [c.id, c.trading_name || c.name])));
+  const emailBtn = document.getElementById('ar-email-stmt-btn');
+  if (emailBtn) emailBtn.style.display = contactId ? 'inline-flex' : 'none';
 }
 
 async function postInvoice(id) {
@@ -12275,6 +12362,7 @@ function renderQuotationsTable(quos, contactMap, leadMap) {
           <td><span class="badge badge-${q.status}">${q.status}</span></td>
           <td class="right" style="white-space:nowrap;">
             <button class="btn btn-ghost btn-sm btn-icon" onclick="openQuoPDF('${q.id}')" title="Preview PDF" aria-label="Preview PDF" style="font-size:15px;padding:4px 7px;">🖨</button>
+            <button class="btn btn-ghost btn-sm btn-icon" onclick="openEmailDocument('quotation','${q.id}')" title="Email Quotation" aria-label="Email Quotation" style="font-size:15px;padding:4px 7px;">✉️</button>
             <button class="btn btn-ghost btn-sm" onclick="openQuoStatusModal('${q.id}')">Status</button>
             ${q.status === 'draft' ? `<button class="btn btn-outline btn-sm" onclick="openEditQuotation('${q.id}')">Edit</button>` : ''}
             ${q.status !== 'converted' && q.status !== 'draft' ? `<button class="btn btn-outline btn-sm" onclick="convertQuoToInvoice('${q.id}')">→ Invoice</button>` : ''}
@@ -13242,6 +13330,7 @@ function renderDNTable(dns, contactMap) {
           <td><span class="badge badge-${d.status}">${d.status}</span></td>
           <td class="right" style="white-space:nowrap;">
             ${d.dn_no ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="openDNPDF('${d.id}')" title="Preview" aria-label="Preview delivery note" style="font-size:15px;padding:4px 7px;">🖨</button>` : ''}
+            ${d.dn_no ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="openEmailDocument('delivery-note','${d.id}')" title="Email Delivery Note" aria-label="Email Delivery Note" style="font-size:15px;padding:4px 7px;">✉️</button>` : ''}
             <button class="btn btn-ghost btn-sm" onclick="openDNStatusModal('${d.id}')">Status</button>
             ${d.status === 'delivered' ? `<button class="btn btn-outline btn-sm" onclick="convertDNToInvoice('${d.id}')">→ Invoice</button>` : ''}
             ${d.status === 'draft' ? `<button class="btn btn-danger btn-sm" onclick="deleteDocument('delivery_note','${d.id}','${d.dn_no||'this draft delivery note'}')">Delete</button>` : ''}
@@ -13517,6 +13606,7 @@ function renderCNTable(cns, contactMap) {
           <td><span class="badge badge-${cn.status}">${cn.status}</span></td>
           <td class="right" style="white-space:nowrap;">
             ${cn.cn_no ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="openCNPDF('${cn.id}')" title="Preview" aria-label="Preview credit note" style="font-size:15px;padding:4px 7px;">🖨</button>` : ''}
+            ${cn.cn_no ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="openEmailDocument('credit-note','${cn.id}')" title="Email Credit Note" aria-label="Email Credit Note" style="font-size:15px;padding:4px 7px;">✉️</button>` : ''}
             ${cn.status === 'draft' ? `<button class="btn btn-primary btn-sm" onclick="postCreditNote('${cn.id}')">Post</button>` : ''}
             ${cn.status === 'draft' ? `<button class="btn btn-danger btn-sm" onclick="deleteDocument('credit_note','${cn.id}','${cn.cn_no||'this draft credit note'}')">Delete</button>` : ''}
             ${cn.status === 'posted' ? `<button class="btn btn-ghost btn-sm" onclick="voidCreditNote('${cn.id}')">Void</button>` : ''}
@@ -14239,6 +14329,502 @@ function renderMultiPagePDF(containerId, pages, headerHTML, showPricing, currenc
   };
 }
 
+// ── Email PDF helpers ──────────────────────────────────────────────────────
+async function _loadHtml2Pdf() {
+  if (window.html2pdf) return;
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+    s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+async function generatePDFBase64(source) {
+  // source: DOM element or HTML string
+  await _loadHtml2Pdf();
+  return html2pdf()
+    .set({
+      margin: 0,
+      html2canvas: { scale: 2, useCORS: true, logging: false },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    })
+    .from(source)
+    .toPdf()
+    .output('datauristring');
+}
+
+  function openEmailDocument(type, id) {
+    const meta = _resolveEmailMeta(type, id);
+    _emailDocMeta = { type, id, ...meta };
+    document.getElementById('email-doc-to').value      = meta.to;
+    document.getElementById('email-doc-subject').value = meta.subject;
+    document.getElementById('email-doc-message').value = '';
+    const btn = document.getElementById('btn-send-email');
+    btn.disabled = false; btn.textContent = 'Send';
+    openModal('modal-send-email');
+  }
+
+  function _resolveEmailMeta(type, id) {
+    const co = currentCompany;
+    if (type === 'invoice') {
+      const inv = invoices.find(i => i.id === id) || {};
+      const c   = contacts.find(x => x.id === inv.contact_id) || {};
+      return { to: c.email || '', subject: `Invoice ${inv.invoice_no || ''} from ${escHTML(co.name)}`, filename: `${inv.invoice_no || 'invoice'}.pdf` };
+    }
+    if (type === 'quotation') {
+      const q = quotations.find(x => x.id === id) || {};
+      const c = contacts.find(x => x.id === q.contact_id) || {};
+      return { to: c.email || '', subject: `Quotation ${q.quote_no || ''} from ${escHTML(co.name)}`, filename: `${q.quote_no || 'quotation'}.pdf` };
+    }
+    if (type === 'delivery-note') {
+      const dn = deliveryNotes.find(x => x.id === id) || {};
+      const c  = contacts.find(x => x.id === dn.contact_id) || {};
+      return { to: c.email || '', subject: `Delivery Note ${dn.dn_no || ''} from ${escHTML(co.name)}`, filename: `${dn.dn_no || 'delivery-note'}.pdf` };
+    }
+    if (type === 'credit-note') {
+      const cn = creditNotes.find(x => x.id === id) || {};
+      const c  = contacts.find(x => x.id === cn.contact_id) || {};
+      return { to: c.email || '', subject: `Credit Note ${cn.cn_no || ''} from ${escHTML(co.name)}`, filename: `${cn.cn_no || 'credit-note'}.pdf` };
+    }
+    if (type === 'receipt') {
+      const rec = {};
+      const inv = {};
+      const c   = {};
+      return { to: c.email || '', subject: `Payment Receipt from ${escHTML(co.name)}`, filename: `receipt.pdf` };
+    }
+    if (type === 'work-order') {
+      return { to: '', subject: `Work Order Receipt from ${escHTML(co.name)}`, filename: `work-order.pdf` };
+    }
+    if (type === 'ar-statement') {
+      const c = contacts.find(x => x.id === id) || {};
+      return { to: c.email || '', subject: `Account Statement from ${escHTML(co.name)}`, filename: `statement-${(c.trading_name || c.name || 'client').replace(/\s+/g,'-').toLowerCase()}.pdf` };
+    }
+    return { to: '', subject: '', filename: 'document.pdf' };
+  }
+
+  function buildWorkOrderReceiptHTML(job, labour, materials, consumables, company) {
+  const co = company || {};
+  const fmt = (n) => 'TT$' + (parseFloat(n)||0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+
+  // Labour subtotal
+  const labourTotal = labour.reduce((s,r) => s + (parseFloat(r.amount_ttd)||0), 0);
+  // Materials subtotal
+  const matsTotal   = materials.reduce((s,r) => s + (parseFloat(r.total_cost_ttd)||0), 0);
+  // Consumables subtotal
+  const consTotal   = consumables.reduce((s,r) => s + (parseFloat(r.total_cost_ttd)||0), 0);
+  const grandTotal  = labourTotal + matsTotal + consTotal;
+
+  // Company header
+  const coHeader = `
+    <div style="display:flex;align-items:center;gap:16px;border-bottom:2px solid #222;padding-bottom:10px;margin-bottom:14px;">
+      ${co.logo_url ? `<img src="${co.logo_url}" style="height:48px;object-fit:contain;" alt="">` : ''}
+      <div>
+        <div style="font-size:18px;font-weight:700;">${escHTML(co.name||'')}</div>
+        <div style="font-size:11px;color:#555;">${[co.address_1,co.address_2,co.city,co.country].filter(Boolean).map(escHTML).join(', ')}</div>
+        ${co.phone ? `<div style="font-size:11px;color:#555;">Tel: ${escHTML(co.phone)}</div>` : ''}
+        ${co.vat_no ? `<div style="font-size:11px;color:#555;">VAT Reg: ${escHTML(co.vat_no)}</div>` : ''}
+      </div>
+    </div>`;
+
+  // Labour section
+  const labourSection = labour.length ? `
+    <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;color:#444;margin:14px 0 4px;">Labour</h4>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;">
+      <thead><tr style="background:#f0f0f0;">
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;">Date</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;">Technician</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;">Classification</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Hours</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Rate</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Amount</th>
+      </tr></thead>
+      <tbody>
+        ${labour.map(r => `<tr>
+          <td style="border:1px solid #ccc;padding:4px 6px;">${r.entry_date||'—'}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;">${escHTML(r.technician||'—')}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;">${escHTML(r.classification||'—')}${r.is_overtime?' (OT)':''}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${(parseFloat(r.hours)||0).toFixed(2)}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${fmt(r.rate_ttd)}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${fmt(r.amount_ttd)}</td>
+        </tr>`).join('')}
+        <tr style="background:#f9f9f9;font-weight:700;">
+          <td colspan="5" style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Labour Subtotal</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${fmt(labourTotal)}</td>
+        </tr>
+      </tbody>
+    </table>` : '';
+
+  // Materials section
+  const matsSection = materials.length ? `
+    <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;color:#444;margin:14px 0 4px;">Materials</h4>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;">
+      <thead><tr style="background:#f0f0f0;">
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;">Description</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;">Category</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Qty</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;">Unit</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Unit Cost</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Total</th>
+      </tr></thead>
+      <tbody>
+        ${materials.map(r => `<tr>
+          <td style="border:1px solid #ccc;padding:4px 6px;">${escHTML(r.description||'—')}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;">${escHTML(r.category||'—')}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${(parseFloat(r.quantity)||0).toFixed(2)}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;">${escHTML(r.unit||'—')}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${fmt(r.unit_cost_ttd)}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${fmt(r.total_cost_ttd)}</td>
+        </tr>`).join('')}
+        <tr style="background:#f9f9f9;font-weight:700;">
+          <td colspan="5" style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Materials Subtotal</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${fmt(matsTotal)}</td>
+        </tr>
+      </tbody>
+    </table>` : '';
+
+  // Consumables section
+  const consSection = consumables.length ? `
+    <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;color:#444;margin:14px 0 4px;">Consumables</h4>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;">
+      <thead><tr style="background:#f0f0f0;">
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;">Description</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;">Stock Code</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Qty</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;">Unit</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Unit Cost</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Total</th>
+      </tr></thead>
+      <tbody>
+        ${consumables.map(r => `<tr>
+          <td style="border:1px solid #ccc;padding:4px 6px;">${escHTML(r.description||'—')}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;">${escHTML(r.stock_code||'—')}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${(parseFloat(r.quantity)||0).toFixed(2)}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;">${escHTML(r.unit||'—')}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${fmt(r.unit_cost_ttd)}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${fmt(r.total_cost_ttd)}</td>
+        </tr>`).join('')}
+        <tr style="background:#f9f9f9;font-weight:700;">
+          <td colspan="5" style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Consumables Subtotal</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${fmt(consTotal)}</td>
+        </tr>
+      </tbody>
+    </table>` : '';
+
+  return `<div style="font-family:Arial,sans-serif;font-size:12px;color:#222;padding:20px;max-width:794px;background:#fff;">
+    ${coHeader}
+    <div style="text-align:center;margin-bottom:14px;">
+      <div style="font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">Work Order Receipt</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:14px;">
+      <tr>
+        <td style="padding:3px 8px;font-weight:700;width:130px;">Work Order No.</td>
+        <td style="padding:3px 8px;">${escHTML(job.job_no||'—')}</td>
+        <td style="padding:3px 8px;font-weight:700;width:130px;">Date Received</td>
+        <td style="padding:3px 8px;">${job.date_received||'—'}</td>
+      </tr>
+      <tr>
+        <td style="padding:3px 8px;font-weight:700;">Customer</td>
+        <td style="padding:3px 8px;">${escHTML(job.customer||'—')}</td>
+        <td style="padding:3px 8px;font-weight:700;">Date Completed</td>
+        <td style="padding:3px 8px;">${job.date_completed||'—'}</td>
+      </tr>
+      <tr>
+        <td style="padding:3px 8px;font-weight:700;">Contact</td>
+        <td style="padding:3px 8px;">${escHTML(job.contact||'—')}</td>
+        <td style="padding:3px 8px;font-weight:700;">Type</td>
+        <td style="padding:3px 8px;">${escHTML(job.job_type||'—')}</td>
+      </tr>
+      <tr>
+        <td style="padding:3px 8px;font-weight:700;">Location</td>
+        <td style="padding:3px 8px;" colspan="3">${escHTML(job.location||'—')}</td>
+      </tr>
+      ${job.description ? `<tr>
+        <td style="padding:3px 8px;font-weight:700;vertical-align:top;">Description</td>
+        <td style="padding:3px 8px;" colspan="3">${escHTML(job.description)}</td>
+      </tr>` : ''}
+    </table>
+    ${labourSection}
+    ${matsSection}
+    ${consSection}
+    <div style="margin-top:16px;border-top:2px solid #222;padding-top:10px;text-align:right;">
+      <span style="font-size:14px;font-weight:700;">Grand Total: ${fmt(grandTotal)}</span>
+    </div>
+    ${job.costing_notes ? `<div style="margin-top:10px;font-size:11px;color:#555;"><strong>Notes:</strong> ${escHTML(job.costing_notes)}</div>` : ''}
+    <div style="margin-top:24px;display:flex;gap:40px;">
+      <div style="flex:1;border-top:1px solid #555;padding-top:4px;font-size:11px;text-align:center;">Prepared By</div>
+      <div style="flex:1;border-top:1px solid #555;padding-top:4px;font-size:11px;text-align:center;">Customer Signature</div>
+      <div style="flex:1;border-top:1px solid #555;padding-top:4px;font-size:11px;text-align:center;">Date</div>
+    </div>
+  </div>`;
+}
+
+  function buildARStatementHTML(contact, invoices, company) {
+    const co  = company || {};
+    const c   = contact || {};
+    const today = new Date().toLocaleDateString('en-TT', { year:'numeric', month:'long', day:'numeric' });
+
+    const fmtAmt = (n, cur) => {
+      const sym = cur === 'USD' ? 'US$' : cur === 'GYD' ? 'G$' : 'TT$';
+      return sym + (parseFloat(n)||0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    };
+
+    // Only show invoices with invoice numbers (posted/paid/overdue/partial)
+    const rows = invoices.filter(i => i.invoice_no).sort((a,b) => (a.invoice_date||'') < (b.invoice_date||'') ? -1 : 1);
+
+    const totalsByCurrency = {};
+    rows.forEach(i => {
+      const bal = parseFloat(i.balance_due||0);
+      if (!totalsByCurrency[i.currency]) totalsByCurrency[i.currency] = 0;
+      totalsByCurrency[i.currency] += bal;
+    });
+
+    const coHeader = `
+      <div style="display:flex;align-items:center;gap:16px;border-bottom:2px solid #222;padding-bottom:10px;margin-bottom:14px;">
+        ${co.logo_url ? `<img src="${co.logo_url}" style="height:48px;object-fit:contain;" alt="">` : ''}
+        <div>
+          <div style="font-size:18px;font-weight:700;">${escHTML(co.name||'')}</div>
+          <div style="font-size:11px;color:#555;">${[co.address_1,co.address_2,co.city,co.country].filter(Boolean).map(escHTML).join(', ')}</div>
+          ${co.phone ? `<div style="font-size:11px;color:#555;">Tel: ${escHTML(co.phone)}</div>` : ''}
+          ${co.vat_no ? `<div style="font-size:11px;color:#555;">VAT Reg: ${escHTML(co.vat_no)}</div>` : ''}
+        </div>
+      </div>`;
+
+    const clientBlock = `
+      <div style="margin-bottom:14px;">
+        <div style="font-size:13px;font-weight:700;">${escHTML(c.trading_name||c.name||'—')}</div>
+        ${c.address_1 ? `<div style="font-size:11px;color:#444;">${escHTML(c.address_1)}</div>` : ''}
+        ${c.city || c.country ? `<div style="font-size:11px;color:#444;">${escHTML([c.city,c.country].filter(Boolean).join(', '))}</div>` : ''}
+        ${c.email ? `<div style="font-size:11px;color:#444;">${escHTML(c.email)}</div>` : ''}
+      </div>
+      <div style="font-size:14px;font-weight:700;text-align:center;margin-bottom:14px;text-transform:uppercase;letter-spacing:1px;">Account Statement as of ${today}</div>`;
+
+    const invoiceRows = rows.length ? rows.map(i => `<tr>
+      <td style="border:1px solid #ccc;padding:4px 8px;font-family:monospace;font-size:11px;">${escHTML(i.invoice_no)}</td>
+      <td style="border:1px solid #ccc;padding:4px 8px;font-size:11px;">${i.invoice_date||'—'}</td>
+      <td style="border:1px solid #ccc;padding:4px 8px;font-size:11px;">${i.due_date||'—'}</td>
+      <td style="border:1px solid #ccc;padding:4px 8px;font-size:11px;">${i.currency}</td>
+      <td style="border:1px solid #ccc;padding:4px 8px;text-align:right;font-size:11px;">${fmtAmt(i.total, i.currency)}</td>
+      <td style="border:1px solid #ccc;padding:4px 8px;text-align:right;font-size:11px;">${fmtAmt((parseFloat(i.total||0)-parseFloat(i.balance_due||0)), i.currency)}</td>
+      <td style="border:1px solid #ccc;padding:4px 8px;text-align:right;font-size:11px;${parseFloat(i.balance_due||0)>0?'font-weight:700;':''}color:${parseFloat(i.balance_due||0)>0?'#c0392b':'#27ae60'};">${fmtAmt(i.balance_due, i.currency)}</td>
+      <td style="border:1px solid #ccc;padding:4px 8px;"><span style="background:${i.status==='paid'?'#27ae60':i.status==='overdue'?'#c0392b':'#e67e22'};color:#fff;border-radius:3px;padding:1px 5px;font-size:10px;">${escHTML(i.status)}</span></td>
+    </tr>`).join('') : `<tr><td colspan="8" style="text-align:center;padding:12px;font-size:11px;color:#888;">No invoices on record.</td></tr>`;
+
+    const totalsBlock = Object.entries(totalsByCurrency).length
+      ? Object.entries(totalsByCurrency).map(([cur, bal]) =>
+          `<div style="margin-top:4px;"><strong>Total Balance Due (${cur}):</strong> ${fmtAmt(bal, cur)}</div>`
+        ).join('')
+      : `<div style="margin-top:4px;"><strong>Total Balance Due:</strong> ${fmtAmt(0, co.currency||'TTD')}</div>`;
+
+    return `<div style="font-family:Arial,sans-serif;font-size:12px;color:#222;padding:20px;max-width:794px;background:#fff;">
+      ${coHeader}
+      ${clientBlock}
+      <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
+        <thead><tr style="background:#f0f0f0;">
+          <th style="border:1px solid #ccc;padding:4px 8px;text-align:left;font-size:11px;">Invoice No.</th>
+          <th style="border:1px solid #ccc;padding:4px 8px;text-align:left;font-size:11px;">Date</th>
+          <th style="border:1px solid #ccc;padding:4px 8px;text-align:left;font-size:11px;">Due Date</th>
+          <th style="border:1px solid #ccc;padding:4px 8px;font-size:11px;">Currency</th>
+          <th style="border:1px solid #ccc;padding:4px 8px;text-align:right;font-size:11px;">Total</th>
+          <th style="border:1px solid #ccc;padding:4px 8px;text-align:right;font-size:11px;">Paid</th>
+          <th style="border:1px solid #ccc;padding:4px 8px;text-align:right;font-size:11px;">Balance</th>
+          <th style="border:1px solid #ccc;padding:4px 8px;font-size:11px;">Status</th>
+        </tr></thead>
+        <tbody>${invoiceRows}</tbody>
+      </table>
+      <div style="text-align:right;padding:8px 0;border-top:2px solid #222;font-size:13px;">
+        ${totalsBlock}
+      </div>
+      <div style="margin-top:16px;font-size:10px;color:#888;text-align:center;">
+        This is a computer-generated statement. Please contact us if you have any discrepancies.
+      </div>
+    </div>`;
+  }
+
+  function _emailARStatement() {
+    const sel = document.getElementById('ar-contact-filter');
+    const contactId = sel ? sel.value : '';
+    if (!contactId) { showToast('Select a client to email a statement.', 'error'); return; }
+    openEmailDocument('ar-statement', contactId);
+  }
+
+  async function _buildEmailPDF(type, id) {
+    const staging = document.getElementById('email-pdf-staging');
+
+    if (type === 'invoice') {
+      const inv     = invoices.find(i => i.id === id);
+      if (!inv) throw new Error('Invoice not found');
+      const lines   = await sbGet('invoice_lines', `invoice_id=eq.${id}&order=line_order`).catch(() => []);
+      const contact = contacts.find(c => c.id === inv.contact_id) || {};
+      const co      = currentCompany;
+      const taxRate = parseFloat(inv.tax_rate || 0);
+      const totalsH = calcTotalsH(inv.incoterms, inv.notes, co.bank_details);
+      const pages   = splitLinesIntoPages(lines, calcFirstRows(totalsH), calcContRows(totalsH));
+      const metaRows = [
+        ['Invoice Date :', formatDateDisplay(inv.invoice_date)],
+        ['Terms :', inv.payment_terms || '—'],
+        ['Due Date :', inv.due_date ? formatDateDisplay(inv.due_date) : '—'],
+        ...(inv.client_ref ? [['Client Ref :', escHTML(inv.client_ref)]] : [])
+      ];
+      const headerHTML = buildPDFHeader(co, 'Invoice', inv.invoice_no || 'DRAFT', 'Balance Due',
+        fmt(inv.balance_due, inv.currency), contact, metaRows);
+      staging.innerHTML = '';
+      renderMultiPagePDF('email-pdf-staging', pages, headerHTML, true, inv.currency,
+        parseFloat(inv.subtotal||0), taxRate, parseFloat(inv.tax_amount||0),
+        parseFloat(inv.total||0), inv.incoterms, inv.incoterms_place,
+        inv.notes, co.bank_details, co.name, inv.invoice_no);
+      return generatePDFBase64(staging);
+    }
+
+    if (type === 'quotation') {
+      const quo     = quotations.find(q => q.id === id);
+      if (!quo) throw new Error('Quotation not found');
+      const lines   = await sbGet('quotation_lines', `quotation_id=eq.${id}&order=line_order`).catch(() => []);
+      const contact = contacts.find(c => c.id === quo.contact_id) || {};
+      const co      = currentCompany;
+      const lead    = salesLeads.find(l => l.id === quo.sales_lead_id);
+      const taxRate = parseFloat(quo.tax_rate || 0);
+      const totalsH = calcTotalsH(quo.incoterms, quo.notes, null);
+      const pages   = splitLinesIntoPages(lines, calcFirstRows(totalsH), calcContRows(totalsH));
+      const metaRows = [
+        ['Quote Date :', formatDateDisplay(quo.quote_date)],
+        ['Valid Until :', quo.valid_until ? formatDateDisplay(quo.valid_until) : '—'],
+        ['Terms :', quo.payment_terms || '—'],
+        ...(quo.client_ref ? [['Client Ref :', escHTML(quo.client_ref)]] : []),
+        ...(lead ? [['Prepared By :', escHTML(lead.name)]] : [])
+      ];
+      const headerHTML = buildPDFHeader(co, 'Quotation', quo.quote_no || 'DRAFT', 'Total Value',
+        fmt(quo.total, quo.currency), contact, metaRows);
+      staging.innerHTML = '';
+      renderMultiPagePDF('email-pdf-staging', pages, headerHTML, true, quo.currency,
+        parseFloat(quo.subtotal||0), taxRate, parseFloat(quo.tax_amount||0),
+        parseFloat(quo.total||0), quo.incoterms, quo.incoterms_place,
+        quo.notes, null, co.name, quo.quote_no);
+      return generatePDFBase64(staging);
+    }
+
+    if (type === 'delivery-note') {
+      const dn      = deliveryNotes.find(d => d.id === id);
+      if (!dn) throw new Error('Delivery note not found');
+      const lines   = await sbGet('delivery_note_lines', `dn_id=eq.${id}&order=line_order`).catch(() => []);
+      const contact = contacts.find(c => c.id === dn.contact_id) || {};
+      const co      = currentCompany;
+      const delAddr = [dn.delivery_address_line1, dn.delivery_address_line2, dn.delivery_address_line3, dn.delivery_country].filter(Boolean).join(', ') || null;
+      const metaRows = [
+        ['DN Date :', formatDateDisplay(dn.dn_date)],
+        ['Delivery Date :', dn.delivery_date ? formatDateDisplay(dn.delivery_date) : '—'],
+        ...(dn.client_ref    ? [['Client Ref :', escHTML(dn.client_ref)]]       : []),
+        ...(dn.carrier       ? [['Carrier :', escHTML(dn.carrier)]]             : []),
+        ...(dn.driver        ? [['Driver :', escHTML(dn.driver)]]               : []),
+        ...(dn.vehicle_ref   ? [['Vehicle :', escHTML(dn.vehicle_ref)]]         : []),
+        ...(dn.recipient_name? [['Recipient :', escHTML(dn.recipient_name)]]    : []),
+        ...(delAddr          ? [['Deliver To :', escHTML(delAddr)]]             : [])
+      ];
+      const totalsH = calcTotalsH(null, dn.notes, null);
+      const pages   = splitLinesIntoPages(lines, calcFirstRows(totalsH) + 4, calcContRows(totalsH) + 4);
+      const headerHTML = buildPDFHeader(co, 'Delivery Note', dn.dn_no,
+        'Status', dn.status ? (dn.status.charAt(0).toUpperCase() + dn.status.slice(1)) : '—', contact, metaRows);
+      staging.innerHTML = '';
+      renderMultiPagePDF('email-pdf-staging', pages, headerHTML, false, co.currency,
+        0, 0, 0, 0, null, null, dn.notes, null, co.name, dn.dn_no);
+      return generatePDFBase64(staging);
+    }
+
+    if (type === 'credit-note') {
+      const cn      = creditNotes.find(c => c.id === id);
+      if (!cn) throw new Error('Credit note not found');
+      const lines   = await sbGet('credit_note_lines', `cn_id=eq.${id}&order=line_order`).catch(() => []);
+      const contact = contacts.find(c => c.id === cn.contact_id) || {};
+      const co      = currentCompany;
+      const inv     = invoices.find(i => i.id === cn.invoice_id);
+      const taxRate = parseFloat(cn.tax_rate || 0);
+      const totalsH = calcTotalsH(null, cn.notes, null);
+      const pages   = splitLinesIntoPages(lines, calcFirstRows(totalsH), calcContRows(totalsH));
+      const metaRows = [
+        ['CN Date :', formatDateDisplay(cn.cn_date)],
+        ['Ref Invoice :', inv?.invoice_no || '—'],
+        ['Reason :', escHTML(cn.reason) || '—']
+      ];
+      const headerHTML = buildPDFHeader(co, 'Credit Note', cn.cn_no, 'Credit Amount',
+        fmt(cn.total, cn.currency), contact, metaRows);
+      staging.innerHTML = '';
+      renderMultiPagePDF('email-pdf-staging', pages, headerHTML, true, cn.currency,
+        parseFloat(cn.subtotal||0), taxRate, parseFloat(cn.tax_amount||0),
+        parseFloat(cn.total||0), null, null, cn.notes, null, co.name, cn.cn_no);
+      return generatePDFBase64(staging);
+    }
+
+    if (type === 'receipt') {
+      const rows    = await sbGet('payment_receipts', `id=eq.${id}&limit=1`);
+      const receipt = rows[0]; if (!receipt) throw new Error('Receipt not found');
+      const inv     = invoices.find(i => i.id === receipt.invoice_id) || {};
+      const contact = contacts.find(c => c.id === receipt.contact_id) || {};
+      const bankAcc = bankAccounts.find(b => b.id === receipt.bank_account_id) || {};
+      return generatePDFBase64(buildReceiptPDFHTML(receipt, inv, contact, bankAcc));
+    }
+
+    if (type === 'work-order') {
+      const jobRows  = await sbGet('jobs', `id=eq.${id}&limit=1`);
+      const job      = jobRows[0]; if (!job) throw new Error('Job not found');
+      const [labour, materials, consumables] = await Promise.all([
+        sbGet('labour_entries',    `job_id=eq.${id}&order=date`).catch(() => []),
+        sbGet('material_entries',  `job_id=eq.${id}`).catch(() => []),
+        sbGet('consumable_entries',`job_id=eq.${id}`).catch(() => [])
+      ]);
+      return generatePDFBase64(buildWorkOrderReceiptHTML(job, labour, materials, consumables, currentCompany));
+    }
+
+    if (type === 'ar-statement') {
+      const contact = contacts.find(c => c.id === id) || {};
+      const clientInvoices = invoices.filter(i => i.contact_id === id && i.invoice_no);
+      return generatePDFBase64(buildARStatementHTML(contact, clientInvoices, currentCompany));
+    }
+
+    throw new Error(`Unknown email document type: ${type}`);
+  }
+
+  function _sendNotification(eventKey, companyId, entityType, entityId, context) {
+    if (!currentCompany?.send_from_email) return;
+    fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${_accessToken}`,
+        'apikey': SUPABASE_KEY
+      },
+      body: JSON.stringify({ event_key: eventKey, company_id: companyId, entity_type: entityType, entity_id: entityId, context })
+    }).catch(() => {});
+  }
+
+  async function sendEmailDocument() {
+    if (!currentCompany?.send_from_email) {
+      showToast('Email sending is not active for this company yet.', 'error');
+      return;
+    }
+    const btn = document.getElementById('btn-send-email');
+    const to      = document.getElementById('email-doc-to').value.trim();
+    const subject = document.getElementById('email-doc-subject').value.trim();
+    const message = document.getElementById('email-doc-message').value.trim();
+    if (!to || !subject) { showToast('To and Subject are required.', 'error'); return; }
+    btn.disabled = true; btn.textContent = 'Generating PDF…';
+    try {
+      const pdfBase64 = await _buildEmailPDF(_emailDocMeta.type, _emailDocMeta.id);
+      btn.textContent = 'Sending…';
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/send-document-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_accessToken}`, 'apikey': SUPABASE_KEY },
+        body: JSON.stringify({ to, subject, message, pdf_base64: pdfBase64, filename: _emailDocMeta.filename })
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'Send failed');
+      closeModal('modal-send-email');
+      showToast(`Document emailed to ${to}`, 'success');
+    } catch(e) {
+      showToast('Email failed: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Send';
+    }
+  }
+
 // ── Override openInvoicePDF to use new multi-page renderer ────────
 async function openInvoicePDF(id) {
   const inv = invoices.find(i => i.id === id);
@@ -14875,6 +15461,25 @@ async function saveOpportunity() {
     await _saveOppTeam(oppId);
     closeModal('modal-opportunity');
     showToast(_editOppId ? 'Opportunity updated.' : 'Opportunity created.', 'success');
+    // Email notification on deal won/lost
+    if (payload.owner_id) {
+      const isWon  = status === 'won'  && existing?.status !== 'won';
+      const isLost = status === 'lost' && existing?.status !== 'lost';
+      if (isWon || isLost) {
+        _sendNotification(
+          isWon ? 'deal.won' : 'deal.lost',
+          currentCompany.id, 'opportunity', oppId, {
+            deal_name:         name,
+            deal_value:        payload.value ? fmt(payload.value, payload.currency || currentCompany.currency) : '—',
+            client_name:       contacts.find(c => c.id === payload.contact_id)?.trading_name
+                            || contacts.find(c => c.id === payload.contact_id)?.name || '—',
+            lost_reason:       payload.lost_reason || '—',
+            recipient_name:    erpUsers.find(u => u.id === payload.owner_id)?.full_name || '',
+            recipient_user_id: payload.owner_id
+          }
+        );
+      }
+    }
     await loadPipeline();
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
@@ -14886,6 +15491,20 @@ async function quickMarkOpp(id, status) {
     const patch = { status, [status === 'won' ? 'won_at' : 'lost_at']: nowISO() };
     await sbPatch('crm_opportunities', id, patch);
     showToast(`Opportunity marked as ${label}.`, 'success');
+    const opp = crmOpps.find(o => o.id === id);
+    if (opp?.owner_id) {
+      _sendNotification(
+        status === 'won' ? 'deal.won' : 'deal.lost',
+        currentCompany.id, 'opportunity', id, {
+          deal_name:         opp.name || '—',
+          deal_value:        opp.value ? fmt(opp.value, opp.currency || currentCompany.currency) : '—',
+          client_name:       contacts.find(c => c.id === opp.contact_id)?.trading_name
+                          || contacts.find(c => c.id === opp.contact_id)?.name || '—',
+          lost_reason:       opp.lost_reason || '—',
+          recipient_user_id: opp.owner_id
+        }
+      );
+    }
     await loadPipeline();
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
@@ -15236,6 +15855,15 @@ async function saveTask() {
         body:       payload.title,
         task_id:    taskId,
       }).then(() => { if (payload.assignee_id === currentUser.id) refreshNotifBadge(); }).catch(() => {});
+    }
+    if (payload.assignee_id && payload.assignee_id !== prevAssigneeId) {
+      _sendNotification('task.assigned', currentCompany.id, 'task', taskId, {
+        task_title:        payload.title,
+        due_date:          payload.due_date || '—',
+        description:       payload.description || '',
+        assigned_by:       currentUser.full_name,
+        recipient_user_id: payload.assignee_id
+      });
     }
     await loadCRMTasks();
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
@@ -15843,5 +16471,32 @@ async function setPrimaryCP(id) {
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 </script>
+<!-- ── Send Email Modal ───────────────────────────────────────────────────── -->
+<div id="modal-send-email" class="modal-overlay" onclick="if(event.target===this)closeModal('modal-send-email')">
+  <div class="modal" style="max-width:min(560px,95vw);">
+    <div class="modal-header">
+      <h3 class="modal-title">✉️ Send Document</h3>
+      <button class="btn btn-ghost btn-sm btn-icon" onclick="closeModal('modal-send-email')" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>To</label>
+        <input type="email" id="email-doc-to" placeholder="recipient@example.com">
+      </div>
+      <div class="field">
+        <label>Subject</label>
+        <input type="text" id="email-doc-subject">
+      </div>
+      <div class="field">
+        <label>Message <span style="color:var(--text-3);font-size:11px;">(optional)</span></label>
+        <textarea id="email-doc-message" rows="4" placeholder="Add a message to accompany the document…" style="resize:vertical;"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-send-email')">Cancel</button>
+      <button id="btn-send-email" class="btn btn-primary" onclick="sendEmailDocument()">Send</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
