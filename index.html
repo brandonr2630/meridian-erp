@@ -5617,6 +5617,7 @@ let _taskNotifs      = [];
 let _financialNotifCount = 0;
 let editingAccountId = null;
 let _accessToken     = null;
+let _emailDocMeta = null; // { type, id, to, subject, filename }
 
 // ── GLOBAL UTILITIES ─────────────────────────────────────────────
 const PERMISSION_MATRIX = [
@@ -14267,6 +14268,215 @@ async function generatePDFBase64(source) {
     .output('datauristring');
 }
 
+  function openEmailDocument(type, id) {
+    const meta = _resolveEmailMeta(type, id);
+    _emailDocMeta = { type, id, ...meta };
+    document.getElementById('email-doc-to').value      = meta.to;
+    document.getElementById('email-doc-subject').value = meta.subject;
+    document.getElementById('email-doc-message').value = '';
+    const btn = document.getElementById('btn-send-email');
+    btn.disabled = false; btn.textContent = 'Send';
+    openModal('modal-send-email');
+  }
+
+  function _resolveEmailMeta(type, id) {
+    const co = currentCompany;
+    if (type === 'invoice') {
+      const inv = invoices.find(i => i.id === id) || {};
+      const c   = contacts.find(x => x.id === inv.contact_id) || {};
+      return { to: c.email || '', subject: `Invoice ${inv.invoice_no || ''} from ${escHTML(co.name)}`, filename: `${inv.invoice_no || 'invoice'}.pdf` };
+    }
+    if (type === 'quotation') {
+      const q = quotations.find(x => x.id === id) || {};
+      const c = contacts.find(x => x.id === q.contact_id) || {};
+      return { to: c.email || '', subject: `Quotation ${q.quote_no || ''} from ${escHTML(co.name)}`, filename: `${q.quote_no || 'quotation'}.pdf` };
+    }
+    if (type === 'delivery-note') {
+      const dn = deliveryNotes.find(x => x.id === id) || {};
+      const c  = contacts.find(x => x.id === dn.contact_id) || {};
+      return { to: c.email || '', subject: `Delivery Note ${dn.dn_no || ''} from ${escHTML(co.name)}`, filename: `${dn.dn_no || 'delivery-note'}.pdf` };
+    }
+    if (type === 'credit-note') {
+      const cn = creditNotes.find(x => x.id === id) || {};
+      const c  = contacts.find(x => x.id === cn.contact_id) || {};
+      return { to: c.email || '', subject: `Credit Note ${cn.cn_no || ''} from ${escHTML(co.name)}`, filename: `${cn.cn_no || 'credit-note'}.pdf` };
+    }
+    if (type === 'receipt') {
+      const rec = {};
+      const inv = {};
+      const c   = {};
+      return { to: c.email || '', subject: `Payment Receipt from ${escHTML(co.name)}`, filename: `receipt.pdf` };
+    }
+    if (type === 'work-order') {
+      return { to: '', subject: `Work Order Receipt from ${escHTML(co.name)}`, filename: `work-order.pdf` };
+    }
+    if (type === 'ar-statement') {
+      const c = contacts.find(x => x.id === id) || {};
+      return { to: c.email || '', subject: `Account Statement from ${escHTML(co.name)}`, filename: `statement-${(c.trading_name || c.name || 'client').replace(/\s+/g,'-').toLowerCase()}.pdf` };
+    }
+    return { to: '', subject: '', filename: 'document.pdf' };
+  }
+
+  async function _buildEmailPDF(type, id) {
+    const staging = document.getElementById('email-pdf-staging');
+
+    if (type === 'invoice') {
+      const inv     = invoices.find(i => i.id === id);
+      if (!inv) throw new Error('Invoice not found');
+      const lines   = await sbGet('invoice_lines', `invoice_id=eq.${id}&order=line_order`).catch(() => []);
+      const contact = contacts.find(c => c.id === inv.contact_id) || {};
+      const co      = currentCompany;
+      const taxRate = parseFloat(inv.tax_rate || 0);
+      const totalsH = calcTotalsH(inv.incoterms, inv.notes, co.bank_details);
+      const pages   = splitLinesIntoPages(lines, calcFirstRows(totalsH), calcContRows(totalsH));
+      const metaRows = [
+        ['Invoice Date :', formatDateDisplay(inv.invoice_date)],
+        ['Terms :', inv.payment_terms || '—'],
+        ['Due Date :', inv.due_date ? formatDateDisplay(inv.due_date) : '—'],
+        ...(inv.client_ref ? [['Client Ref :', escHTML(inv.client_ref)]] : [])
+      ];
+      const headerHTML = buildPDFHeader(co, 'Invoice', inv.invoice_no || 'DRAFT', 'Balance Due',
+        fmt(inv.balance_due, inv.currency), contact, metaRows);
+      staging.innerHTML = '';
+      renderMultiPagePDF('email-pdf-staging', pages, headerHTML, true, inv.currency,
+        parseFloat(inv.subtotal||0), taxRate, parseFloat(inv.tax_amount||0),
+        parseFloat(inv.total||0), inv.incoterms, inv.incoterms_place,
+        inv.notes, co.bank_details, co.name, inv.invoice_no);
+      return generatePDFBase64(staging);
+    }
+
+    if (type === 'quotation') {
+      const quo     = quotations.find(q => q.id === id);
+      if (!quo) throw new Error('Quotation not found');
+      const lines   = await sbGet('quotation_lines', `quotation_id=eq.${id}&order=line_order`).catch(() => []);
+      const contact = contacts.find(c => c.id === quo.contact_id) || {};
+      const co      = currentCompany;
+      const lead    = salesLeads.find(l => l.id === quo.sales_lead_id);
+      const taxRate = parseFloat(quo.tax_rate || 0);
+      const totalsH = calcTotalsH(quo.incoterms, quo.notes, null);
+      const pages   = splitLinesIntoPages(lines, calcFirstRows(totalsH), calcContRows(totalsH));
+      const metaRows = [
+        ['Quote Date :', formatDateDisplay(quo.quote_date)],
+        ['Valid Until :', quo.valid_until ? formatDateDisplay(quo.valid_until) : '—'],
+        ['Terms :', quo.payment_terms || '—'],
+        ...(quo.client_ref ? [['Client Ref :', escHTML(quo.client_ref)]] : []),
+        ...(lead ? [['Prepared By :', escHTML(lead.name)]] : [])
+      ];
+      const headerHTML = buildPDFHeader(co, 'Quotation', quo.quote_no || 'DRAFT', 'Total Value',
+        fmt(quo.total, quo.currency), contact, metaRows);
+      staging.innerHTML = '';
+      renderMultiPagePDF('email-pdf-staging', pages, headerHTML, true, quo.currency,
+        parseFloat(quo.subtotal||0), taxRate, parseFloat(quo.tax_amount||0),
+        parseFloat(quo.total||0), quo.incoterms, quo.incoterms_place,
+        quo.notes, null, co.name, quo.quote_no);
+      return generatePDFBase64(staging);
+    }
+
+    if (type === 'delivery-note') {
+      const dn      = deliveryNotes.find(d => d.id === id);
+      if (!dn) throw new Error('Delivery note not found');
+      const lines   = await sbGet('delivery_note_lines', `dn_id=eq.${id}&order=line_order`).catch(() => []);
+      const contact = contacts.find(c => c.id === dn.contact_id) || {};
+      const co      = currentCompany;
+      const delAddr = [dn.delivery_address_line1, dn.delivery_address_line2, dn.delivery_address_line3, dn.delivery_country].filter(Boolean).join(', ') || null;
+      const metaRows = [
+        ['DN Date :', formatDateDisplay(dn.dn_date)],
+        ['Delivery Date :', dn.delivery_date ? formatDateDisplay(dn.delivery_date) : '—'],
+        ...(dn.client_ref    ? [['Client Ref :', escHTML(dn.client_ref)]]       : []),
+        ...(dn.carrier       ? [['Carrier :', escHTML(dn.carrier)]]             : []),
+        ...(dn.driver        ? [['Driver :', escHTML(dn.driver)]]               : []),
+        ...(dn.vehicle_ref   ? [['Vehicle :', escHTML(dn.vehicle_ref)]]         : []),
+        ...(dn.recipient_name? [['Recipient :', escHTML(dn.recipient_name)]]    : []),
+        ...(delAddr          ? [['Deliver To :', escHTML(delAddr)]]             : [])
+      ];
+      const totalsH = calcTotalsH(null, dn.notes, null);
+      const pages   = splitLinesIntoPages(lines, calcFirstRows(totalsH) + 4, calcContRows(totalsH) + 4);
+      const headerHTML = buildPDFHeader(co, 'Delivery Note', dn.dn_no,
+        'Status', dn.status ? (dn.status.charAt(0).toUpperCase() + dn.status.slice(1)) : '—', contact, metaRows);
+      staging.innerHTML = '';
+      renderMultiPagePDF('email-pdf-staging', pages, headerHTML, false, co.currency,
+        0, 0, 0, 0, null, null, dn.notes, null, co.name, dn.dn_no);
+      return generatePDFBase64(staging);
+    }
+
+    if (type === 'credit-note') {
+      const cn      = creditNotes.find(c => c.id === id);
+      if (!cn) throw new Error('Credit note not found');
+      const lines   = await sbGet('credit_note_lines', `cn_id=eq.${id}&order=line_order`).catch(() => []);
+      const contact = contacts.find(c => c.id === cn.contact_id) || {};
+      const co      = currentCompany;
+      const inv     = invoices.find(i => i.id === cn.invoice_id);
+      const taxRate = parseFloat(cn.tax_rate || 0);
+      const totalsH = calcTotalsH(null, cn.notes, null);
+      const pages   = splitLinesIntoPages(lines, calcFirstRows(totalsH), calcContRows(totalsH));
+      const metaRows = [
+        ['CN Date :', formatDateDisplay(cn.cn_date)],
+        ['Ref Invoice :', inv?.invoice_no || '—'],
+        ['Reason :', escHTML(cn.reason) || '—']
+      ];
+      const headerHTML = buildPDFHeader(co, 'Credit Note', cn.cn_no, 'Credit Amount',
+        fmt(cn.total, cn.currency), contact, metaRows);
+      staging.innerHTML = '';
+      renderMultiPagePDF('email-pdf-staging', pages, headerHTML, true, cn.currency,
+        parseFloat(cn.subtotal||0), taxRate, parseFloat(cn.tax_amount||0),
+        parseFloat(cn.total||0), null, null, cn.notes, null, co.name, cn.cn_no);
+      return generatePDFBase64(staging);
+    }
+
+    if (type === 'receipt') {
+      const rows    = await sbGet('payment_receipts', `id=eq.${id}&limit=1`);
+      const receipt = rows[0]; if (!receipt) throw new Error('Receipt not found');
+      const inv     = invoices.find(i => i.id === receipt.invoice_id) || {};
+      const contact = contacts.find(c => c.id === receipt.contact_id) || {};
+      const bankAcc = bankAccounts.find(b => b.id === receipt.bank_account_id) || {};
+      return generatePDFBase64(buildReceiptPDFHTML(receipt, inv, contact, bankAcc));
+    }
+
+    if (type === 'work-order') {
+      const jobRows  = await sbGet('jobs', `id=eq.${id}&limit=1`);
+      const job      = jobRows[0]; if (!job) throw new Error('Job not found');
+      const [labour, materials, consumables] = await Promise.all([
+        sbGet('labour_entries',    `job_id=eq.${id}&order=date`).catch(() => []),
+        sbGet('material_entries',  `job_id=eq.${id}`).catch(() => []),
+        sbGet('consumable_entries',`job_id=eq.${id}`).catch(() => [])
+      ]);
+      return generatePDFBase64(buildWorkOrderReceiptHTML(job, labour, materials, consumables, currentCompany));
+    }
+
+    if (type === 'ar-statement') {
+      const contact = contacts.find(c => c.id === id) || {};
+      const clientInvoices = invoices.filter(i => i.contact_id === id && i.invoice_no);
+      return generatePDFBase64(buildARStatementHTML(contact, clientInvoices, currentCompany));
+    }
+
+    throw new Error(`Unknown email document type: ${type}`);
+  }
+
+  async function sendEmailDocument() {
+    const btn = document.getElementById('btn-send-email');
+    const to      = document.getElementById('email-doc-to').value.trim();
+    const subject = document.getElementById('email-doc-subject').value.trim();
+    const message = document.getElementById('email-doc-message').value.trim();
+    if (!to || !subject) { showToast('To and Subject are required.', 'error'); return; }
+    btn.disabled = true; btn.textContent = 'Generating PDF…';
+    try {
+      const pdfBase64 = await _buildEmailPDF(_emailDocMeta.type, _emailDocMeta.id);
+      btn.textContent = 'Sending…';
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/send-document-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_accessToken}`, 'apikey': SUPABASE_KEY },
+        body: JSON.stringify({ to, subject, message, pdf_base64: pdfBase64, filename: _emailDocMeta.filename })
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'Send failed');
+      closeModal('modal-send-email');
+      showToast(`Document emailed to ${to}`, 'success');
+    } catch(e) {
+      showToast('Email failed: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Send';
+    }
+  }
+
 // ── Override openInvoicePDF to use new multi-page renderer ────────
 async function openInvoicePDF(id) {
   const inv = invoices.find(i => i.id === id);
@@ -15871,5 +16081,32 @@ async function setPrimaryCP(id) {
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 </script>
+<!-- ── Send Email Modal ───────────────────────────────────────────────────── -->
+<div id="modal-send-email" class="modal-overlay" onclick="if(event.target===this)closeModal('modal-send-email')">
+  <div class="modal" style="max-width:min(560px,95vw);">
+    <div class="modal-header">
+      <h3 class="modal-title">✉️ Send Document</h3>
+      <button class="btn btn-ghost btn-sm btn-icon" onclick="closeModal('modal-send-email')" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>To</label>
+        <input type="email" id="email-doc-to" placeholder="recipient@example.com">
+      </div>
+      <div class="field">
+        <label>Subject</label>
+        <input type="text" id="email-doc-subject">
+      </div>
+      <div class="field">
+        <label>Message <span style="color:var(--text-3);font-size:11px;">(optional)</span></label>
+        <textarea id="email-doc-message" rows="4" placeholder="Add a message to accompany the document…" style="resize:vertical;"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-send-email')">Cancel</button>
+      <button id="btn-send-email" class="btn btn-primary" onclick="sendEmailDocument()">Send</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
