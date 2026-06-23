@@ -2029,10 +2029,9 @@ body.light .global-search-results, body.light .split-btn-menu {
         <div class="nav-item" data-perm="admin:users" onclick="navigate('user-management')" id="nav-user-management">
           <span class="nav-item-icon">👥</span> User Management
         </div>
-        <div class="nav-item" data-perm="admin:roles" onclick="navigate('role-management')" id="nav-role-management">
-  <span class="nav-icon">🔐</span>
-  <span class="nav-label">Role Management</span>
-</div>
+        <div class="nav-item" data-perm="admin:users" onclick="navigate('role-management')" id="nav-role-management">
+          <span class="nav-item-icon">🔐</span> Role Management
+        </div>
         <div class="nav-item" data-perm="admin:settings" onclick="navigate('settings')" id="nav-settings">
           <span class="nav-item-icon">⚙️</span> Settings
         </div>
@@ -3604,7 +3603,7 @@ body.light .global-search-results, body.light .split-btn-menu {
   </div>
 </div>
 
-<div id="view-role-management" class="view-section" style="display:none;">
+<div id="view-role-management" class="page-view">
   <div class="view-header">
     <h2 class="view-title">Role Management</h2>
     <p class="view-subtitle" id="rm-subtitle"></p>
@@ -6056,7 +6055,7 @@ const VIEW_SECTIONS = {
   'sales-leads': ['sales'],
   pipeline: ['sales'], 'crm-activities': ['sales'], 'crm-tasks': ['sales'],
   'work-orders': ['operations'], 'job-costing': ['operations'], 'delivery-notes': ['operations'], 'job-config': ['operations'],
-  companies: ['setup'], 'user-management': ['setup'], settings: ['setup']
+  companies: ['setup'], 'user-management': ['setup'], 'role-management': ['setup'], settings: ['setup']
 };
 
 function getNavState() {
@@ -7430,7 +7429,7 @@ async function jcFetchNewJobNo() {
     const result = await sb('rpc/next_job_no', { method:'POST', body:{} });
     if (result) return typeof result==='string' ? result : (result[0] || result);
   } catch(e) {}
-  return 'JC-DRAFT';
+  return 'WO-DRAFT';
 }
 
 // ── NEW JOB ──────────────────────────────────────────────────────
@@ -7441,10 +7440,9 @@ async function jcNewJob() {
   }
   jcResetForm();
   jcOpenForm();
-  const jobNo = await jcFetchNewJobNo();
-  document.getElementById('jc-job-no-display').textContent = jobNo;
   document.getElementById('jc-f-date-received').valueAsDate = new Date();
   jcMarkClean();
+  // Job number is assigned on first save, not here — prevents gaps from cancelled forms
 }
 function jcResetForm() {
   document.querySelectorAll('#jc-form-wrap input:not([readonly]), #jc-form-wrap select, #jc-form-wrap textarea').forEach(el => { el.value = ''; });
@@ -7494,6 +7492,12 @@ async function jcSaveJob() {
 }
 async function jcSaveJobData(data, jobId) {
   const parse = str => { try { return JSON.parse(str)||[]; } catch(e) { return []; } };
+  // Fetch job number at first save — not at form-open — to prevent gaps from cancelled forms
+  if (!jobId) {
+    data.jobNo = await jcFetchNewJobNo();
+    const noEl = document.getElementById('jc-job-no-display');
+    if (noEl) noEl.textContent = data.jobNo;
+  }
   const jobRecord = {
     company_id:      currentCompany.id,
     job_no:          data.jobNo,
@@ -7714,10 +7718,8 @@ async function jcDuplicateJob() {
     if (!ok) return;
   }
   const original = jcCollectFormData();
-  const jobNo = await jcFetchNewJobNo();
   jcResetForm();
   jcOpenForm();
-  document.getElementById('jc-job-no-display').textContent = jobNo;
   document.getElementById('jc-f-date-received').valueAsDate = new Date();
   const set = (id, v) => { const el=document.getElementById(id); if(el) el.value=v||''; };
   set('jc-f-customer',     original.customer);    set('jc-f-contact',      original.contact);
@@ -7741,7 +7743,7 @@ async function jcDuplicateJob() {
   jcOnJobTypeChange(); jcUpdateCostSummary();
   jcClearAuditLog(); jcAddAuditEntry('create', `Duplicated from ${original.jobNo}`);
   jcMarkDirty();
-  showToast('✓ Duplicated as ' + jobNo + '. Review and save.', 'success');
+  showToast('✓ Duplicated from ' + original.jobNo + '. Review and save.', 'success');
 }
 
 // ── COLLECT FORM DATA ─────────────────────────────────────────────
