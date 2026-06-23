@@ -3520,6 +3520,41 @@ body.light .global-search-results, body.light .split-btn-menu {
   </div>
 </div>
 
+<!-- ── EDIT USER MODAL ── -->
+<div class="modal-overlay" id="modal-edit-user" onclick="if(event.target===this)closeModal('modal-edit-user')">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header">
+      <div class="modal-title">Edit User</div>
+      <button class="modal-close" onclick="closeModal('modal-edit-user')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="eu-auth-id">
+      <div class="field-group">
+        <label class="field-label">Full Name *</label>
+        <input type="text" id="eu-name" class="field-input" placeholder="Jane Smith">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Email *</label>
+        <input type="email" id="eu-email" class="field-input" placeholder="jane@example.com">
+      </div>
+      <div class="field-group">
+        <label class="field-label">New Password</label>
+        <input type="password" id="eu-password" class="field-input" placeholder="Leave blank to keep current">
+        <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Minimum 8 characters. Blank = no change.</div>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Company</label>
+        <select id="eu-company" class="field-input"></select>
+      </div>
+      <div id="eu-error" style="color:var(--red);font-size:12px;min-height:16px;margin-top:4px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-edit-user')">Cancel</button>
+      <button class="btn btn-primary" id="eu-save-btn" onclick="saveEditUser()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── EDIT PERMISSIONS MODAL ── -->
 <div class="modal-overlay" id="modal-edit-permissions" onclick="if(event.target===this)closeModal('modal-edit-permissions')">
   <div class="modal" style="max-width:520px;">
@@ -6483,6 +6518,7 @@ function umRenderTable(users) {
       : `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-3);">● Inactive</span>`;
     const isSelf = currentUser && u.auth_user_id === currentUser.auth_user_id;
     const actions = isSelf ? `<span style="font-size:11px;color:var(--text-3);">Current</span>` : `
+      <button class="btn btn-ghost" style="padding:3px 8px;font-size:11px;" onclick="openEditUserModal('${u.auth_user_id}')">Edit</button>
       <button class="btn btn-ghost" style="padding:3px 8px;font-size:11px;" onclick="openEditPermissionsModal('${u.auth_user_id}')">Edit Role</button>
       <button class="btn btn-ghost" style="padding:3px 8px;font-size:11px;" onclick="toggleUserActive('${u.auth_user_id}',${u.is_active})">${u.is_active ? 'Deactivate' : 'Activate'}</button>
       <button class="btn btn-ghost" style="padding:3px 8px;font-size:11px;color:var(--red);" onclick="removeUser('${u.auth_user_id}','${escHTML(u.full_name||'this user')}')">Remove</button>
@@ -6524,6 +6560,77 @@ async function openCreateUserModal() {
     : '<option value="">No roles found</option>';
 
   document.getElementById('modal-create-user').classList.add('show');
+}
+
+function openEditUserModal(authUserId) {
+  if (!isAdmin()) return;
+  const u = _umAllUsers.find(x => x.auth_user_id === authUserId);
+  if (!u) return;
+  document.getElementById('eu-auth-id').value   = authUserId;
+  document.getElementById('eu-name').value      = u.full_name || '';
+  document.getElementById('eu-email').value     = u.email || '';
+  document.getElementById('eu-password').value  = '';
+  document.getElementById('eu-error').textContent = '';
+  const coSel = document.getElementById('eu-company');
+  coSel.innerHTML = companies.map(c =>
+    `<option value="${escHTML(c.id)}"${c.id === u.company_id ? ' selected' : ''}>${escHTML(c.trading_name || c.name)}</option>`
+  ).join('');
+  const saveBtn = document.getElementById('eu-save-btn');
+  saveBtn.textContent = 'Save Changes'; saveBtn.disabled = false;
+  document.getElementById('modal-edit-user').classList.add('show');
+}
+
+async function saveEditUser() {
+  const authUserId  = document.getElementById('eu-auth-id').value;
+  const name        = document.getElementById('eu-name').value.trim();
+  const email       = document.getElementById('eu-email').value.trim().toLowerCase();
+  const password    = document.getElementById('eu-password').value;
+  const company_id  = document.getElementById('eu-company').value;
+  const errEl       = document.getElementById('eu-error');
+  const saveBtn     = document.getElementById('eu-save-btn');
+
+  errEl.textContent = '';
+  if (!name)                              { errEl.textContent = 'Name is required.'; return; }
+  if (!email)                             { errEl.textContent = 'Email is required.'; return; }
+  if (password && password.length < 8)   { errEl.textContent = 'Password must be at least 8 characters.'; return; }
+
+  saveBtn.textContent = 'Saving…'; saveBtn.disabled = true;
+
+  const u = _umAllUsers.find(x => x.auth_user_id === authUserId);
+  const emailChanged    = u && email !== u.email;
+  const passwordChanged = !!password;
+
+  try {
+    // Patch erp_users profile (name + company)
+    await sbPatchWhere('erp_users', `auth_user_id=eq.${authUserId}`, { full_name: name, company_id });
+
+    // If email or password changed, call Edge Function (needs service role)
+    if (emailChanged || passwordChanged) {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/update-erp-user`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${_accessToken}`,
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_KEY,
+        },
+        body: JSON.stringify({
+          auth_user_id: authUserId,
+          ...(emailChanged    ? { email }    : {}),
+          ...(passwordChanged ? { password } : {}),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Failed to update auth credentials.');
+    }
+
+    showToast(`User "${name}" updated.`, 'success');
+    closeModal('modal-edit-user');
+    await loadUserManagement();
+  } catch(e) {
+    errEl.textContent = e.message;
+  } finally {
+    saveBtn.textContent = 'Save Changes'; saveBtn.disabled = false;
+  }
 }
 
 async function openEditPermissionsModal(authUserId) {
