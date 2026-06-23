@@ -14784,6 +14784,7 @@ async function generatePDFBase64(source) {
   }
 
   function _sendNotification(eventKey, companyId, entityType, entityId, context) {
+    if (!currentCompany?.send_from_email) return;
     fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
       method: 'POST',
       headers: {
@@ -14796,6 +14797,10 @@ async function generatePDFBase64(source) {
   }
 
   async function sendEmailDocument() {
+    if (!currentCompany?.send_from_email) {
+      showToast('Email sending is not active for this company yet.', 'error');
+      return;
+    }
     const btn = document.getElementById('btn-send-email');
     const to      = document.getElementById('email-doc-to').value.trim();
     const subject = document.getElementById('email-doc-subject').value.trim();

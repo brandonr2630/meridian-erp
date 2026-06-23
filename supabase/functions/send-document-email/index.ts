@@ -128,8 +128,15 @@ Deno.serve(async (req: Request) => {
   }
 
   const company = companies[0];
-  const sendFromEmail: string =
-    company.send_from_email || "accounts@terranresources.com";
+
+  if (!company.send_from_email) {
+    return corsResponse(
+      JSON.stringify({ error: "Email sending is not configured for this company" }),
+      422,
+    );
+  }
+
+  const sendFromEmail: string = company.send_from_email;
   const companyName: string = company.name ?? "Terran Resources";
   const replyTo: string = company.email ?? sendFromEmail;
 
