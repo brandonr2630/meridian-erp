@@ -6280,7 +6280,7 @@ function openCreateRoleModal() {
   document.getElementById('role-edit-name').value = '';
   document.getElementById('role-edit-error').textContent = '';
   renderPermMatrix({});
-  document.getElementById('modal-role-edit').style.display = 'flex';
+  document.getElementById('modal-role-edit').classList.add('show');
 }
 
 function openEditRoleModal(roleId) {
@@ -6291,7 +6291,7 @@ function openEditRoleModal(roleId) {
   document.getElementById('role-edit-name').value = role.name;
   document.getElementById('role-edit-error').textContent = '';
   renderPermMatrix(role.permissions || {});
-  document.getElementById('modal-role-edit').style.display = 'flex';
+  document.getElementById('modal-role-edit').classList.add('show');
 }
 
 function renderPermMatrix(currentPerms) {
