@@ -1475,7 +1475,7 @@ body {
 .dash-table-wrap { overflow-x:auto; background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-lg); }
 .dash-table { width:100%; border-collapse:collapse; font-size:12px; }
 .dash-table thead tr { background:var(--bg-3); }
-.dash-table th { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text-2); padding:9px 12px; text-align:left; white-space:nowrap; cursor:pointer; user-select:none; }
+.dash-table th { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text-2); padding:9px 12px; text-align:center; white-space:nowrap; cursor:pointer; user-select:none; }
 .dash-table th:hover { color:var(--gold); }
 .dash-table tbody tr { border-bottom:1px solid var(--border); cursor:pointer; transition:background .1s; }
 .dash-table tbody tr:hover { background:var(--gold-bg); }
@@ -3068,6 +3068,7 @@ body.light .global-search-results, body.light .split-btn-menu {
                     <th onclick="jcDashSort('job_type')">Type ↕</th>
                     <th onclick="jcDashSort('status')">Status ↕</th>
                     <th onclick="jcDashSort('priority')">Priority ↕</th>
+                    <th onclick="jcDashSort('location')">Location ↕</th>
                     <th onclick="jcDashSort('date_received')">Received ↕</th>
                     <th onclick="jcDashSort('due_date')">Due ↕</th>
                     <th>Description</th>
