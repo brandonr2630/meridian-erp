@@ -154,7 +154,15 @@ Deno.serve(async (req: Request) => {
         200,
       );
     }
-    recipientIds = [context.recipient_user_id];
+    // Validate recipient_user_id is a valid UUID to prevent injection
+    const recipientId = context.recipient_user_id;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(recipientId)) {
+      return corsResponse(
+        JSON.stringify({ error: "Invalid recipient_user_id format" }),
+        400,
+      );
+    }
+    recipientIds = [recipientId];
   } else if (notifType.recipient.startsWith("role:")) {
     const roleName = notifType.recipient.slice(5); // e.g. "admin"
 
@@ -164,7 +172,7 @@ Deno.serve(async (req: Request) => {
       : roleName;
 
     const roleRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/erp_roles?name=in.(${encodeURIComponent(roleNames)})&select=id`,
+      `${SUPABASE_URL}/rest/v1/erp_roles?name=in.(${roleNames})&select=id`,
       {
         headers: {
           Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
@@ -188,7 +196,7 @@ Deno.serve(async (req: Request) => {
     const roleIdList = roles.map((r) => r.id).join(",");
 
     const ucrRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/erp_user_company_roles?company_id=eq.${company_id}&role_id=in.(${encodeURIComponent(roleIdList)})&select=user_id`,
+      `${SUPABASE_URL}/rest/v1/erp_user_company_roles?company_id=eq.${encodeURIComponent(company_id)}&role_id=in.(${roleIdList})&select=user_id`,
       {
         headers: {
           Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
@@ -246,7 +254,7 @@ Deno.serve(async (req: Request) => {
   for (const userId of recipientIds) {
     // 6a. Check notification preference (absence = enabled by default)
     const prefRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/notification_preferences?user_id=eq.${userId}&event_key=eq.${encodeURIComponent(event_key)}&limit=1`,
+      `${SUPABASE_URL}/rest/v1/notification_preferences?user_id=eq.${encodeURIComponent(userId)}&event_key=eq.${encodeURIComponent(event_key)}&limit=1`,
       {
         headers: {
           Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
@@ -272,7 +280,7 @@ Deno.serve(async (req: Request) => {
 
     // 6b. Get recipient profile
     const recipRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/erp_users?id=eq.${userId}&select=full_name,email&limit=1`,
+      `${SUPABASE_URL}/rest/v1/erp_users?id=eq.${encodeURIComponent(userId)}&select=full_name,email&limit=1`,
       {
         headers: {
           Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
