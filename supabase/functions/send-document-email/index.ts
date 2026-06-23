@@ -102,6 +102,10 @@ Deno.serve(async (req: Request) => {
 
   const companyId: string = profiles[0].company_id;
 
+  if (!companyId) {
+    return corsResponse(JSON.stringify({ error: "User has no assigned company" }), 403);
+  }
+
   // ── 4. Resolve company for from-address and display name ───────────────────
   const companyUrl =
     `${SUPABASE_URL}/rest/v1/companies?id=eq.${companyId}&limit=1`;
@@ -160,8 +164,8 @@ Deno.serve(async (req: Request) => {
 
   if (!resendRes.ok) {
     const errData = await resendRes.json().catch(() => ({}));
-    const message = (errData as { message?: string }).message ?? "Failed to send email";
-    return corsResponse(JSON.stringify({ error: message }), resendRes.status);
+    const errMsg = (errData as { message?: string }).message ?? "Failed to send email";
+    return corsResponse(JSON.stringify({ error: errMsg }), resendRes.status);
   }
 
   return corsResponse(JSON.stringify({ success: true }), 200);
