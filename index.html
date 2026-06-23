@@ -1387,6 +1387,14 @@ body {
 .register-table td input, .register-table td select { background:var(--bg-3); border:1px solid transparent; border-radius:var(--radius); color:var(--text); padding:4px 6px; font-size:12px; width:100%; outline:none; transition:border-color .15s; }
 .register-table td input:focus { border-color:var(--gold); background:var(--gold-bg); }
 
+.btn-upload-pdf { font-size:11px; padding:2px 6px; border:1px solid var(--border); border-radius:4px; background:var(--bg-card); cursor:pointer; color:var(--text-3); }
+.btn-upload-pdf:hover { background:var(--primary); color:#fff; border-color:var(--primary); }
+.btn-view-pdf { font-size:11px; color:var(--primary); text-decoration:none; margin-right:4px; }
+.btn-view-pdf:hover { text-decoration:underline; }
+.btn-replace-pdf { font-size:11px; background:none; border:none; cursor:pointer; color:var(--text-3); padding:0 2px; }
+.btn-replace-pdf:hover { color:var(--primary); }
+.jc-dr-pdf-cell { white-space:nowrap; }
+
 /* Row management buttons */
 .btn-add-row { background:transparent; border:1px dashed var(--border-2); border-radius:var(--radius); color:var(--text-2); padding:5px 12px; font-size:11px; cursor:pointer; margin-top:6px; transition:all .15s; }
 .btn-add-row:hover { border-color:var(--gold); color:var(--gold); }
@@ -3179,9 +3187,15 @@ body.light .global-search-results, body.light .split-btn-menu {
                 <div class="dyn-table-wrap"><table class="register-table"><thead><tr>
                   <th style="width:120px">Drawing No.</th><th>Drawing Title</th>
                   <th style="width:90px">Revision No.</th><th style="width:120px">Date</th>
-                  <th style="width:120px">Source</th><th style="width:32px"></th>
+                  <th style="width:120px">Source</th><th style="width:100px">PDF</th><th style="width:32px"></th>
                 </tr></thead><tbody id="jc-drawings-body"></tbody></table></div>
-                <button class="btn-add-row" onclick="jcAddDrawingRow()">+ Add Drawing</button>
+                <button class="btn-add-row" onclick="jcAddNewDrawingRow()">+ Add Drawing</button>
+                <div id="jc-archived-drawings" style="display:none;margin-top:10px;">
+                  <div class="jc-archive-toggle" onclick="jcToggleArchivedDrawings()" style="cursor:pointer;font-size:12px;color:var(--text-3);padding:4px 0;">
+                    <span id="jc-archived-drawings-chevron">▶</span> Archived Drawings (<span id="jc-archived-drawings-count">0</span>)
+                  </div>
+                  <div id="jc-archived-drawings-body" style="display:none;margin-top:6px;"></div>
+                </div>
                 <div class="section-divider" style="margin-top:14px;">Specifications Register</div>
                 <div class="dyn-table-wrap"><table class="register-table"><thead><tr>
                   <th style="width:120px">Spec No. / Ref</th><th>Spec Title / Description</th>
@@ -7453,6 +7467,12 @@ function jcResetForm() {
   document.querySelectorAll('.jc-cat-btn').forEach(b => b.classList.remove('active'));
   const custBtn = document.getElementById('jc-cat-customer'); if (custBtn) custBtn.classList.add('active');
   jcCurrentJobId = null; jcIsLocked = false; jcAdminCostUnlocked = false;
+  const archSec = document.getElementById('jc-archived-drawings');
+  if (archSec) archSec.style.display = 'none';
+  const archBody = document.getElementById('jc-archived-drawings-body');
+  if (archBody) archBody.innerHTML = '';
+  const archCount = document.getElementById('jc-archived-drawings-count');
+  if (archCount) archCount.textContent = '0';
   document.getElementById('jc-lock-banner')?.classList.remove('show');
   document.getElementById('jc-form-wrap')?.classList.remove('jc-readonly');
   const delBtn = document.getElementById('jc-delete-btn'); if (delBtn) delBtn.style.display = 'none';
@@ -7527,7 +7547,6 @@ async function jcSaveJobData(data, jobId) {
     qc_result:       data.qcResult      || null,
     qc_notes:        data.qcNotes       || null,
     qc_state:        parse(data.qcState),
-    drawings:        parse(data.drawings),
     specs:           parse(data.specs),
     reports:         parse(data.reports),
     created_by:      currentUser.auth_user_id,
@@ -7575,6 +7594,17 @@ async function jcSaveJobData(data, jobId) {
     username:currentUser.full_name, action_type:'job_saved',
     description:`Job ${data.jobNo} saved by ${currentUser.full_name}`
   }).catch(()=>{});
+  if (data.drawingRows && data.drawingRows.length) {
+    await Promise.all(data.drawingRows.map(d =>
+      sbPatch('job_drawings', d.id, {
+        drawing_no:    d.drawing_no,
+        drawing_title: d.drawing_title,
+        revision_no:   d.revision_no,
+        date:          d.date || null,
+        source:        d.source,
+      })
+    ));
+  }
   return savedId;
 }
 
@@ -7585,13 +7615,14 @@ async function jcOpenJob(jobId) {
     if (!ok) return;
   }
   try {
-    const [jr, lr, er, mr, cr, sr] = await Promise.all([
+    const [jr, lr, er, mr, cr, sr, dr] = await Promise.all([
       sbGet('jobs',                  `id=eq.${jobId}&limit=1`),
       sbGet('labour_entries',        `job_id=eq.${jobId}&order=sort_order`),
       sbGet('equipment_entries',     `job_id=eq.${jobId}&order=sort_order`),
       sbGet('material_entries',      `job_id=eq.${jobId}&order=sort_order`),
       sbGet('consumable_entries',    `job_id=eq.${jobId}&order=sort_order`),
       sbGet('subcontractor_entries', `job_id=eq.${jobId}&order=sort_order`),
+      sbGet('job_drawings',          `job_id=eq.${jobId}&order=created_at.asc`),
     ]);
     if (!jr.length) throw new Error('Job not found.');
     const j = jr[0];
@@ -7623,6 +7654,10 @@ async function jcOpenJob(jobId) {
       'Subs Detail': JSON.stringify((sr||[]).map(r => ({ date:r.entry_date||'', name:r.name||'', service:r.service_description||'', inv:r.invoice_ref||'', cost:String(r.cost_ttd||0) }))),
     };
     jcPopulateForm(row);
+    const activeDrawings   = (dr || []).filter(d => !d.archived);
+    const archivedDrawings = (dr || []).filter(d =>  d.archived);
+    activeDrawings.forEach(d => jcAddDrawingRow(d));
+    jcRenderArchivedDrawings(archivedDrawings);
     jcOpenForm();
   } catch(err) {
     showToast('✗ Failed to load job: ' + (err.message || err), 'error');
@@ -7664,7 +7699,6 @@ function jcPopulateForm(row) {
   parse(row['Materials Detail']).forEach(d => jcAddMaterialRow(d));
   parse(row['Consumables Detail']).forEach(d => jcAddConsumableRow(d));
   parse(row['Subs Detail']).forEach(d => jcAddSubRow(d));
-  parse(row['Drawings Detail']).forEach(d => jcAddDrawingRow(d));
   parse(row['Specs Detail']).forEach(d => jcAddSpecRow(d));
   parse(row['Reports Detail']).forEach(d => jcAddReportRow(d));
   jcOnJobTypeChange();
@@ -7790,9 +7824,16 @@ function jcCollectFormData() {
     subsDetail.push({ date:inputs[0]?.value||'', name:inputs[1]?.value||'', service:inputs[2]?.value||'', inv:inputs[3]?.value||'', cost:document.getElementById(tr.id+'-cost')?.value||'0' });
   });
   const drawings = [];
-  document.querySelectorAll('#jc-drawings-body tr').forEach(tr => {
-    if (!tr.id) return; const inputs=tr.querySelectorAll('input');
-    drawings.push({ 'Drawing No':inputs[0]?.value||'', 'Drawing Title':inputs[1]?.value||'', 'Revision No':inputs[2]?.value||'', 'Date':inputs[3]?.value||'', 'Source':tr.querySelector('select')?.value||'Client' });
+  document.querySelectorAll('#jc-drawings-body tr[data-drawing-id]').forEach(tr => {
+    const inputs = tr.querySelectorAll('input[type=text], input[type=date]');
+    drawings.push({
+      id:            tr.dataset.drawingId,
+      drawing_no:    inputs[0]?.value || '',
+      drawing_title: inputs[1]?.value || '',
+      revision_no:   inputs[2]?.value || '',
+      date:          inputs[3]?.value || null,
+      source:        tr.querySelector('select')?.value || 'Client',
+    });
   });
   const specs = [];
   document.querySelectorAll('#jc-specs-body tr').forEach(tr => {
@@ -7825,7 +7866,7 @@ function jcCollectFormData() {
     jsaDate:       get('jc-f-jsa-date'),       jsaBy:         get('jc-f-jsa-by'),
     dateCompleted: get('jc-f-date-completed'), inspectedBy:   get('jc-f-inspected-by'),
     qcResult:      get('jc-f-qc-result'),      qcNotes:       get('jc-f-qc-notes'),
-    qcState:       JSON.stringify(qcState),    drawings:      JSON.stringify(drawings),
+    qcState:       JSON.stringify(qcState),    drawingRows:   drawings,
     specs:         JSON.stringify(specs),      reports:       JSON.stringify(reports),
     labourDetail:  JSON.stringify(labourDetail), equipDetail: JSON.stringify(equipDetail),
     matsDetail:    JSON.stringify(matsDetail),   consDetail:  JSON.stringify(consDetail),
@@ -8263,18 +8304,308 @@ function jcUpdateSubTotals() {
 
 // ── DRAWINGS / SPECS / REPORTS ────────────────────────────────────
 function jcAddDrawingRow(d) {
-  const tbody=document.getElementById('jc-drawings-body'); if (!tbody) return;
-  const rid='jc-dr-'+Date.now()+Math.random().toString(36).substr(2,4);
-  const tr=document.createElement('tr'); tr.id=rid;
-  tr.innerHTML=`
-    <td><input type="text" placeholder="DWG-001" value="${d&&d['Drawing No']||''}"></td>
-    <td><input type="text" placeholder="Drawing title" value="${d&&d['Drawing Title']||''}"></td>
-    <td><input type="text" placeholder="Rev A" value="${d&&d['Revision No']||''}"></td>
-    <td><input type="date" value="${d&&d['Date']||''}"></td>
-    <td><select><option value="Client">Client</option><option value="Internal">Internal</option></select></td>
-    <td><button class="btn-del" onclick="document.getElementById('${rid}').remove();">✕</button></td>`;
-  if (d&&d['Source']) tr.querySelector('select').value=d['Source'];
+  // d is a job_drawings DB row: { id, drawing_no, drawing_title, revision_no, date, source, storage_key, archived }
+  const tbody = document.getElementById('jc-drawings-body');
+  if (!tbody) return;
+  const rid = 'jc-dr-' + d.id;
+  const tr = document.createElement('tr');
+  tr.id = rid;
+  tr.dataset.drawingId = d.id;
+
+  tr.innerHTML = `
+    <td><input type="text" placeholder="DWG-001" value="" oninput="jcMarkDirty()"></td>
+    <td><input type="text" placeholder="Drawing title" value="" oninput="jcMarkDirty()"></td>
+    <td><input type="text" placeholder="Rev A" value="" oninput="jcMarkDirty()"></td>
+    <td><input type="date" value="" oninput="jcMarkDirty()"></td>
+    <td><select onchange="jcMarkDirty()"><option value="Client">Client</option><option value="Internal">Internal</option></select></td>
+    <td class="jc-dr-pdf-cell">
+      <input type="file" accept=".pdf" id="${rid}-file" style="display:none">
+      <button class="btn-upload-pdf" id="${rid}-upload-btn">⬆ Upload</button>
+    </td>
+    <td><button class="btn-del" id="${rid}-del-btn">✕</button></td>`;
+
+  // Set values after innerHTML to avoid XSS from user content in value attrs
+  const inputs = tr.querySelectorAll('input[type=text], input[type=date]');
+  inputs[0].value = d.drawing_no    || '';
+  inputs[1].value = d.drawing_title || '';
+  inputs[2].value = d.revision_no   || '';
+  inputs[3].value = d.date          || '';
+  tr.querySelector('select').value  = d.source || 'Client';
+
+  // Wire PDF cell
+  const fileInput = tr.querySelector(`#${rid}-file`);
+  const uploadBtn = tr.querySelector(`#${rid}-upload-btn`);
+  fileInput.addEventListener('change', () => jcUploadDrawingPdf(d.id, rid, fileInput));
+  uploadBtn.addEventListener('click',  () => fileInput.click());
+
+  // If PDF already attached, replace upload button with view + replace
+  if (d.storage_key) jcSetDrawingRowHasFile(rid, d.storage_key);
+
+  // Delete = soft archive
+  tr.querySelector(`#${rid}-del-btn`).addEventListener('click', () => jcArchiveDrawing(d.id, rid));
+
   tbody.appendChild(tr);
+}
+
+function jcSetDrawingRowHasFile(rid, storageKey) {
+  const cell = document.querySelector(`#${rid} .jc-dr-pdf-cell`);
+  if (!cell) return;
+  cell.dataset.storageKey = storageKey;
+  const uploadBtn = cell.querySelector('.btn-upload-pdf');
+  if (uploadBtn) uploadBtn.remove();
+  if (!cell.querySelector('.btn-view-pdf')) {
+    const viewA = document.createElement('a');
+    viewA.href = '#'; viewA.className = 'btn-view-pdf'; viewA.textContent = '📄 View';
+    viewA.addEventListener('click', e => { e.preventDefault(); jcViewDrawingPdf(cell.dataset.storageKey); });
+    const replaceBtn = document.createElement('button');
+    replaceBtn.className = 'btn-replace-pdf'; replaceBtn.title = 'Replace PDF'; replaceBtn.textContent = '↺';
+    replaceBtn.addEventListener('click', () => cell.closest('tr').querySelector('input[type=file]').click());
+    cell.appendChild(viewA);
+    cell.appendChild(replaceBtn);
+  }
+}
+async function jcAddNewDrawingRow() {
+  if (!jcCurrentJobId) {
+    showToast('Save the job before adding drawings.', 'warn');
+    return;
+  }
+  try {
+    const rows = await sbPost('job_drawings', {
+      job_id:     jcCurrentJobId,
+      company_id: currentCompany.id,
+      source:     'Client',
+      created_by: currentUser.id,
+    });
+    if (!rows || !rows[0]) throw new Error('No row returned');
+    jcAddDrawingRow(rows[0]);
+  } catch(err) {
+    showToast('Failed to add drawing: ' + (err.message || err), 'error');
+  }
+}
+async function jcUploadDrawingPdf(drawingId, rid, fileInput) {
+  const file = fileInput.files[0];
+  if (!file) return;
+  if (file.type !== 'application/pdf') {
+    showToast('Only PDF files are accepted.', 'error');
+    fileInput.value = '';
+    return;
+  }
+  if (file.size > 20 * 1024 * 1024) {
+    showToast('File must be under 20 MB.', 'error');
+    fileInput.value = '';
+    return;
+  }
+
+  const cell = document.querySelector(`#${rid} .jc-dr-pdf-cell`);
+  if (!cell) return;
+
+  const prevContent = cell.innerHTML;
+  cell.innerHTML = '<span style="font-size:11px;color:var(--text-3)">Uploading…</span>';
+
+  try {
+    const safeName   = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storageKey = `${currentCompany.id}/${jcCurrentJobId}/${Date.now()}-${safeName}`;
+    const authToken  = _accessToken || SUPABASE_KEY;
+
+    const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/job-drawings/${storageKey}`, {
+      method: 'POST',
+      headers: {
+        'apikey':        SUPABASE_KEY,
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type':  'application/pdf',
+        'x-upsert':      'true',
+      },
+      body: file,
+    });
+    if (!uploadRes.ok) {
+      const e = await uploadRes.json().catch(() => ({}));
+      throw new Error(e.message || uploadRes.status);
+    }
+
+    await sbPatch('job_drawings', drawingId, { storage_key: storageKey });
+
+    cell.innerHTML = `<input type="file" accept=".pdf" id="${rid}-file" style="display:none">`;
+    const newFileInput = cell.querySelector('input[type=file]');
+    newFileInput.addEventListener('change', () => jcUploadDrawingPdf(drawingId, rid, newFileInput));
+    jcSetDrawingRowHasFile(rid, storageKey);
+
+    showToast('PDF uploaded.', 'success');
+  } catch(err) {
+    cell.innerHTML = prevContent;
+    const fi = cell.querySelector('input[type=file]');
+    if (fi) fi.addEventListener('change', () => jcUploadDrawingPdf(drawingId, rid, fi));
+    showToast('Upload failed: ' + (err.message || err), 'error');
+  }
+  fileInput.value = '';
+}
+async function jcViewDrawingPdf(storageKey) {
+  try {
+    const authToken = _accessToken || SUPABASE_KEY;
+    const res = await fetch(
+      `${SUPABASE_URL}/storage/v1/object/sign/job-drawings/${storageKey}`,
+      {
+        method: 'POST',
+        headers: {
+          'apikey':        SUPABASE_KEY,
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type':  'application/json',
+        },
+        body: JSON.stringify({ expiresIn: 3600 }),
+      }
+    );
+    if (!res.ok) throw new Error('Could not generate download link.');
+    const data = await res.json();
+    const signedUrl = data.signedURL || data.signedUrl;
+    if (!signedUrl) throw new Error('No signed URL returned.');
+    window.open(SUPABASE_URL + signedUrl, '_blank');
+  } catch(err) {
+    showToast('Could not open drawing — try again.', 'error');
+  }
+}
+async function jcArchiveDrawing(drawingId, rid) {
+  const tr = document.getElementById(rid);
+  const drawingNo = tr?.querySelector('input[type=text]')?.value || 'this drawing';
+  const ok = await showConfirm(
+    `Move "${drawingNo}" to the archive?`,
+    'Archive Drawing',
+    'Archive'
+  );
+  if (!ok) return;
+  try {
+    await sbPatch('job_drawings', drawingId, {
+      archived:    true,
+      archived_at: nowISO(),
+      archived_by: currentUser.id,
+    });
+    const inputs   = tr.querySelectorAll('input[type=text], input[type=date]');
+    const sel      = tr.querySelector('select');
+    const cell     = tr.querySelector('.jc-dr-pdf-cell');
+    const archivedRow = {
+      id:            drawingId,
+      drawing_no:    inputs[0]?.value || '',
+      drawing_title: inputs[1]?.value || '',
+      revision_no:   inputs[2]?.value || '',
+      date:          inputs[3]?.value || '',
+      source:        sel?.value || 'Client',
+      storage_key:   cell?.dataset.storageKey || null,
+      archived:      true,
+    };
+    tr.remove();
+    jcAppendArchivedRow(archivedRow);
+    showToast('Drawing archived.', 'success');
+  } catch(err) {
+    showToast('Archive failed: ' + (err.message || err), 'error');
+  }
+}
+function jcRenderArchivedDrawings(drawings) {
+  const container = document.getElementById('jc-archived-drawings');
+  const countEl   = document.getElementById('jc-archived-drawings-count');
+  const body      = document.getElementById('jc-archived-drawings-body');
+  if (!container || !body) return;
+  body.innerHTML = '';
+  if (!isAdmin() || drawings.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = '';
+  if (countEl) countEl.textContent = drawings.length;
+  drawings.forEach(d => jcAppendArchivedRow(d));
+}
+function jcAppendArchivedRow(d) {
+  if (!isAdmin()) return;
+  const container = document.getElementById('jc-archived-drawings');
+  const body      = document.getElementById('jc-archived-drawings-body');
+  const countEl   = document.getElementById('jc-archived-drawings-count');
+  if (!body) return;
+
+  container.style.display = '';
+  const current = parseInt(countEl?.textContent || '0', 10);
+  if (countEl) countEl.textContent = current + 1;
+
+  const rid = 'jc-ar-' + d.id;
+  const div = document.createElement('div');
+  div.id = rid;
+  div.style.cssText = 'display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px;color:var(--text-3);';
+  div.innerHTML = `
+    <span style="width:110px;flex-shrink:0">${d.drawing_no  || '—'}</span>
+    <span style="flex:1">${d.drawing_title || '—'}</span>
+    <span style="width:70px;flex-shrink:0">${d.revision_no  || '—'}</span>
+    <span style="width:100px;flex-shrink:0">${d.date || '—'}</span>`;
+
+  const restoreBtn = document.createElement('button');
+  restoreBtn.className = 'btn btn-ghost btn-sm';
+  restoreBtn.textContent = 'Restore';
+  restoreBtn.style.fontSize = '11px';
+  restoreBtn.addEventListener('click', () => jcRestoreDrawing(d.id, rid));
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.className = 'btn btn-sm';
+  deleteBtn.textContent = 'Delete Permanently';
+  deleteBtn.style.cssText = 'font-size:11px;color:#c00;border-color:#c00;';
+  deleteBtn.addEventListener('click', () => jcHardDeleteDrawing(d.id, d.storage_key, rid));
+
+  div.appendChild(restoreBtn);
+  div.appendChild(deleteBtn);
+  body.appendChild(div);
+}
+function jcToggleArchivedDrawings() {
+  const body    = document.getElementById('jc-archived-drawings-body');
+  const chevron = document.getElementById('jc-archived-drawings-chevron');
+  if (!body) return;
+  const open = body.style.display === 'none';
+  body.style.display = open ? '' : 'none';
+  if (chevron) chevron.textContent = open ? '▼' : '▶';
+}
+async function jcRestoreDrawing(drawingId, archivedRid) {
+  try {
+    await sbPatch('job_drawings', drawingId, {
+      archived:    false,
+      archived_at: null,
+      archived_by: null,
+    });
+    const fetched = await sbGet('job_drawings', `id=eq.${drawingId}&limit=1`);
+    if (fetched && fetched[0]) jcAddDrawingRow(fetched[0]);
+    document.getElementById(archivedRid)?.remove();
+    const countEl = document.getElementById('jc-archived-drawings-count');
+    if (countEl) {
+      const n = Math.max(0, parseInt(countEl.textContent || '1', 10) - 1);
+      countEl.textContent = n;
+      if (n === 0) document.getElementById('jc-archived-drawings').style.display = 'none';
+    }
+    showToast('Drawing restored.', 'success');
+  } catch(err) {
+    showToast('Restore failed: ' + (err.message || err), 'error');
+  }
+}
+async function jcHardDeleteDrawing(drawingId, storageKey, archivedRid) {
+  const typed = prompt('Type DELETE to permanently remove this drawing and its PDF:');
+  if (typed !== 'DELETE') return;
+  try {
+    if (storageKey) {
+      const authToken = _accessToken || SUPABASE_KEY;
+      const delRes = await fetch(`${SUPABASE_URL}/storage/v1/object/job-drawings`, {
+        method: 'DELETE',
+        headers: {
+          'apikey':        SUPABASE_KEY,
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type':  'application/json',
+        },
+        body: JSON.stringify({ prefixes: [storageKey] }),
+      });
+      if (!delRes.ok) console.warn('Storage delete may have failed — proceeding with DB delete.');
+    }
+    await sbDelete('job_drawings', drawingId);
+    document.getElementById(archivedRid)?.remove();
+    const countEl = document.getElementById('jc-archived-drawings-count');
+    if (countEl) {
+      const n = Math.max(0, parseInt(countEl.textContent || '1', 10) - 1);
+      countEl.textContent = n;
+      if (n === 0) document.getElementById('jc-archived-drawings').style.display = 'none';
+    }
+    showToast('Drawing permanently deleted.', 'success');
+  } catch(err) {
+    showToast('Delete failed: ' + (err.message || err), 'error');
+  }
 }
 function jcAddSpecRow(d) {
   const tbody=document.getElementById('jc-specs-body'); if (!tbody) return;
