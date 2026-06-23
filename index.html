@@ -7399,7 +7399,7 @@ function jcRenderDashTable(jobs) {
       <td style="font-size:11px;">${escHTML(j.location||'—')}</td>
       <td style="font-family:'DM Mono',monospace;font-size:11px;">${j.date_received||'—'}</td>
       <td style="font-family:'DM Mono',monospace;font-size:11px;">${dueCell}</td>
-      <td style="color:var(--text-2);">${desc}</td>
+      <td style="color:var(--text-2);">${desc}${(j.status==='Completed'||j.status==='Invoiced')?`<button class="btn btn-ghost btn-sm btn-icon" onclick="event.stopPropagation();openEmailDocument('work-order','${j.id}')" title="Email Receipt" style="font-size:13px;padding:2px 5px;margin-left:6px;vertical-align:middle;">✉️</button>`:''}</td>
     </tr>`;
   }).join('');
 }
@@ -14320,6 +14320,162 @@ async function generatePDFBase64(source) {
     }
     return { to: '', subject: '', filename: 'document.pdf' };
   }
+
+  function buildWorkOrderReceiptHTML(job, labour, materials, consumables, company) {
+  const co = company || {};
+  const fmt = (n) => 'TT$' + (parseFloat(n)||0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+
+  // Labour subtotal
+  const labourTotal = labour.reduce((s,r) => s + (parseFloat(r.amount_ttd)||0), 0);
+  // Materials subtotal
+  const matsTotal   = materials.reduce((s,r) => s + (parseFloat(r.total_cost_ttd)||0), 0);
+  // Consumables subtotal
+  const consTotal   = consumables.reduce((s,r) => s + (parseFloat(r.total_cost_ttd)||0), 0);
+  const grandTotal  = labourTotal + matsTotal + consTotal;
+
+  // Company header
+  const coHeader = `
+    <div style="display:flex;align-items:center;gap:16px;border-bottom:2px solid #222;padding-bottom:10px;margin-bottom:14px;">
+      ${co.logo_url ? `<img src="${co.logo_url}" style="height:48px;object-fit:contain;" alt="">` : ''}
+      <div>
+        <div style="font-size:18px;font-weight:700;">${escHTML(co.name||'')}</div>
+        <div style="font-size:11px;color:#555;">${[co.address_1,co.address_2,co.city,co.country].filter(Boolean).map(escHTML).join(', ')}</div>
+        ${co.phone ? `<div style="font-size:11px;color:#555;">Tel: ${escHTML(co.phone)}</div>` : ''}
+        ${co.vat_no ? `<div style="font-size:11px;color:#555;">VAT Reg: ${escHTML(co.vat_no)}</div>` : ''}
+      </div>
+    </div>`;
+
+  // Labour section
+  const labourSection = labour.length ? `
+    <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;color:#444;margin:14px 0 4px;">Labour</h4>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;">
+      <thead><tr style="background:#f0f0f0;">
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;">Date</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;">Technician</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;">Classification</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Hours</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Rate</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Amount</th>
+      </tr></thead>
+      <tbody>
+        ${labour.map(r => `<tr>
+          <td style="border:1px solid #ccc;padding:4px 6px;">${r.entry_date||'—'}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;">${escHTML(r.technician||'—')}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;">${escHTML(r.classification||'—')}${r.is_overtime?' (OT)':''}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${(parseFloat(r.hours)||0).toFixed(2)}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${fmt(r.rate_ttd)}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${fmt(r.amount_ttd)}</td>
+        </tr>`).join('')}
+        <tr style="background:#f9f9f9;font-weight:700;">
+          <td colspan="5" style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Labour Subtotal</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${fmt(labourTotal)}</td>
+        </tr>
+      </tbody>
+    </table>` : '';
+
+  // Materials section
+  const matsSection = materials.length ? `
+    <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;color:#444;margin:14px 0 4px;">Materials</h4>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;">
+      <thead><tr style="background:#f0f0f0;">
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;">Description</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;">Category</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Qty</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;">Unit</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Unit Cost</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Total</th>
+      </tr></thead>
+      <tbody>
+        ${materials.map(r => `<tr>
+          <td style="border:1px solid #ccc;padding:4px 6px;">${escHTML(r.description||'—')}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;">${escHTML(r.category||'—')}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${(parseFloat(r.quantity)||0).toFixed(2)}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;">${escHTML(r.unit||'—')}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${fmt(r.unit_cost_ttd)}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${fmt(r.total_cost_ttd)}</td>
+        </tr>`).join('')}
+        <tr style="background:#f9f9f9;font-weight:700;">
+          <td colspan="5" style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Materials Subtotal</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${fmt(matsTotal)}</td>
+        </tr>
+      </tbody>
+    </table>` : '';
+
+  // Consumables section
+  const consSection = consumables.length ? `
+    <h4 style="font-size:12px;font-weight:700;text-transform:uppercase;color:#444;margin:14px 0 4px;">Consumables</h4>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;">
+      <thead><tr style="background:#f0f0f0;">
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;">Description</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;">Stock Code</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Qty</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:left;">Unit</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Unit Cost</th>
+        <th style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Total</th>
+      </tr></thead>
+      <tbody>
+        ${consumables.map(r => `<tr>
+          <td style="border:1px solid #ccc;padding:4px 6px;">${escHTML(r.description||'—')}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;">${escHTML(r.stock_code||'—')}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${(parseFloat(r.quantity)||0).toFixed(2)}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;">${escHTML(r.unit||'—')}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${fmt(r.unit_cost_ttd)}</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${fmt(r.total_cost_ttd)}</td>
+        </tr>`).join('')}
+        <tr style="background:#f9f9f9;font-weight:700;">
+          <td colspan="5" style="border:1px solid #ccc;padding:4px 6px;text-align:right;">Consumables Subtotal</td>
+          <td style="border:1px solid #ccc;padding:4px 6px;text-align:right;">${fmt(consTotal)}</td>
+        </tr>
+      </tbody>
+    </table>` : '';
+
+  return `<div style="font-family:Arial,sans-serif;font-size:12px;color:#222;padding:20px;max-width:794px;background:#fff;">
+    ${coHeader}
+    <div style="text-align:center;margin-bottom:14px;">
+      <div style="font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">Work Order Receipt</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:14px;">
+      <tr>
+        <td style="padding:3px 8px;font-weight:700;width:130px;">Work Order No.</td>
+        <td style="padding:3px 8px;">${escHTML(job.job_no||'—')}</td>
+        <td style="padding:3px 8px;font-weight:700;width:130px;">Date Received</td>
+        <td style="padding:3px 8px;">${job.date_received||'—'}</td>
+      </tr>
+      <tr>
+        <td style="padding:3px 8px;font-weight:700;">Customer</td>
+        <td style="padding:3px 8px;">${escHTML(job.customer||'—')}</td>
+        <td style="padding:3px 8px;font-weight:700;">Date Completed</td>
+        <td style="padding:3px 8px;">${job.date_completed||'—'}</td>
+      </tr>
+      <tr>
+        <td style="padding:3px 8px;font-weight:700;">Contact</td>
+        <td style="padding:3px 8px;">${escHTML(job.contact||'—')}</td>
+        <td style="padding:3px 8px;font-weight:700;">Type</td>
+        <td style="padding:3px 8px;">${escHTML(job.job_type||'—')}</td>
+      </tr>
+      <tr>
+        <td style="padding:3px 8px;font-weight:700;">Location</td>
+        <td style="padding:3px 8px;" colspan="3">${escHTML(job.location||'—')}</td>
+      </tr>
+      ${job.description ? `<tr>
+        <td style="padding:3px 8px;font-weight:700;vertical-align:top;">Description</td>
+        <td style="padding:3px 8px;" colspan="3">${escHTML(job.description)}</td>
+      </tr>` : ''}
+    </table>
+    ${labourSection}
+    ${matsSection}
+    ${consSection}
+    <div style="margin-top:16px;border-top:2px solid #222;padding-top:10px;text-align:right;">
+      <span style="font-size:14px;font-weight:700;">Grand Total: ${fmt(grandTotal)}</span>
+    </div>
+    ${job.costing_notes ? `<div style="margin-top:10px;font-size:11px;color:#555;"><strong>Notes:</strong> ${escHTML(job.costing_notes)}</div>` : ''}
+    <div style="margin-top:24px;display:flex;gap:40px;">
+      <div style="flex:1;border-top:1px solid #555;padding-top:4px;font-size:11px;text-align:center;">Prepared By</div>
+      <div style="flex:1;border-top:1px solid #555;padding-top:4px;font-size:11px;text-align:center;">Customer Signature</div>
+      <div style="flex:1;border-top:1px solid #555;padding-top:4px;font-size:11px;text-align:center;">Date</div>
+    </div>
+  </div>`;
+}
 
   async function _buildEmailPDF(type, id) {
     const staging = document.getElementById('email-pdf-staging');
