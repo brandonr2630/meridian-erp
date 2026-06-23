@@ -80,7 +80,12 @@ Deno.serve(async (req: Request) => {
 
   const callerToken = authHeader.slice(7);
 
-  if (source !== "cron") {
+  if (source === "cron") {
+    // Cron callers must present the service role key as their bearer token
+    if (callerToken !== SERVICE_ROLE_KEY) {
+      return corsResponse(JSON.stringify({ error: "Unauthorized" }), 401);
+    }
+  } else {
     // Non-cron callers must be active ERP users
     let callerSub: string;
     try {
@@ -108,7 +113,6 @@ Deno.serve(async (req: Request) => {
       return corsResponse(JSON.stringify({ error: "Caller has no active ERP profile" }), 403);
     }
   }
-  // Cron calls pass the service role key — treated as trusted, no further check needed.
 
   // ── 3. Look up notification type ──────────────────────────────────────────
   const ntRes = await fetch(
@@ -255,6 +259,12 @@ Deno.serve(async (req: Request) => {
       const prefs = await prefRes.json() as { enabled: boolean }[];
       if (prefs.length > 0 && prefs[0].enabled === false) {
         // User has explicitly disabled this notification
+        await insertNotificationLog({
+          SUPABASE_URL, SERVICE_ROLE_KEY,
+          event_key, company_id, entity_type, entity_id,
+          recipient_id: userId, recipient_email: null,
+          subject: null, error: "opted_out",
+        });
         results.push({ user_id: userId, sent: false, error: "disabled_by_preference" });
         continue;
       }
