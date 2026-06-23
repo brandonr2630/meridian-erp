@@ -1,6 +1,35 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-22 · Session 35*
+*Last updated: 2026-06-22 · Session 36*
+
+---
+
+## Session 36 — Work Order numbering fix + Role Management nav fix
+
+**Date:** 2026-06-22
+**Branch:** (direct edits to `index.html`)
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| `index.html` — `jcNewJob()` | Removed pre-fetch of job number | Was calling `jcFetchNewJobNo()` at form-open, consuming a sequence slot even if the user cancelled without saving — causing gaps. Number now assigned at first save. |
+| `index.html` — `jcDuplicateJob()` | Removed pre-fetch of job number | Same gap issue as above. |
+| `index.html` — `jcSaveJobData()` | Fetch job number at save time | When `!jobId` (new job), fetches `jcFetchNewJobNo()` before building the DB record; updates `#jc-job-no-display` with the assigned number. |
+| `index.html` — `jcFetchNewJobNo()` | Updated fallback | Fallback was `'JC-DRAFT'` → changed to `'WO-DRAFT'`. |
+| `index.html` — Role Management nav item | `data-perm` fixed | Was `admin:roles` (atom missing from system role JSONB) → changed to `admin:users` (same gate as User Management). Inner span classes also corrected to match sidebar convention. |
+| `index.html` — `loadRoleManagement()` | Admin guard added | Added `isAdmin()` check matching `loadUserManagement()` pattern. |
+| `index.html` — `VIEW_SECTIONS` | `role-management` added | Ensures Setup section auto-expands when navigating to Role Management. |
+| `supabase/migrations/20260622_work_order_renumber.sql` | New migration **(manual apply required)** | Rewrites `next_job_no()` to emit `WO-###` prefix; renumbers all existing jobs from `WO-001` ordered by `created_at`; syncs `job_audit_log`; resets sequence. |
+
+### Manual steps required
+
+1. Apply `supabase/migrations/20260622_work_order_renumber.sql` in Supabase SQL Editor.
+
+### Notes
+
+- Job numbers now assigned at first save, not at form-open. The `#jc-job-no-display` shows `—` while filling in a new form; number appears after the first save.
+- Role Management is now visible to any user with `admin:users` permission (same as User Management). If you want to restrict it to super-admins only, change `data-perm` back to `admin:companies`.
 
 ---
 
