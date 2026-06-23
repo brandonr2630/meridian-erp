@@ -31,12 +31,16 @@
 
 - `20260622_email_delivery` — notification tables, sentinels, `send_from_email`
 
-### Manual steps remaining (Task 1)
+### Manual steps remaining
 
-1. Verify `terranresources.com` + `q2m.io` in [Resend dashboard](https://resend.com/domains) (DNS TXT records)
-2. Create Resend API key → add as `RESEND_API_KEY` in Supabase → Edge Functions → Secrets
-3. Apply `supabase/migrations/20260622_pg_cron_overdue_notifications.sql` in Supabase SQL Editor after replacing `{SERVICE_ROLE_KEY}`
-4. Set `send_from_email` per company in ERP → ERP Companies → Edit → "Send From Email" field
+1. ~~Verify `q2m.io` in Resend~~ ✅ done
+2. ~~Add `RESEND_API_KEY` to Supabase Edge Function secrets~~ ✅ done
+3. Set `send_from_email = noreply@q2m.io` for Q2M company in ERP → ERP Companies → Edit → "Send From Email"
+4. Apply `supabase/migrations/20260622_pg_cron_overdue_notifications.sql` in Supabase SQL Editor after replacing `{SERVICE_ROLE_KEY}`
+
+### Hotfix applied post-merge
+
+- `companies.pdf_page_size` column was missing from DB (pre-existing gap — code referenced it but migration was never written). Added via `ALTER TABLE companies ADD COLUMN IF NOT EXISTS pdf_page_size text DEFAULT 'letter'` directly in SQL Editor (2026-06-22).
 
 ### Notes
 
