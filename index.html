@@ -14721,6 +14721,18 @@ async function generatePDFBase64(source) {
     throw new Error(`Unknown email document type: ${type}`);
   }
 
+  function _sendNotification(eventKey, companyId, entityType, entityId, context) {
+    fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${_accessToken}`,
+        'apikey': SUPABASE_KEY
+      },
+      body: JSON.stringify({ event_key: eventKey, company_id: companyId, entity_type: entityType, entity_id: entityId, context })
+    }).catch(() => {});
+  }
+
   async function sendEmailDocument() {
     const btn = document.getElementById('btn-send-email');
     const to      = document.getElementById('email-doc-to').value.trim();
@@ -15382,6 +15394,25 @@ async function saveOpportunity() {
     await _saveOppTeam(oppId);
     closeModal('modal-opportunity');
     showToast(_editOppId ? 'Opportunity updated.' : 'Opportunity created.', 'success');
+    // Email notification on deal won/lost
+    if (payload.owner_id) {
+      const isWon  = status === 'won'  && existing?.status !== 'won';
+      const isLost = status === 'lost' && existing?.status !== 'lost';
+      if (isWon || isLost) {
+        _sendNotification(
+          isWon ? 'deal.won' : 'deal.lost',
+          currentCompany.id, 'opportunity', oppId, {
+            deal_name:         name,
+            deal_value:        payload.value ? fmt(payload.value, payload.currency || currentCompany.currency) : '—',
+            client_name:       contacts.find(c => c.id === payload.contact_id)?.trading_name
+                            || contacts.find(c => c.id === payload.contact_id)?.name || '—',
+            lost_reason:       payload.lost_reason || '—',
+            recipient_name:    erpUsers.find(u => u.id === payload.owner_id)?.full_name || '',
+            recipient_user_id: payload.owner_id
+          }
+        );
+      }
+    }
     await loadPipeline();
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
@@ -15393,6 +15424,20 @@ async function quickMarkOpp(id, status) {
     const patch = { status, [status === 'won' ? 'won_at' : 'lost_at']: nowISO() };
     await sbPatch('crm_opportunities', id, patch);
     showToast(`Opportunity marked as ${label}.`, 'success');
+    const opp = crmOpps.find(o => o.id === id);
+    if (opp?.owner_id) {
+      _sendNotification(
+        status === 'won' ? 'deal.won' : 'deal.lost',
+        currentCompany.id, 'opportunity', id, {
+          deal_name:         opp.name || '—',
+          deal_value:        opp.value ? fmt(opp.value, opp.currency || currentCompany.currency) : '—',
+          client_name:       contacts.find(c => c.id === opp.contact_id)?.trading_name
+                          || contacts.find(c => c.id === opp.contact_id)?.name || '—',
+          lost_reason:       opp.lost_reason || '—',
+          recipient_user_id: opp.owner_id
+        }
+      );
+    }
     await loadPipeline();
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
@@ -15743,6 +15788,15 @@ async function saveTask() {
         body:       payload.title,
         task_id:    taskId,
       }).then(() => { if (payload.assignee_id === currentUser.id) refreshNotifBadge(); }).catch(() => {});
+    }
+    if (payload.assignee_id && payload.assignee_id !== prevAssigneeId) {
+      _sendNotification('task.assigned', currentCompany.id, 'task', taskId, {
+        task_title:        payload.title,
+        due_date:          payload.due_date || '—',
+        description:       payload.description || '',
+        assigned_by:       currentUser.full_name,
+        recipient_user_id: payload.assignee_id
+      });
     }
     await loadCRMTasks();
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
