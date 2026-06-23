@@ -5712,7 +5712,7 @@ async function sb(path, opts = {}) {
 }
 async function sbGet(table, params = '')        { return sb(`${table}?${params}`); }
 async function sbPost(table, body)              { return sb(table, { method: 'POST', body }); }
-const NO_UPDATED_AT = new Set(['sequence_counters','crm_activities','crm_tasks','crm_team_members','opportunity_team','erp_notifications']);
+const NO_UPDATED_AT = new Set(['sequence_counters','crm_activities','crm_tasks','crm_team_members','opportunity_team','erp_notifications','erp_users']);
 async function sbPatch(table, id, body)         { const ts = NO_UPDATED_AT.has(table) ? {} : { updated_at: nowISO() }; return sb(`${table}?id=eq.${id}`, { method: 'PATCH', body: { ...body, ...ts } }); }
 async function sbPatchWhere(table, where, body) { const ts = NO_UPDATED_AT.has(table) ? {} : { updated_at: nowISO() }; return sb(`${table}?${where}`, { method: 'PATCH', prefer: 'return=minimal', body: { ...body, ...ts } }); }
 async function sbDelete(table, id)              { return sb(`${table}?id=eq.${id}`, { method: 'DELETE', prefer: 'return=minimal' }); }
