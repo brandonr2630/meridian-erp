@@ -3571,34 +3571,35 @@ body.light .global-search-results, body.light .split-btn-menu {
     </div>
   </div>
 
-  <!-- Edit Permissions Modal -->
-  <div class="modal" id="um-edit-modal" style="display:none;">
-    <div class="modal-content" style="max-width:520px;">
-      <div class="modal-header">
-        <div class="modal-title">Edit Permissions</div>
-        <button class="btn btn-ghost" onclick="closeEditPermissionsModal()">✕</button>
-      </div>
-      <div class="modal-body">
-        <div id="um-edit-user-name" style="font-size:13px;font-weight:600;color:var(--text-1);margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border);"></div>
-        <input type="hidden" id="um-edit-auth-id">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
-          <div class="field-group" style="margin-bottom:0;">
-            <label class="field-label">Role</label>
-            <select id="um-edit-role" class="field-input">
-              <!-- populated by openEditPermissionsModal() -->
-            </select>
-          </div>
-          <div class="field-group" style="margin-bottom:0;">
-            <label class="field-label">Company</label>
-            <select id="um-edit-company" class="field-input"></select>
-          </div>
+</div>
+
+<!-- ── EDIT PERMISSIONS MODAL ── -->
+<div class="modal-overlay" id="modal-edit-permissions" onclick="if(event.target===this)closeModal('modal-edit-permissions')">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header">
+      <div class="modal-title">Edit User Role</div>
+      <button class="modal-close" onclick="closeModal('modal-edit-permissions')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="um-edit-user-name" style="font-size:13px;font-weight:600;color:var(--text-1);margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border);"></div>
+      <input type="hidden" id="um-edit-auth-id">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+        <div class="field-group" style="margin-bottom:0;">
+          <label class="field-label">Role</label>
+          <select id="um-edit-role" class="field-input">
+            <!-- populated by openEditPermissionsModal() -->
+          </select>
         </div>
-        <div id="um-edit-error" style="color:var(--red);font-size:12px;min-height:16px;"></div>
+        <div class="field-group" style="margin-bottom:0;">
+          <label class="field-label">Company</label>
+          <select id="um-edit-company" class="field-input"></select>
+        </div>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-outline" onclick="closeEditPermissionsModal()">Cancel</button>
-        <button class="btn btn-primary" id="um-edit-save-btn" onclick="saveEditPermissions()">Save Changes</button>
-      </div>
+      <div id="um-edit-error" style="color:var(--red);font-size:12px;min-height:16px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-edit-permissions')">Cancel</button>
+      <button class="btn btn-primary" id="um-edit-save-btn" onclick="saveEditPermissions()">Save Changes</button>
     </div>
   </div>
 </div>
@@ -6645,11 +6646,11 @@ async function openEditPermissionsModal(authUserId) {
   ).catch(() => []);
   if (assignments.length) roleSel.value = assignments[0].role_id;
 
-  document.getElementById('um-edit-modal').style.display = 'flex';
+  document.getElementById('modal-edit-permissions').classList.add('show');
 }
 
 function closeEditPermissionsModal() {
-  document.getElementById('um-edit-modal').style.display = 'none';
+  closeModal('modal-edit-permissions');
 }
 
 
