@@ -5075,6 +5075,7 @@ body.light .global-search-results, body.light .split-btn-menu {
         <div class="field"><label class="field-label">VAT Registration No.</label><input type="text" id="erp-co-vat" class="mono" placeholder="Shown on invoice if present"></div>
         <div class="field"><label class="field-label">Phone</label><input type="tel" id="erp-co-phone"></div>
         <div class="field"><label class="field-label">Email</label><input type="email" id="erp-co-email"></div>
+        <div class="field"><label class="field-label">Send From Email <span style="font-size:10px;color:var(--text-3);font-weight:400;">(Resend verified address)</span></label><input type="email" id="erp-co-send-from" placeholder="e.g. accounts@terranresources.com"></div>
       </div>
 
       <!-- Address -->
@@ -9688,7 +9689,7 @@ function openAddCompany() {
   document.getElementById('modal-erp-company-title').textContent = 'Add Company';
   document.getElementById('save-erp-company-btn').textContent = 'Save Company';
   ['erp-co-code','erp-co-name','erp-co-trading','erp-co-tin','erp-co-vat',
-   'erp-co-phone','erp-co-email','erp-co-line1','erp-co-line2','erp-co-line3',
+   'erp-co-phone','erp-co-email','erp-co-send-from','erp-co-line1','erp-co-line2','erp-co-line3',
    'erp-co-country','erp-co-postal','erp-co-bank'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('erp-co-currency').value = 'TTD';
   document.getElementById('erp-co-pdf-size').value  = 'letter';
@@ -9716,6 +9717,7 @@ async function openEditErpCompany(id) {
     document.getElementById('erp-co-vat').value      = c.vat_reg || '';
     document.getElementById('erp-co-phone').value    = c.phone || '';
     document.getElementById('erp-co-email').value    = c.email || '';
+    document.getElementById('erp-co-send-from').value = c.send_from_email || '';
     document.getElementById('erp-co-line1').value    = c.address_line1 || '';
     document.getElementById('erp-co-line2').value    = c.address_line2 || '';
     document.getElementById('erp-co-line3').value    = c.address_line3 || '';
@@ -9780,6 +9782,7 @@ async function saveErpCompany() {
       vat_reg:        document.getElementById('erp-co-vat').value || null,
       phone:          document.getElementById('erp-co-phone').value || null,
       email:          document.getElementById('erp-co-email').value || null,
+      send_from_email: document.getElementById('erp-co-send-from').value.trim() || null,
       address_line1:  document.getElementById('erp-co-line1').value || null,
       address_line2:  document.getElementById('erp-co-line2').value || null,
       address_line3:  document.getElementById('erp-co-line3').value || null,
