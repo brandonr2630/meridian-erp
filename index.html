@@ -303,6 +303,8 @@ body {
   flex-direction: column;
   flex-shrink: 0;
   overflow-y: auto;
+  opacity: 0;
+  transition: opacity 0.15s ease;
 }
 .sidebar-section { padding: 16px 12px 8px; }
 .sidebar-section-label {
@@ -2063,8 +2065,8 @@ body.light .global-search-results, body.light .split-btn-menu {
           <div class="page-subtitle" id="dash-date"></div>
         </div>
         <div class="page-actions" id="dash-actions">
-          <button class="btn btn-outline btn-sm" onclick="openNewQuotation()">+ Quotation</button>
-          <button class="btn btn-primary btn-sm" onclick="openNewInvoice()">+ Invoice</button>
+          <button class="btn btn-outline btn-sm" id="dash-btn-quotation" onclick="openNewQuotation()">+ Quotation</button>
+          <button class="btn btn-primary btn-sm" id="dash-btn-invoice" onclick="openNewInvoice()">+ Invoice</button>
         </div>
       </div>
       <div class="page-body">
@@ -2081,46 +2083,50 @@ body.light .global-search-results, body.light .split-btn-menu {
         </div>
 
         <!-- Zone 1: Attention Required -->
-        <div style="margin-bottom:8px;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);">Needs Attention</div>
-        <div class="stat-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:24px;" id="dash-attention">
-          <div class="stat-card negative dash-alert-card" onclick="navigate('ar');filterARStatus('overdue')" style="cursor:pointer;">
-            <div class="stat-label">Overdue Invoices</div>
-            <div class="stat-value" id="alert-overdue">—</div>
-            <div class="stat-sub" id="alert-overdue-val">—</div>
-          </div>
-          <div class="stat-card accent dash-alert-card" onclick="navigate('ar')" style="cursor:pointer;">
-            <div class="stat-label">Due in 7 Days</div>
-            <div class="stat-value" id="alert-due7">—</div>
-            <div class="stat-sub" id="alert-due7-val">—</div>
-          </div>
-          <div class="stat-card dash-alert-card" onclick="navigate('quotations')" style="cursor:pointer;">
-            <div class="stat-label">Expiring Quotes</div>
-            <div class="stat-value" id="alert-expiring">—</div>
-            <div class="stat-sub">Next 7 days</div>
-          </div>
-          <div class="stat-card dash-alert-card" onclick="navigate('ap')" style="cursor:pointer;">
-            <div class="stat-label">Bills Due Soon</div>
-            <div class="stat-value" id="alert-bills">—</div>
-            <div class="stat-sub" id="alert-bills-val">—</div>
-          </div>
-          <div class="stat-card dash-alert-card" onclick="navigate('ar')" style="cursor:pointer;">
-            <div class="stat-label">Draft Documents</div>
-            <div class="stat-value" id="alert-drafts">—</div>
-            <div class="stat-sub">Awaiting action</div>
+        <div id="dash-attention-zone">
+          <div style="margin-bottom:8px;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);">Needs Attention</div>
+          <div class="stat-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:24px;" id="dash-attention">
+            <div id="dash-card-overdue" class="stat-card negative dash-alert-card" onclick="navigate('ar');filterARStatus('overdue')" style="cursor:pointer;">
+              <div class="stat-label">Overdue Invoices</div>
+              <div class="stat-value" id="alert-overdue">—</div>
+              <div class="stat-sub" id="alert-overdue-val">—</div>
+            </div>
+            <div id="dash-card-due7" class="stat-card accent dash-alert-card" onclick="navigate('ar')" style="cursor:pointer;">
+              <div class="stat-label">Due in 7 Days</div>
+              <div class="stat-value" id="alert-due7">—</div>
+              <div class="stat-sub" id="alert-due7-val">—</div>
+            </div>
+            <div id="dash-card-expiring" class="stat-card dash-alert-card" onclick="navigate('quotations')" style="cursor:pointer;">
+              <div class="stat-label">Expiring Quotes</div>
+              <div class="stat-value" id="alert-expiring">—</div>
+              <div class="stat-sub">Next 7 days</div>
+            </div>
+            <div id="dash-card-bills" class="stat-card dash-alert-card" onclick="navigate('ap')" style="cursor:pointer;">
+              <div class="stat-label">Bills Due Soon</div>
+              <div class="stat-value" id="alert-bills">—</div>
+              <div class="stat-sub" id="alert-bills-val">—</div>
+            </div>
+            <div id="dash-card-drafts" class="stat-card dash-alert-card" onclick="navigate('ar')" style="cursor:pointer;">
+              <div class="stat-label">Draft Documents</div>
+              <div class="stat-value" id="alert-drafts">—</div>
+              <div class="stat-sub">Awaiting action</div>
+            </div>
           </div>
         </div>
 
         <!-- Zone 2: Business Snapshot -->
-        <div style="margin-bottom:8px;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);">Business Snapshot</div>
-        <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px;">
-          <div class="stat-card"><div class="stat-label">Total Receivable</div><div class="stat-value" id="stat-ar">—</div><div class="stat-sub" id="stat-ar-sub">Outstanding invoices</div></div>
-          <div class="stat-card negative"><div class="stat-label">Total Payable</div><div class="stat-value" id="stat-ap">—</div><div class="stat-sub">Outstanding bills</div></div>
-          <div class="stat-card positive">
-            <div class="stat-label">Quote Conversion</div>
-            <div class="stat-value" id="dash-conv-rate" style="color:var(--green);">—</div>
-            <div class="stat-sub" id="dash-conv-detail">Rolling 30 days</div>
+        <div id="dash-snapshot-zone">
+          <div style="margin-bottom:8px;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);">Business Snapshot</div>
+          <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px;">
+            <div id="dash-card-total-ar" class="stat-card"><div class="stat-label">Total Receivable</div><div class="stat-value" id="stat-ar">—</div><div class="stat-sub" id="stat-ar-sub">Outstanding invoices</div></div>
+            <div id="dash-card-total-ap" class="stat-card negative"><div class="stat-label">Total Payable</div><div class="stat-value" id="stat-ap">—</div><div class="stat-sub">Outstanding bills</div></div>
+            <div id="dash-card-conversion" class="stat-card positive">
+              <div class="stat-label">Quote Conversion</div>
+              <div class="stat-value" id="dash-conv-rate" style="color:var(--green);">—</div>
+              <div class="stat-sub" id="dash-conv-detail">Rolling 30 days</div>
+            </div>
+            <div id="dash-card-revenue" class="stat-card accent"><div class="stat-label">Revenue This Month</div><div class="stat-value" id="stat-revenue">—</div><div class="stat-sub" id="stat-revenue-sub">vs last month</div></div>
           </div>
-          <div class="stat-card accent"><div class="stat-label">Revenue This Month</div><div class="stat-value" id="stat-revenue">—</div><div class="stat-sub" id="stat-revenue-sub">vs last month</div></div>
         </div>
 
         <!-- Zone 3c: Sales Pipeline -->
@@ -2152,32 +2158,35 @@ body.light .global-search-results, body.light .split-btn-menu {
         </div>
 
         <!-- Zone 3: Operations -->
-        <div style="margin-bottom:8px;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);">Operations</div>
-        <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px;">
-          <div class="stat-card" onclick="navigate('work-orders')" style="cursor:pointer;">
-            <div class="stat-label">Open Jobs</div>
-            <div class="stat-value" id="dash-jc-open">—</div>
-            <div class="stat-sub" id="dash-jc-open-sub">Active</div>
-          </div>
-          <div class="stat-card negative" onclick="navigate('work-orders')" style="cursor:pointer;">
-            <div class="stat-label">Overdue</div>
-            <div class="stat-value" id="dash-jc-overdue">—</div>
-            <div class="stat-sub">Past due date</div>
-          </div>
-          <div class="stat-card accent" onclick="navigate('work-orders')" style="cursor:pointer;">
-            <div class="stat-label">Due This Week</div>
-            <div class="stat-value" id="dash-jc-week">—</div>
-            <div class="stat-sub">Next 7 days</div>
-          </div>
-          <div class="stat-card positive" onclick="navigate('work-orders')" style="cursor:pointer;">
-            <div class="stat-label">Completed This Month</div>
-            <div class="stat-value" id="dash-jc-completed">—</div>
-            <div class="stat-sub">This month</div>
+        <div id="dash-ops-zone">
+          <div style="margin-bottom:8px;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);">Operations</div>
+          <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px;">
+            <div class="stat-card" onclick="navigate('work-orders')" style="cursor:pointer;">
+              <div class="stat-label">Open Jobs</div>
+              <div class="stat-value" id="dash-jc-open">—</div>
+              <div class="stat-sub" id="dash-jc-open-sub">Active</div>
+            </div>
+            <div class="stat-card negative" onclick="navigate('work-orders')" style="cursor:pointer;">
+              <div class="stat-label">Overdue</div>
+              <div class="stat-value" id="dash-jc-overdue">—</div>
+              <div class="stat-sub">Past due date</div>
+            </div>
+            <div class="stat-card accent" onclick="navigate('work-orders')" style="cursor:pointer;">
+              <div class="stat-label">Due This Week</div>
+              <div class="stat-value" id="dash-jc-week">—</div>
+              <div class="stat-sub">Next 7 days</div>
+            </div>
+            <div class="stat-card positive" onclick="navigate('work-orders')" style="cursor:pointer;">
+              <div class="stat-label">Completed This Month</div>
+              <div class="stat-value" id="dash-jc-completed">—</div>
+              <div class="stat-sub">This month</div>
+            </div>
           </div>
         </div>
 
         <!-- Zone 3b: Exchange Rates -->
-        <div style="margin-bottom:8px;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);">Exchange Rates</div>
+        <div id="dash-forex-zone-wrap">
+          <div style="margin-bottom:8px;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);">Exchange Rates</div>
         <div id="dash-forex-zone" style="margin-bottom:24px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
           <div class="stat-card" id="dash-fx-ttd-usd">
             <div class="stat-label">TTD / USD</div>
@@ -2198,6 +2207,7 @@ body.light .global-search-results, body.light .split-btn-menu {
             </div>
           </div>
         </div>
+        </div><!-- /dash-forex-zone-wrap -->
 
         <!-- Zone 4: Recent Activity -->
         <div style="display:grid;grid-template-columns:1fr 340px;gap:20px;">
@@ -2213,15 +2223,15 @@ body.light .global-search-results, body.light .split-btn-menu {
               <div class="section-card-title">Quick Actions</div>
             </div>
             <div style="display:flex;flex-direction:column;gap:8px;padding:4px 0;">
-              <button class="btn btn-outline" style="justify-content:flex-start;gap:10px;" onclick="openNewInvoice()">📄 New Invoice</button>
-              <button class="btn btn-outline" style="justify-content:flex-start;gap:10px;" onclick="openNewQuotation()">📝 New Quotation</button>
-              <button class="btn btn-outline" style="justify-content:flex-start;gap:10px;" onclick="openNewDeliveryNote()">🚚 New Delivery Note</button>
-              <button class="btn btn-outline" style="justify-content:flex-start;gap:10px;" onclick="openAddClient()">🏢 New Client</button>
-              <button class="btn btn-outline" style="justify-content:flex-start;gap:10px;" onclick="openAddVendor()">🏭 New Vendor</button>
-              <button class="btn btn-outline" style="justify-content:flex-start;gap:10px;" onclick="navigate('ar')">💰 Receive Payment</button>
-              <button class="btn btn-outline" style="justify-content:flex-start;gap:10px;" onclick="navigate('aged-ar')">⏱ Aged Receivables</button>
-              <button class="btn btn-outline" style="justify-content:flex-start;gap:10px;" onclick="navigate('aged-ap')">⏳ Aged Payables</button>
-              <button class="btn btn-outline" style="justify-content:flex-start;gap:10px;" onclick="navigate('pl')">📊 P&amp;L Report</button>
+              <button id="qact-invoice" class="btn btn-outline" style="justify-content:flex-start;gap:10px;" onclick="openNewInvoice()">📄 New Invoice</button>
+              <button id="qact-quotation" class="btn btn-outline" style="justify-content:flex-start;gap:10px;" onclick="openNewQuotation()">📝 New Quotation</button>
+              <button id="qact-dn" class="btn btn-outline" style="justify-content:flex-start;gap:10px;" onclick="openNewDeliveryNote()">🚚 New Delivery Note</button>
+              <button id="qact-client" class="btn btn-outline" style="justify-content:flex-start;gap:10px;" onclick="openAddClient()">🏢 New Client</button>
+              <button id="qact-vendor" class="btn btn-outline" style="justify-content:flex-start;gap:10px;" onclick="openAddVendor()">🏭 New Vendor</button>
+              <button id="qact-payment" class="btn btn-outline" style="justify-content:flex-start;gap:10px;" onclick="navigate('ar')">💰 Receive Payment</button>
+              <button id="qact-aged-ar" class="btn btn-outline" style="justify-content:flex-start;gap:10px;" onclick="navigate('aged-ar')">⏱ Aged Receivables</button>
+              <button id="qact-aged-ap" class="btn btn-outline" style="justify-content:flex-start;gap:10px;" onclick="navigate('aged-ap')">⏳ Aged Payables</button>
+              <button id="qact-pl" class="btn btn-outline" style="justify-content:flex-start;gap:10px;" onclick="navigate('pl')">📊 P&amp;L Report</button>
             </div>
           </div>
         </div>
@@ -5940,6 +5950,9 @@ function applyRoleNav() {
     const anyVisible = Array.from(items).some(el => el.style.display !== 'none');
     sec.style.display = anyVisible ? '' : 'none';
   });
+
+  // Reveal sidebar now that permissions are applied (prevents flash of full menu on login)
+  document.querySelector('.sidebar').style.opacity = '1';
 }
 
 // ── COMPANIES ────────────────────────────────────────────────────
@@ -8757,6 +8770,20 @@ async function loadDashboard() {
     const overdueCard = document.getElementById('alert-overdue')?.closest('.stat-card');
     if (overdueCard) overdueCard.style.borderColor = overdue.length ? 'var(--red)' : '';
 
+    // ── Zone 1: permission-gate individual cards ────────────────────
+    const _hasAR     = can('finance:ar:read');
+    const _hasAP     = can('finance:ap:read');
+    const _hasQuotes = can('sales:quotes:read');
+    const _show = (id, visible) => { const e = document.getElementById(id); if (e) e.style.display = visible ? '' : 'none'; };
+    _show('dash-card-overdue',   _hasAR);
+    _show('dash-card-due7',      _hasAR);
+    _show('dash-card-expiring',  _hasQuotes);
+    _show('dash-card-bills',     _hasAP);
+    _show('dash-card-drafts',    _hasAR || _hasAP || _hasQuotes);
+    _show('dash-attention-zone', _hasAR || _hasAP || _hasQuotes);
+    _show('dash-btn-invoice',    can('finance:ar:write'));
+    _show('dash-btn-quotation',  can('sales:quotes:write'));
+
     // ── Zone 2: Business Snapshot ──────────────────────────────────
     const totalAR = invs.reduce((s,i) => s + convertToBase(i.balance_due, i.currency||base).amount, 0);
     const totalAP = bills.reduce((s,b) => s + parseFloat(b.balance_due||0), 0);
@@ -8783,29 +8810,51 @@ async function loadDashboard() {
     document.getElementById('stat-revenue-sub').textContent = revDiff !== null ? `${revDiff > 0 ? '▲' : '▼'} ${Math.abs(revDiff)}% vs last month` : 'No prior month data';
 
     // Quote conversion (rolling 30 days)
-    loadDashConversion();
+    if (_hasQuotes) loadDashConversion();
+
+    // ── Zone 2: permission-gate cards + quick actions ───────────────
+    _show('dash-card-total-ar',   _hasAR);
+    _show('dash-card-total-ap',   _hasAP);
+    _show('dash-card-conversion', _hasQuotes);
+    _show('dash-card-revenue',    _hasAR);
+    _show('dash-snapshot-zone',   _hasAR || _hasAP || _hasQuotes);
+    _show('qact-invoice',         can('finance:ar:write'));
+    _show('qact-quotation',       can('sales:quotes:write'));
+    _show('qact-dn',              can('ops:delivery:read'));
+    _show('qact-client',          can('sales:clients:read'));
+    _show('qact-vendor',          can('finance:ap:write'));
+    _show('qact-payment',         can('finance:ar:write'));
+    _show('qact-aged-ar',         _hasAR);
+    _show('qact-aged-ap',         _hasAP);
+    _show('qact-pl',              can('finance:reports:read'));
 
     // ── Zone 3: Workshop ──────────────────────────────────────────
-    sbGet('jobs', `company_id=eq.${coId}&status=not.in.(Completed,Invoiced,Closed)&select=id,due_date`)
-      .then(openJobs => {
-        const overdue = openJobs.filter(j => j.due_date && j.due_date < today);
-        const week    = openJobs.filter(j => j.due_date && j.due_date >= today && j.due_date <= in7str);
-        document.getElementById('dash-jc-open').textContent    = openJobs.length;
-        document.getElementById('dash-jc-open-sub').textContent = openJobs.length === 1 ? '1 active job' : `${openJobs.length} active jobs`;
-        document.getElementById('dash-jc-overdue').textContent  = overdue.length || '—';
-        document.getElementById('dash-jc-week').textContent     = week.length    || '—';
-        const overdueCard = document.getElementById('dash-jc-overdue')?.closest('.stat-card');
-        if (overdueCard) overdueCard.style.borderColor = overdue.length ? 'var(--red)' : '';
-      }).catch(() => {});
-    sbGet('jobs', `company_id=eq.${coId}&status=eq.Completed&date_completed=gte.${mFrom}&select=id`)
-      .then(rows => { document.getElementById('dash-jc-completed').textContent = rows.length || '—'; })
-      .catch(() => {});
+    const _hasOps = can('ops:work-orders:read');
+    _show('dash-ops-zone', _hasOps);
+    if (_hasOps) {
+      sbGet('jobs', `company_id=eq.${coId}&status=not.in.(Completed,Invoiced,Closed)&select=id,due_date`)
+        .then(openJobs => {
+          const overdue = openJobs.filter(j => j.due_date && j.due_date < today);
+          const week    = openJobs.filter(j => j.due_date && j.due_date >= today && j.due_date <= in7str);
+          document.getElementById('dash-jc-open').textContent    = openJobs.length;
+          document.getElementById('dash-jc-open-sub').textContent = openJobs.length === 1 ? '1 active job' : `${openJobs.length} active jobs`;
+          document.getElementById('dash-jc-overdue').textContent  = overdue.length || '—';
+          document.getElementById('dash-jc-week').textContent     = week.length    || '—';
+          const overdueCard = document.getElementById('dash-jc-overdue')?.closest('.stat-card');
+          if (overdueCard) overdueCard.style.borderColor = overdue.length ? 'var(--red)' : '';
+        }).catch(() => {});
+      sbGet('jobs', `company_id=eq.${coId}&status=eq.Completed&date_completed=gte.${mFrom}&select=id`)
+        .then(rows => { document.getElementById('dash-jc-completed').textContent = rows.length || '—'; })
+        .catch(() => {});
+    }
 
     // ── Zone 4: Recent Activity ────────────────────────────────────
     await loadRecentActivity();
 
     // ── Zone 3b: Exchange Rates ────────────────────────────────────
-    await renderDashForex();
+    const _hasForex = canFinance();
+    _show('dash-forex-zone-wrap', _hasForex);
+    if (_hasForex) await renderDashForex();
 
     // ── Zone 3c: Sales Pipeline ────────────────────────────────────
     loadDashboardCRM().catch(() => {});
@@ -13551,7 +13600,7 @@ async function refreshForexRates() {
 async function loadDashboardCRM() {
   const zone = document.getElementById('dash-crm-zone');
   if (!zone) return;
-  if (!currentUser || currentUser.module_sales_crm === false || !currentUser.module_sales) {
+  if (!can('sales:crm:read')) {
     zone.style.display = 'none';
     return;
   }
