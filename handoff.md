@@ -1,6 +1,37 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-24 · Session 39*
+*Last updated: 2026-06-24 · Session 40*
+
+---
+
+## Session 40 — Dashboard zone flash fix + RBAC-aware Recent Activity
+
+**Date:** 2026-06-24
+**PR:** [#104](https://github.com/brandonr2630/meridian-erp/pull/104) — merged
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| `index.html` — `loadDashboard()` | All `_show()` gates moved before first `await` | Previously, zone visibility was applied AFTER `await Promise.all([...])` (~500 ms network gap). All permission consts (`_hasAR`, `_hasAP`, `_hasQuotes`, `_hasOps`, `_hasForex`) and the `_show()` helper are now declared and called synchronously at function entry — before any DB fetch — so restricted zones are hidden before the browser can repaint. |
+| `index.html` — `loadDashboard()` | Duplicate `const` blocks removed | The old Zone 1 / Zone 2 gate blocks (with redundant `const _hasAR = ...`, `const _show = ...` declarations) and the `const _hasOps` / `const _hasForex` lines were removed. Would have thrown `SyntaxError: Identifier '_hasAR' has already been declared` in strict mode and caused redundant DOM writes. |
+| `index.html` — `loadRecentActivity()` | Rewritten to be RBAC-aware | Was always fetching invoices + quotations + delivery notes regardless of role. Now builds `fetches[]` conditionally: `finance:ar:read` → invoices; `sales:quotes:read` → quotations; `ops:delivery:read` → delivery notes; `ops:work-orders:read` → jobs (work orders). An `operations_tech` sees only work orders + delivery notes. `finance_manager` sees invoices. `sales_rep` sees quotations + delivery notes. Admins see all four. Results merged and sorted by date, capped at 10 rows. |
+
+### Recent Activity feed → permission mapping
+
+| Activity type | Permission gate | Navigate to |
+|--------------|----------------|-------------|
+| Invoices (📄) | `finance:ar:read` | `ar` |
+| Quotations (📝) | `sales:quotes:read` | `quotations` |
+| Delivery Notes (🚚) | `ops:delivery:read` | `delivery-notes` |
+| Work Orders (🔧) | `ops:work-orders:read` | `work-orders` |
+
+### Notes
+
+- Zone flash fix is purely a code-order change — no new logic, no new permissions, same set of `_show()` calls just moved 30 lines earlier in the function.
+- `coPfx` in `loadRecentActivity()` replicates the `isSuperAdmin()` cross-company filter: super admins see all-company activity across all four document types.
+- Jobs fetch uses `select=job_no,customer,status,created_at,company_id` (no wildcard) to minimize payload.
+- Job status values ("Open", "In Progress", "Completed", "Invoiced", "Closed") render via `.badge` base class; no specific badge-{status} CSS exists for those values — they show as plain grey badges.
 
 ---
 
