@@ -8720,6 +8720,38 @@ async function loadDashboard() {
     const in7str = in7.toISOString().slice(0,10);
     const base   = currentCompany.base_currency || currentCompany.currency;
 
+    // ── Early permission gates — apply BEFORE any await to prevent zone flash ──
+    const _hasAR     = can('finance:ar:read');
+    const _hasAP     = can('finance:ap:read');
+    const _hasQuotes = can('sales:quotes:read');
+    const _hasOps    = can('ops:work-orders:read');
+    const _hasForex  = canFinance();
+    const _show = (id, visible) => { const e = document.getElementById(id); if (e) e.style.display = visible ? '' : 'none'; };
+    _show('dash-attention-zone',  _hasAR || _hasAP || _hasQuotes);
+    _show('dash-card-overdue',    _hasAR);
+    _show('dash-card-due7',       _hasAR);
+    _show('dash-card-expiring',   _hasQuotes);
+    _show('dash-card-bills',      _hasAP);
+    _show('dash-card-drafts',     _hasAR || _hasAP || _hasQuotes);
+    _show('dash-snapshot-zone',   _hasAR || _hasAP || _hasQuotes);
+    _show('dash-card-total-ar',   _hasAR);
+    _show('dash-card-total-ap',   _hasAP);
+    _show('dash-card-conversion', _hasQuotes);
+    _show('dash-card-revenue',    _hasAR);
+    _show('dash-ops-zone',        _hasOps);
+    _show('dash-forex-zone-wrap', _hasForex);
+    _show('dash-btn-invoice',     can('finance:ar:write'));
+    _show('dash-btn-quotation',   can('sales:quotes:write'));
+    _show('qact-invoice',         can('finance:ar:write'));
+    _show('qact-quotation',       can('sales:quotes:write'));
+    _show('qact-dn',              can('ops:delivery:read'));
+    _show('qact-client',          can('sales:clients:read'));
+    _show('qact-vendor',          can('finance:ap:write'));
+    _show('qact-payment',         can('finance:ar:write'));
+    _show('qact-aged-ar',         _hasAR);
+    _show('qact-aged-ap',         _hasAP);
+    _show('qact-pl',              can('finance:reports:read'));
+
     // Super admin badge
     if (isSuperAdmin()) {
       document.getElementById('dash-super-admin-badge').style.display = '';
@@ -8770,19 +8802,6 @@ async function loadDashboard() {
     const overdueCard = document.getElementById('alert-overdue')?.closest('.stat-card');
     if (overdueCard) overdueCard.style.borderColor = overdue.length ? 'var(--red)' : '';
 
-    // ── Zone 1: permission-gate individual cards ────────────────────
-    const _hasAR     = can('finance:ar:read');
-    const _hasAP     = can('finance:ap:read');
-    const _hasQuotes = can('sales:quotes:read');
-    const _show = (id, visible) => { const e = document.getElementById(id); if (e) e.style.display = visible ? '' : 'none'; };
-    _show('dash-card-overdue',   _hasAR);
-    _show('dash-card-due7',      _hasAR);
-    _show('dash-card-expiring',  _hasQuotes);
-    _show('dash-card-bills',     _hasAP);
-    _show('dash-card-drafts',    _hasAR || _hasAP || _hasQuotes);
-    _show('dash-attention-zone', _hasAR || _hasAP || _hasQuotes);
-    _show('dash-btn-invoice',    can('finance:ar:write'));
-    _show('dash-btn-quotation',  can('sales:quotes:write'));
 
     // ── Zone 2: Business Snapshot ──────────────────────────────────
     const totalAR = invs.reduce((s,i) => s + convertToBase(i.balance_due, i.currency||base).amount, 0);
@@ -8812,25 +8831,8 @@ async function loadDashboard() {
     // Quote conversion (rolling 30 days)
     if (_hasQuotes) loadDashConversion();
 
-    // ── Zone 2: permission-gate cards + quick actions ───────────────
-    _show('dash-card-total-ar',   _hasAR);
-    _show('dash-card-total-ap',   _hasAP);
-    _show('dash-card-conversion', _hasQuotes);
-    _show('dash-card-revenue',    _hasAR);
-    _show('dash-snapshot-zone',   _hasAR || _hasAP || _hasQuotes);
-    _show('qact-invoice',         can('finance:ar:write'));
-    _show('qact-quotation',       can('sales:quotes:write'));
-    _show('qact-dn',              can('ops:delivery:read'));
-    _show('qact-client',          can('sales:clients:read'));
-    _show('qact-vendor',          can('finance:ap:write'));
-    _show('qact-payment',         can('finance:ar:write'));
-    _show('qact-aged-ar',         _hasAR);
-    _show('qact-aged-ap',         _hasAP);
-    _show('qact-pl',              can('finance:reports:read'));
 
     // ── Zone 3: Workshop ──────────────────────────────────────────
-    const _hasOps = can('ops:work-orders:read');
-    _show('dash-ops-zone', _hasOps);
     if (_hasOps) {
       sbGet('jobs', `company_id=eq.${coId}&status=not.in.(Completed,Invoiced,Closed)&select=id,due_date`)
         .then(openJobs => {
@@ -8852,8 +8854,6 @@ async function loadDashboard() {
     await loadRecentActivity();
 
     // ── Zone 3b: Exchange Rates ────────────────────────────────────
-    const _hasForex = canFinance();
-    _show('dash-forex-zone-wrap', _hasForex);
     if (_hasForex) await renderDashForex();
 
     // ── Zone 3c: Sales Pipeline ────────────────────────────────────
@@ -8865,25 +8865,34 @@ async function loadDashboard() {
 async function loadRecentActivity() {
   const wrap = document.getElementById('dash-activity');
   try {
-    // Fetch recent activity across invoices, quotations, payments, delivery notes
-    const coFilter = isSuperAdmin()
-      ? `order=created_at.desc&limit=12`
-      : `company_id=eq.${currentCompany.id}&order=created_at.desc&limit=12`;
-
+    const coId = currentCompany.id;
+    const coPfx = isSuperAdmin() ? '' : `company_id=eq.${coId}&`;
     const cMap = {}; contacts.forEach(c => { cMap[c.id] = c.trading_name||c.name; });
     const coMap = {}; companies.forEach(c => { coMap[c.id] = c.code||c.name; });
 
-    const [recentInvs, recentQuos, recentDNs] = await Promise.all([
-      sbGet('invoices',    coFilter.replace('limit=12','limit=5')),
-      sbGet('quotations',  coFilter.replace('limit=12','limit=5')),
-      sbGet('delivery_notes', coFilter.replace('limit=12','limit=4')),
-    ]);
+    // Build fetches conditionally — each role sees activity from its own domain
+    const fetches = [];
+    if (can('finance:ar:read'))
+      fetches.push(sbGet('invoices', `${coPfx}order=created_at.desc&limit=5`)
+        .then(rows => rows.map(i => ({ icon:'📄', label: i.invoice_no||'Draft Invoice', sub: cMap[i.contact_id]||'—', status: i.status, date: i.invoice_date, co: coMap[i.company_id], action: ()=>{ navigate('ar'); } })))
+        .catch(()=>[]));
+    if (can('sales:quotes:read'))
+      fetches.push(sbGet('quotations', `${coPfx}order=created_at.desc&limit=5`)
+        .then(rows => rows.map(q => ({ icon:'📝', label: q.quote_no||'Draft Quote', sub: cMap[q.contact_id]||'—', status: q.status, date: q.quote_date, co: coMap[q.company_id], action: ()=>{ navigate('quotations'); } })))
+        .catch(()=>[]));
+    if (can('ops:delivery:read'))
+      fetches.push(sbGet('delivery_notes', `${coPfx}order=created_at.desc&limit=4`)
+        .then(rows => rows.map(d => ({ icon:'🚚', label: d.dn_no||'Draft DN', sub: cMap[d.contact_id]||'—', status: d.status, date: d.dn_date, co: coMap[d.company_id], action: ()=>{ navigate('delivery-notes'); } })))
+        .catch(()=>[]));
+    if (can('ops:work-orders:read'))
+      fetches.push(sbGet('jobs', `${coPfx}order=created_at.desc&limit=5&select=job_no,customer,status,created_at,company_id`)
+        .then(rows => rows.map(j => ({ icon:'🔧', label: j.job_no||'New Work Order', sub: j.customer||'—', status: (j.status||'open').toLowerCase().replace(/\s+/g,'-'), date: (j.created_at||'').slice(0,10), co: coMap[j.company_id], action: ()=>{ navigate('work-orders'); } })))
+        .catch(()=>[]));
 
-    const activities = [
-      ...recentInvs.map(i => ({ type:'invoice', icon:'📄', label: i.invoice_no||'Draft Invoice', sub: cMap[i.contact_id]||'—', status: i.status, date: i.invoice_date, co: coMap[i.company_id], action: ()=>{ navigate('ar'); } })),
-      ...recentQuos.map(q => ({ type:'quotation', icon:'📝', label: q.quote_no||'Draft Quote', sub: cMap[q.contact_id]||'—', status: q.status, date: q.quote_date, co: coMap[q.company_id], action: ()=>{ navigate('quotations'); } })),
-      ...recentDNs.map(d => ({ type:'dn', icon:'🚚', label: d.dn_no||'Draft DN', sub: cMap[d.contact_id]||'—', status: d.status, date: d.dn_date, co: coMap[d.company_id], action: ()=>{ navigate('delivery-notes'); } })),
-    ].sort((a,b) => b.date?.localeCompare(a.date||'')).slice(0,10);
+    if (!fetches.length) { wrap.innerHTML = '<div class="table-empty">No recent activity.</div>'; return; }
+
+    const results = await Promise.all(fetches);
+    const activities = results.flat().sort((a,b) => (b.date||'').localeCompare(a.date||'')).slice(0,10);
 
     if (!activities.length) { wrap.innerHTML = '<div class="table-empty">No recent activity.</div>'; return; }
 
@@ -8896,7 +8905,7 @@ async function loadRecentActivity() {
             <div style="font-size:11px;color:var(--text-3);margin-top:1px;">${escHTML(a.sub)}</div>
           </div>
           ${isSuperAdmin() && a.co ? `<span style="font-size:10px;color:var(--gold);background:var(--gold-bg);border:1px solid var(--gold-border);border-radius:3px;padding:1px 6px;flex-shrink:0;">${escHTML(a.co)}</span>` : ''}
-          <span class="badge badge-${a.status}" style="flex-shrink:0;">${a.status}</span>
+          <span class="badge badge-${escHTML(a.status)}" style="flex-shrink:0;">${escHTML(a.status)}</span>
           <span style="font-size:10px;color:var(--text-3);flex-shrink:0;">${a.date||''}</span>
         </div>`).join('')}
     </div>`;
