@@ -1,6 +1,54 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-06-23 · Session 38*
+*Last updated: 2026-06-24 · Session 39*
+
+---
+
+## Session 39 — Dashboard RBAC gating + sidebar flash fix
+
+**Date:** 2026-06-24
+**PR:** [#102](https://github.com/brandonr2630/meridian-erp/pull/102) — merged
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| `index.html` — `.sidebar` CSS | `opacity: 0; transition: opacity 0.15s ease` added | Sidebar starts invisible; revealed at the end of `applyRoleNav()` after permissions are applied. Eliminates the brief full-menu flash visible to restricted roles on every login and session restore. |
+| `index.html` — `applyRoleNav()` | Sidebar reveal at end | `document.querySelector('.sidebar').style.opacity = '1'` appended after all nav-item and section visibility rules run. |
+| `index.html` — Dashboard HTML | Zone wrapper divs + card IDs added | Each dashboard zone wrapped in a named `<div id="dash-*-zone">` so the zone label disappears alongside its cards. Card IDs added: `dash-card-overdue`, `dash-card-due7`, `dash-card-expiring`, `dash-card-bills`, `dash-card-drafts` (Zone 1); `dash-card-total-ar`, `dash-card-total-ap`, `dash-card-conversion`, `dash-card-revenue` (Zone 2). Button IDs added: `dash-btn-invoice`, `dash-btn-quotation` (header); `qact-*` on all 9 Quick Action buttons. |
+| `index.html` — `loadDashboard()` | Per-zone permission gating | After each zone renders, `_show(id, bool)` helper sets `display:none` on hidden elements. Zone 1 (Attention Required): AR cards gated on `finance:ar:read`, Expiring Quotes on `sales:quotes:read`, Bills on `finance:ap:read`. Zone 2 (Business Snapshot): same atoms per card; zone hidden entirely if user has none. Zone 3 (Operations): `ops:work-orders:read` gates both zone visibility and the two `sbGet('jobs',...)` fetches. Zone 3b (Exchange Rates): `canFinance()` gates zone + `renderDashForex()` call. Header buttons and Quick Actions gated per their respective write/read atoms. |
+| `index.html` — `loadDashboardCRM()` | Dead column check replaced | Was `currentUser.module_sales_crm === false \|\| !currentUser.module_sales` — both columns were dropped in Phase 4. Now `can('sales:crm:read')`. |
+
+### Dashboard zone → permission mapping (reference)
+
+| Zone | Cards / elements | Permission gate |
+|------|-----------------|-----------------|
+| Needs Attention | Overdue Invoices, Due in 7 Days | `finance:ar:read` |
+| Needs Attention | Expiring Quotes | `sales:quotes:read` |
+| Needs Attention | Bills Due Soon | `finance:ap:read` |
+| Needs Attention | Draft Documents | any of the three above |
+| Business Snapshot | Total Receivable, Revenue This Month | `finance:ar:read` |
+| Business Snapshot | Total Payable | `finance:ap:read` |
+| Business Snapshot | Quote Conversion | `sales:quotes:read` |
+| Sales Pipeline (CRM) | whole zone | `sales:crm:read` |
+| Operations | whole zone + DB fetch | `ops:work-orders:read` |
+| Exchange Rates | whole zone | `canFinance()` |
+| `+ Invoice` header button / Quick Action | visibility | `finance:ar:write` |
+| `+ Quotation` header button / Quick Action | visibility | `sales:quotes:write` |
+| New Delivery Note Quick Action | visibility | `ops:delivery:read` |
+| New Client Quick Action | visibility | `sales:clients:read` |
+| New Vendor Quick Action | visibility | `finance:ap:write` |
+| Receive Payment Quick Action | visibility | `finance:ar:write` |
+| Aged Receivables Quick Action | visibility | `finance:ar:read` |
+| Aged Payables Quick Action | visibility | `finance:ap:read` |
+| P&L Report Quick Action | visibility | `finance:reports:read` |
+
+### Notes
+
+- Data fetches for finance zones (invoices, bills, quotations) still execute regardless of permission — RLS at the DB level returns empty results for unauthorized users. Only the Operations zone fetch is skipped client-side (no point firing the query if the zone is hidden).
+- `_show(id, bool)` is a locally-scoped helper inside `loadDashboard()` — not exported.
+- Zone wrappers mean both the section label and its cards disappear together when a role has no access.
+- An `operations_tech` sees Operations zone only. A `sales_rep` sees Sales Pipeline + Expiring Quotes card. A `finance_manager` sees all Finance zones + Exchange Rates. `company_admin` / `super_admin` see everything.
 
 ---
 
