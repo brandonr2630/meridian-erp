@@ -4,29 +4,33 @@
 
 ---
 
-## Session 41 — Work Order floating nav pill (IN PROGRESS — still broken on live)
+## Session 41 — Work Order floating nav pill (RESOLVED)
 
 **Date:** 2026-07-01
-**PRs:** [#106](https://github.com/brandonr2630/meridian-erp/pull/106) · [#107](https://github.com/brandonr2630/meridian-erp/pull/107) — both merged, deployed
+**PRs:** [#106](https://github.com/brandonr2630/meridian-erp/pull/106) · [#107](https://github.com/brandonr2630/meridian-erp/pull/107) · [#109](https://github.com/brandonr2630/meridian-erp/pull/109) — all merged, deployed
 
 ### What Changed
 
 | Item | Change | Detail |
 |------|--------|--------|
-| `index.html` — `.jc-toolbar` | New floating "nav pill" | Fixed bottom-center pill (`#jc-float-pill`) mirroring the Work Order form toolbar: All Jobs, Duplicate, Search, Save, Print. Meant to appear once `#jc-toolbar` scrolls out of view via `IntersectionObserver`, and hidden while the Job Cards dashboard (not a form) is open. |
+| `index.html` — `.jc-toolbar` | New floating "nav pill" | Fixed bottom-center pill (`#jc-float-pill`) mirroring the Work Order form toolbar: All Jobs, Duplicate, Search, Save, Print. Hidden while the Job Cards dashboard (not a form) is open. |
 | `index.html` — `jcMarkDirty()` / `jcMarkClean()` | Pill dirty-ring hook | Pill gets a pulsing red ring (`.jc-float-pill.dirty`) when `jcIsDirty` is true; ring clears on save. Reuses the existing dirty-tracking functions — no new state. |
-| `index.html` — `jcInitFloatPill()` | New init function | Called once from `loadJobCards()`. Attaches the `IntersectionObserver` to `#jc-toolbar`. |
+| `index.html` — `jcInitFloatPill()` | New init function | Called once from `loadJobCards()`. |
 | `index.html` — `jcFloatPillFocusSearch()` | New helper | Pill's search button scrolls the real toolbar into view and focuses `#jc-search-input` (pill doesn't duplicate the search input itself). |
-| `index.html` — `.jc-toolbar` div (PR #107 hotfix) | Missing `id` added | PR #106 shipped `jcInitFloatPill()` calling `document.getElementById('jc-toolbar')`, but the div only had `class="jc-toolbar"` — no `id`. Lookup returned null, the guard bailed, observer never attached, pill never appeared regardless of scroll. One-line fix: added `id="jc-toolbar"`. |
+| `index.html` — `.jc-toolbar` div (PR #107 hotfix) | Missing `id` added | PR #106 shipped `jcInitFloatPill()` calling `document.getElementById('jc-toolbar')`, but the div only had `class="jc-toolbar"` — no `id`. One-line fix: added `id="jc-toolbar"`. |
+| `index.html` — `jcInitFloatPill()` (PR #109 fix) | `IntersectionObserver` → scroll listener | Root cause of "still broken after id fix": the observer was attached to `#jc-toolbar` while it sat inside a `display:none` ancestor (`#jc-form-wrap`). Once the form opened and the user scrolled the *nested* `overflow:auto` container (`#job-cards-body`, not the window), Firefox never recomputed the intersection — callback never fired again. Chrome's compositor recomputes more aggressively and happened to mask it, so it initially looked Chrome-only-broken until cross-browser testing. Replaced with a direct `scroll` listener on `#job-cards-body`, throttled via `requestAnimationFrame` — deterministic in both browsers, no IO nested-scroll-root ambiguity. |
 
-### Outstanding — unresolved this session
+### Debugging trail (for future similar bugs)
 
-- **Pill still reported not working after the id fix.** User confirmed via screenshot (scrolled deep into a Work Order form, e.g. Labour & Time Tracking section) that the pill does not appear. Deploy verified live (curl confirms `id="jc-toolbar"` present in served HTML, `Last-Modified` matches push time). Static code review found no remaining bug (no transform ancestors breaking `position:fixed`, no z-index conflict, no duplicate IDs, `IntersectionObserver` logic is standard and should work with the app's nested-scroll layout — `html,body{overflow:hidden}` + `.page-body{overflow-y:auto}`). Root cause not yet confirmed.
-- **Live debugging blocked** — attempted to use the Claude in Chrome MCP to drive the user's logged-in browser and inspect live (`getElementById('jc-toolbar')`, `getElementById('jc-float-pill')`, `window._jcFloatPillInit`, console errors). `list_connected_browsers` returned empty — extension not connected. Two ways to unblock, presented to user, awaiting response:
-  1. Connect the Claude in Chrome extension to the browser tab already logged into `erp.terranresources.com`.
-  2. Provide test ERP credentials so a separate browser (chrome-devtools MCP) can log in directly.
-- **Next session: start here.** Once live access is available, run the three console checks above, and if the pill element/observer are fine, check for a stale/cached SPA tab (user must do a genuine hard reload — an open SPA tab does not re-fetch `index.html` on its own).
-- **Possibly unrelated side report:** user flagged that opening ("selecting") a Work Order shows a toast that reads like "Job saved" immediately, before any change is made. Investigated — the only matching toast is the pre-existing `showToast('✓ Job ' + row['Job No'] + ' loaded.', 'success')` at `jcOpenJob()` (line ~7794), which says **"loaded"**, not "saved", and fires whenever any job is opened (predates this session's work). Not yet confirmed whether this is: (a) the user misreading "loaded" as "saved" and the behavior is fine as-is, or (b) an actual mislabeled/unwanted toast to remove. **Needs clarification from user next session.**
+1. Static code review (id-fix session) found nothing wrong — correct instinct, the code *was* fine for Chrome.
+2. Live repro via chrome-devtools MCP against the local file (bypassing login by forcing view/form classes) confirmed the pill worked correctly in a clean Chrome session — ruled out a Chrome-side code bug, pointed at environment (stale-tab hypothesis).
+3. Connected the Claude-in-Chrome extension, drove a fresh logged-in Chrome tab on the live site directly (job WO-006) — pill worked. Reinforced the stale-tab theory.
+4. User then reported Firefox also broken, then Chrome broken again on their own tab (a different tab than the automated one). Had the user run live console checks in their real Firefox tab: `window._jcFloatPillInit` was `true` (observer attached), `#jc-form-wrap` was `.active`, `#jc-toolbar`'s `getBoundingClientRect()` was fully negative (well scrolled past) — every condition for `.show` was met, but the class was never added. That pinpointed the observer callback itself as stale/never re-firing, not a state or CSS issue.
+5. Fix: stopped relying on `IntersectionObserver` for a target inside a nested (non-window) scroll container; used a plain scroll listener instead.
+
+### Possibly unrelated side report (still open)
+
+- User flagged that opening ("selecting") a Work Order shows a toast that reads like "Job saved" immediately, before any change is made. Investigated — the only matching toast is the pre-existing `showToast('✓ Job ' + row['Job No'] + ' loaded.', 'success')` at `jcOpenJob()` (line ~7794), which says **"loaded"**, not "saved", and fires whenever any job is opened (predates this session's work). Not yet confirmed whether this is: (a) the user misreading "loaded" as "saved" and the behavior is fine as-is, or (b) an actual mislabeled/unwanted toast to remove. **Needs clarification from user next session.**
 
 ---
 
