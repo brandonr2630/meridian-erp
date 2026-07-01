@@ -6868,12 +6868,21 @@ function jcInitFloatPill() {
   if (window._jcFloatPillInit) return;
   const toolbar = document.getElementById('jc-toolbar');
   const pill = document.getElementById('jc-float-pill');
-  if (!toolbar || !pill) return;
+  const scroller = document.getElementById('job-cards-body');
+  if (!toolbar || !pill || !scroller) return;
   window._jcFloatPillInit = true;
-  new IntersectionObserver(([entry]) => {
+  let ticking = false;
+  const update = () => {
+    ticking = false;
     const formActive = document.getElementById('jc-form-wrap')?.classList.contains('active');
-    pill.classList.toggle('show', !!formActive && !entry.isIntersecting && entry.boundingClientRect.top < 0);
-  }, { threshold: 0 }).observe(toolbar);
+    pill.classList.toggle('show', !!formActive && toolbar.getBoundingClientRect().bottom < 0);
+  };
+  scroller.addEventListener('scroll', () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(update);
+  }, { passive: true });
+  update();
 }
 function jcFloatPillFocusSearch() {
   const toolbar = document.getElementById('jc-toolbar');
