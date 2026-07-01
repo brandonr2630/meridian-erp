@@ -1274,6 +1274,33 @@ body {
 /* ── JC TOOLBAR & STATUS BAR ─── */
 .jc-toolbar { background:var(--bg-2); border-bottom:1px solid var(--border); padding:7px 16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .jc-toolbar-divider { width:1px; height:24px; background:var(--border); }
+
+/* ── JC FLOATING NAV PILL (appears when jc-toolbar scrolls out of view) ─── */
+.jc-float-pill {
+  position:fixed; left:50%; bottom:22px; z-index:var(--z-dropdown);
+  display:flex; align-items:center; gap:2px;
+  background:var(--bg-2); border:1px solid var(--border); border-radius:999px;
+  padding:5px; box-shadow:var(--shadow-lg); backdrop-filter:blur(10px);
+  opacity:0; pointer-events:none;
+  transform:translate(-50%, 14px) scale(.96);
+  transition:opacity .18s ease, transform .18s ease, box-shadow .25s ease;
+}
+.jc-float-pill.show { opacity:1; pointer-events:auto; transform:translate(-50%, 0) scale(1); }
+.jc-float-pill.dirty { box-shadow:0 0 0 2px var(--red), var(--shadow-lg); animation:jcPillPulse 1.7s ease-in-out infinite; }
+@keyframes jcPillPulse {
+  0%,100% { box-shadow:0 0 0 2px var(--red), var(--shadow-lg); }
+  50%     { box-shadow:0 0 0 4px var(--red-bg), var(--shadow-lg); }
+}
+.jc-fp-btn {
+  display:flex; align-items:center; gap:6px; background:none; border:none; color:var(--text-2);
+  font-size:12px; font-weight:600; padding:8px 13px; border-radius:999px; cursor:pointer;
+  white-space:nowrap; transition:background .12s ease, color .12s ease;
+}
+.jc-fp-btn:hover { background:var(--bg-3); color:var(--text); }
+.jc-fp-save { background:var(--gold); color:#151204; }
+.jc-fp-save:hover { background:var(--gold-2); color:#151204; }
+.jc-fp-divider { width:1px; height:18px; background:var(--border); flex-shrink:0; margin:0 1px; }
+@media (max-width:560px) { .jc-fp-label { display:none; } .jc-fp-btn { padding:8px 10px; } }
 .jc-search-wrap { display:flex; align-items:center; gap:6px; flex:1; min-width:200px; position:relative; }
 .jc-search-select { background:var(--bg-3); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); padding:5px 8px; font-size:12px; cursor:pointer; }
 .jc-search-input { background:var(--bg-3); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); padding:5px 10px; font-size:12px; flex:1; outline:none; transition:border-color .15s; }
@@ -3132,6 +3159,16 @@ body.light .global-search-results, body.light .split-btn-menu {
             <div class="jc-toolbar-divider"></div>
             <button class="btn btn-primary btn-sm" onclick="jcSaveJob()">💾 Save</button>
             <button class="btn btn-ghost btn-sm" onclick="window.print()">🖨 Print</button>
+          </div>
+          <!-- Floating Nav Pill: mirrors the toolbar, shown once it scrolls out of view -->
+          <div class="jc-float-pill" id="jc-float-pill">
+            <button class="jc-fp-btn" onclick="jcOpenDashboard()" title="All Jobs">← <span class="jc-fp-label">All Jobs</span></button>
+            <button class="jc-fp-btn" onclick="jcDuplicateJob()" title="Duplicate">⧉ <span class="jc-fp-label">Duplicate</span></button>
+            <div class="jc-fp-divider"></div>
+            <button class="jc-fp-btn" onclick="jcFloatPillFocusSearch()" title="Search">🔍 <span class="jc-fp-label">Search</span></button>
+            <div class="jc-fp-divider"></div>
+            <button class="jc-fp-btn jc-fp-save" onclick="jcSaveJob()" title="Save">💾 <span class="jc-fp-label">Save</span></button>
+            <button class="jc-fp-btn" onclick="window.print()" title="Print">🖨 <span class="jc-fp-label">Print</span></button>
           </div>
           <!-- Status bar -->
           <div class="jc-statusbar">
@@ -6824,6 +6861,26 @@ async function loadJobCards() {
   await jcLoadConfig();
   jcOpenDashboard();
   await jcLoadDashboard();
+  jcInitFloatPill();
+}
+// ── FLOATING NAV PILL ────────────────────────────────────────────
+function jcInitFloatPill() {
+  if (window._jcFloatPillInit) return;
+  const toolbar = document.getElementById('jc-toolbar');
+  const pill = document.getElementById('jc-float-pill');
+  if (!toolbar || !pill) return;
+  window._jcFloatPillInit = true;
+  new IntersectionObserver(([entry]) => {
+    const formActive = document.getElementById('jc-form-wrap')?.classList.contains('active');
+    pill.classList.toggle('show', !!formActive && !entry.isIntersecting && entry.boundingClientRect.top < 0);
+  }, { threshold: 0 }).observe(toolbar);
+}
+function jcFloatPillFocusSearch() {
+  const toolbar = document.getElementById('jc-toolbar');
+  if (!toolbar) return;
+  toolbar.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  clearTimeout(window._jcFpFocusTimer);
+  window._jcFpFocusTimer = setTimeout(() => document.getElementById('jc-search-input')?.focus(), 380);
 }
 // ── JOB CONFIG STATE ─────────────────────────────────────────────
 let jcCfgCurrentTab = 'labour';
@@ -7300,6 +7357,7 @@ function jcRefreshRowDropdowns() {
 function jcOpenDashboard() {
   document.getElementById('jc-dashboard').classList.add('active');
   document.getElementById('jc-form-wrap').classList.remove('active');
+  document.getElementById('jc-float-pill')?.classList.remove('show');
 }
 function jcOpenForm() {
   document.getElementById('jc-dashboard').classList.remove('active');
@@ -7942,11 +8000,13 @@ function jcMarkDirty() {
   jcIsDirty = true;
   document.getElementById('jc-draft-dot')?.classList.add('show');
   document.getElementById('jc-unsaved-banner')?.classList.add('show');
+  document.getElementById('jc-float-pill')?.classList.add('dirty');
 }
 function jcMarkClean() {
   jcIsDirty = false;
   document.getElementById('jc-draft-dot')?.classList.remove('show');
   document.getElementById('jc-unsaved-banner')?.classList.remove('show');
+  document.getElementById('jc-float-pill')?.classList.remove('dirty');
 }
 
 // ── SEARCH ────────────────────────────────────────────────────────
