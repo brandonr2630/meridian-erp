@@ -1,6 +1,24 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-07-01 · Session 41*
+*Last updated: 2026-07-03 · Session 42*
+
+---
+
+## Session 42 — Job-open toast wording fix (RESOLVED)
+
+**Date:** 2026-07-03
+**PR:** [#111](https://github.com/brandonr2630/meridian-erp/pull/111) — merged, deployed
+
+### What Changed
+
+| Item | Change | Detail |
+|------|--------|--------|
+| `index.html` — `jcPopulateForm()` (line ~7803) | Job-open toast reworded | Was `showToast('✓ Job ' + row['Job No'] + ' loaded.', 'success')` — green checkmark, same styling as the save-success toast, causing the user to misread it as a save confirmation (flagged Session 41). Changed to `showToast('Opened ' + row['Job No'] + '.', 'info')` — blue `.toast.info` style, visually distinct from `.toast.success` at a glance. |
+
+### Notes
+
+- Resolves Session 41 open item: toast on opening a WO sounded like "Job saved". Confirmed pre-existing "loaded" toast (not a mislabeled save) — fixed by making it visually distinct rather than just re-wording, since shared green/checkmark styling was the actual source of confusion.
+- Save toast (`✓ Job {no} saved.`, green, `jcSaveJobData()` ~line 7582) unchanged.
 
 ---
 
