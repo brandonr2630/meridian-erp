@@ -3348,6 +3348,30 @@ body.light .global-search-results, body.light .split-btn-menu {
               </div>
             </div>
 
+            <!-- 5b. Hardware -->
+            <div class="card">
+              <div class="card-header"><span class="card-header-icon">🔩</span><span class="card-header-title">Hardware &amp; Fasteners Used</span></div>
+              <div class="card-body">
+                <p class="scroll-hint">← scroll to see all columns →</p>
+                <div class="dyn-table-wrap">
+                  <table class="dyn-table">
+                    <thead><tr>
+                      <th style="width:110px">Date</th><th>Hardware / Description</th>
+                      <th style="width:130px">Size / Spec</th><th style="width:60px">Qty</th>
+                      <th style="width:70px">Unit</th><th style="width:110px" class="right">Unit Cost (TTD)</th>
+                      <th style="width:110px" class="right">Total Cost</th><th style="width:28px"></th>
+                    </tr></thead>
+                    <tbody id="jc-hardware-body"></tbody>
+                    <tfoot><tr>
+                      <td colspan="6" class="right" style="font-size:11px;">Total Hardware:</td>
+                      <td id="jc-hardware-cost-total" class="right" style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:var(--gold);">$0.00</td><td></td>
+                    </tr></tfoot>
+                  </table>
+                </div>
+                <button class="btn-add-row" onclick="jcAddHardwareRow()">+ Add Hardware</button>
+              </div>
+            </div>
+
             <!-- 6. Consumables -->
             <div class="card">
               <div class="card-header"><span class="card-header-icon">🧪</span><span class="card-header-title">Consumables Used</span></div>
@@ -3369,6 +3393,30 @@ body.light .global-search-results, body.light .split-btn-menu {
                   </table>
                 </div>
                 <button class="btn-add-row" onclick="jcAddConsumableRow()">+ Add Consumable</button>
+              </div>
+            </div>
+
+            <!-- 6b. Tooling -->
+            <div class="card">
+              <div class="card-header"><span class="card-header-icon">⚙️</span><span class="card-header-title">Tooling Used</span></div>
+              <div class="card-body">
+                <p class="scroll-hint">← scroll to see all columns →</p>
+                <div class="dyn-table-wrap">
+                  <table class="dyn-table">
+                    <thead><tr>
+                      <th style="width:110px">Date</th><th>Tool / Description</th>
+                      <th style="width:110px">Stock Code</th><th style="width:60px">Qty</th>
+                      <th style="width:70px">Unit</th><th style="width:110px" class="right">Unit Cost (TTD)</th>
+                      <th style="width:110px" class="right">Total Cost</th><th style="width:28px"></th>
+                    </tr></thead>
+                    <tbody id="jc-tooling-body"></tbody>
+                    <tfoot><tr>
+                      <td colspan="6" class="right" style="font-size:11px;">Total Tooling:</td>
+                      <td id="jc-tooling-cost-total" class="right" style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:var(--gold);">$0.00</td><td></td>
+                    </tr></tfoot>
+                  </table>
+                </div>
+                <button class="btn-add-row" onclick="jcAddToolingRow()">+ Add Tool</button>
               </div>
             </div>
 
@@ -3405,7 +3453,9 @@ body.light .global-search-results, body.light .split-btn-menu {
                         <tr><td>Labour</td><td id="jc-cs-labour">$0.00</td></tr>
                         <tr><td>Machine / Equipment</td><td id="jc-cs-equip">$0.00</td></tr>
                         <tr><td>Materials &amp; Stock</td><td id="jc-cs-materials">$0.00</td></tr>
+                        <tr><td>Hardware</td><td id="jc-cs-hardware">$0.00</td></tr>
                         <tr><td>Consumables</td><td id="jc-cs-consumables">$0.00</td></tr>
+                        <tr><td>Tooling</td><td id="jc-cs-tooling">$0.00</td></tr>
                         <tr><td>Sub-contractors</td><td id="jc-cs-subs">$0.00</td></tr>
                         <tr><td>Other / Miscellaneous</td><td><input type="number" id="jc-cs-misc" style="background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:12px;text-align:right;width:90px;outline:none;padding:2px 4px;" placeholder="0.00" value="0" oninput="jcUpdateCostSummary()"></td></tr>
                         <tr class="total-row"><td>Total Job Cost</td><td id="jc-cs-total">$0.00</td></tr>
