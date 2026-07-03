@@ -7800,7 +7800,7 @@ function jcPopulateForm(row) {
   jcMarkClean();
   const delBtn = document.getElementById('jc-delete-btn'); if (delBtn) delBtn.style.display = isAdmin() ? '' : 'none';
   const adminSec = document.getElementById('jc-admin-cost-section'); if (adminSec) adminSec.style.display = isAdmin() ? '' : 'none';
-  showToast('✓ Job ' + row['Job No'] + ' loaded.', 'success');
+  showToast('Opened ' + row['Job No'] + '.', 'info');
 }
 
 // ── DELETE ────────────────────────────────────────────────────────
