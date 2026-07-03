@@ -14762,7 +14762,20 @@ function renderMultiPagePDF(containerId, pages, headerHTML, showPricing, currenc
       </div>`;
   });
 
-  const iframe = document.getElementById(containerId);
+  const target = document.getElementById(containerId);
+
+  if (target.tagName !== 'IFRAME') {
+    // Plain staging div (email/download PDF generation via html2canvas) —
+    // no isolated document needed, just scope the reset/color rules to this
+    // element so they can't leak into the rest of the app's DOM.
+    target.innerHTML = `<style>
+      #${containerId} * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+      #${containerId} .pdf-hdr td { background: #1a1a1a !important; color: #fff !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    </style>${pagesHTML}`;
+    return;
+  }
+
+  const iframe = target;
   const doc = iframe.contentDocument || iframe.contentWindow.document;
   doc.open();
   doc.write(`<!DOCTYPE html>
