@@ -7413,21 +7413,27 @@ async function jcCfgDelete(tab, id) {
 
 // ── CONFIG ────────────────────────────────────────────────────────
 async function jcLoadConfig() {
-  jcConfig = { labour:[], equipment:[], tasks:[], materials:[], consumables:[], qcChecklists:[], employees:[] };
+  jcConfig = { labour:[], equipment:[], tasks:[], materials:[], consumables:[], hardware:[], tooling:[], fuel:[], qcChecklists:[], employees:[] };
   try {
-    const [labRows, eqRows, matRows, conRows, taskRows, qcRows, empRows] = await Promise.all([
+    const [labRows, eqRows, matRows, conRows, hwRows, toolRows, fuelRows, taskRows, qcRows, empRows] = await Promise.all([
       sbGet('config_labour',       'status=eq.approved&is_active=eq.true&order=sort_order'),
       sbGet('config_equipment',    'status=eq.approved&is_active=eq.true&order=sort_order'),
       sbGet('config_materials',    'status=eq.approved&is_active=eq.true&order=sort_order'),
       sbGet('config_consumables',  'status=eq.approved&is_active=eq.true&order=sort_order'),
+      sbGet('config_hardware',     'status=eq.approved&is_active=eq.true&order=sort_order'),
+      sbGet('config_tooling',      'status=eq.approved&is_active=eq.true&order=sort_order'),
+      sbGet('config_fuel',         'status=eq.approved&is_active=eq.true&order=sort_order'),
       sbGet('config_tasks',        'status=eq.approved&is_active=eq.true&order=sort_order'),
       sbGet('config_qc_checklists','status=eq.approved&is_active=eq.true&order=sort_order'),
       sbGet('employees',           'order=name'),
     ]);
     jcConfig.labour      = (labRows ||[]).map(r => ({ classification:r.classification, workshopRate:parseFloat(r.workshop_rate_ttd)||0, onsiteRate:parseFloat(r.onsite_rate_ttd)||0 }));
     jcConfig.equipment   = (eqRows  ||[]).map(r => ({ name:r.equipment_name, assetNo:r.asset_no||'', workshopRate:parseFloat(r.workshop_rate_ttd)||0, onsiteRate:parseFloat(r.onsite_rate_ttd)||0 }));
-    jcConfig.materials   = (matRows ||[]).map(r => ({ name:r.item_name, unit:r.unit||'', cost:parseFloat(r.default_unit_cost_ttd)||0 }));
-    jcConfig.consumables = (conRows ||[]).map(r => ({ name:r.item_name, unit:r.unit||'', cost:parseFloat(r.default_unit_cost_ttd)||0 }));
+    jcConfig.materials   = (matRows ||[]).map(r => ({ id:r.id, name:r.item_name, unit:r.unit||'', cost:parseFloat(r.default_unit_cost_ttd)||0 }));
+    jcConfig.consumables = (conRows ||[]).map(r => ({ id:r.id, name:r.item_name, unit:r.unit||'', cost:parseFloat(r.default_unit_cost_ttd)||0 }));
+    jcConfig.hardware    = (hwRows  ||[]).map(r => ({ id:r.id, name:r.item_name, spec:r.spec||'', unit:r.unit||'', cost:parseFloat(r.default_unit_cost_ttd)||0 }));
+    jcConfig.tooling     = (toolRows||[]).map(r => ({ id:r.id, name:r.item_name, code:r.stock_code||'', unit:r.unit||'', cost:parseFloat(r.default_unit_cost_ttd)||0 }));
+    jcConfig.fuel        = (fuelRows||[]).map(r => ({ id:r.id, name:r.item_name, unit:r.unit||'', cost:parseFloat(r.default_unit_cost_ttd)||0 }));
     jcConfig.tasks       = (taskRows||[]).map(r => r.task_name);
     jcConfig.qcChecklists= (qcRows  ||[]).map(r => ({ item:r.checklist_item, jobType:r.job_type||'All' }));
     jcConfig.employees   = (empRows ||[]).map(r => ({ name:r.name, classification:r.job_classification||'' }));
@@ -7440,6 +7446,8 @@ function jcRefreshRowDropdowns() {
   const taskOpts = '<option value="">Select task…</option>' + jcConfig.tasks.map(t => `<option value="${escHTML(t)}">${escHTML(t)}</option>`).join('');
   const matOpts  = '<option value="">Select…</option>' + jcConfig.materials.map(r => `<option value="${escHTML(r.name)}">${escHTML(r.name)}</option>`).join('');
   const conOpts  = '<option value="">Select…</option>' + jcConfig.consumables.map(r => `<option value="${escHTML(r.name)}">${escHTML(r.name)}</option>`).join('');
+  const hwOpts   = '<option value="">Select…</option>' + jcConfig.hardware.map(r => `<option value="${escHTML(r.name)}">${escHTML(r.name)}</option>`).join('');
+  const toolOpts = '<option value="">Select…</option>' + jcConfig.tooling.map(r => `<option value="${escHTML(r.name)}">${escHTML(r.name)}</option>`).join('');
   document.querySelectorAll('#jc-labour-body tr').forEach(tr => {
     const rid = tr.id; if (!rid || !rid.startsWith('jc-lr-')) return;
     const empSel = document.getElementById(rid+'-emp'); if (!empSel) return;
@@ -7458,6 +7466,14 @@ function jcRefreshRowDropdowns() {
   document.querySelectorAll('#jc-consumables-body tr').forEach(tr => {
     const sel = tr.querySelector('select'); if (!sel) return;
     const cur = sel.value; sel.innerHTML = conOpts; sel.value = cur;
+  });
+  document.querySelectorAll('#jc-hardware-body tr').forEach(tr => {
+    const sel = tr.querySelector('select'); if (!sel) return;
+    const cur = sel.value; sel.innerHTML = hwOpts; sel.value = cur;
+  });
+  document.querySelectorAll('#jc-tooling-body tr').forEach(tr => {
+    const sel = tr.querySelector('select'); if (!sel) return;
+    const cur = sel.value; sel.innerHTML = toolOpts; sel.value = cur;
   });
 }
 
