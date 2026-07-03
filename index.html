@@ -6906,6 +6906,9 @@ const JC_CFG_TABS = [
   { id:'equipment',   label:'Equipment',       table:'config_equipment' },
   { id:'materials',   label:'Materials',       table:'config_materials' },
   { id:'consumables', label:'Consumables',     table:'config_consumables' },
+  { id:'hardware',    label:'Hardware',        table:'config_hardware' },
+  { id:'tooling',     label:'Tooling',         table:'config_tooling' },
+  { id:'fuel',        label:'Fuel',            table:'config_fuel' },
   { id:'tasks',       label:'Tasks',           table:'config_tasks' },
   { id:'qc',          label:'QC Checklists',   table:'config_qc_checklists' },
   { id:'employees',   label:'Employees',       table:'employees' },
@@ -6991,6 +6994,32 @@ function jcCfgRenderTab(tab, rows) {
     body = rows.map(r => `<tr>
       <td style="font-weight:500;">${escHTML(r.item_name||'')}</td>
       <td>${escHTML(r.category||'—')}</td>
+      <td>${escHTML(r.unit||'—')}</td>
+      <td class="right mono">${jcFmtTTD(r.default_unit_cost_ttd)}</td>
+      <td><span class="badge ${r.is_active?'badge-posted':'badge-void'}">${r.is_active?'Active':'Inactive'}</span></td>
+      <td class="right">${jcCfgActions(tab,r.id)}</td></tr>`).join('');
+  } else if (tab === 'hardware') {
+    head = '<th>Item Name</th><th>Size / Spec</th><th>Unit</th><th class="right">Default Unit Cost</th><th>Active</th><th class="right">Actions</th>';
+    body = rows.map(r => `<tr>
+      <td style="font-weight:500;">${escHTML(r.item_name||'')}</td>
+      <td>${escHTML(r.spec||'—')}</td>
+      <td>${escHTML(r.unit||'—')}</td>
+      <td class="right mono">${jcFmtTTD(r.default_unit_cost_ttd)}</td>
+      <td><span class="badge ${r.is_active?'badge-posted':'badge-void'}">${r.is_active?'Active':'Inactive'}</span></td>
+      <td class="right">${jcCfgActions(tab,r.id)}</td></tr>`).join('');
+  } else if (tab === 'tooling') {
+    head = '<th>Item Name</th><th>Stock Code</th><th>Unit</th><th class="right">Default Unit Cost</th><th>Active</th><th class="right">Actions</th>';
+    body = rows.map(r => `<tr>
+      <td style="font-weight:500;">${escHTML(r.item_name||'')}</td>
+      <td class="mono">${escHTML(r.stock_code||'—')}</td>
+      <td>${escHTML(r.unit||'—')}</td>
+      <td class="right mono">${jcFmtTTD(r.default_unit_cost_ttd)}</td>
+      <td><span class="badge ${r.is_active?'badge-posted':'badge-void'}">${r.is_active?'Active':'Inactive'}</span></td>
+      <td class="right">${jcCfgActions(tab,r.id)}</td></tr>`).join('');
+  } else if (tab === 'fuel') {
+    head = '<th>Item Name</th><th>Unit</th><th class="right">Default Unit Cost</th><th>Active</th><th class="right">Actions</th>';
+    body = rows.map(r => `<tr>
+      <td style="font-weight:500;">${escHTML(r.item_name||'')}</td>
       <td>${escHTML(r.unit||'—')}</td>
       <td class="right mono">${jcFmtTTD(r.default_unit_cost_ttd)}</td>
       <td><span class="badge ${r.is_active?'badge-posted':'badge-void'}">${r.is_active?'Active':'Inactive'}</span></td>
@@ -7151,6 +7180,62 @@ function jcCfgBuildModalBody(tab, r) {
     ${sortField}${activeField}
   </div>`;
 
+  if (tab === 'hardware') return `<div class="form-grid" style="grid-template-columns:1fr 1fr;">
+    <div class="field" style="grid-column:span 2;">
+      <label class="field-label">Item Name <span style="color:var(--red)">*</span></label>
+      <input type="text" id="jc-cfg-f1" value="${escHTML(r.item_name||'')}" placeholder="e.g. M8 Hex Bolt Stainless">
+    </div>
+    <div class="field">
+      <label class="field-label">Size / Spec</label>
+      <input type="text" id="jc-cfg-f2" value="${escHTML(r.spec||'')}" placeholder="e.g. M8 x 40mm">
+    </div>
+    <div class="field">
+      <label class="field-label">Unit</label>
+      <input type="text" id="jc-cfg-f3" value="${escHTML(r.unit||'')}" placeholder="e.g. pc, box">
+    </div>
+    <div class="field">
+      <label class="field-label">Default Unit Cost (TTD)</label>
+      <input type="number" id="jc-cfg-f4" value="${r.default_unit_cost_ttd??0}" min="0" step="0.01" class="mono">
+    </div>
+    ${sortField}${activeField}
+  </div>`;
+
+  if (tab === 'tooling') return `<div class="form-grid" style="grid-template-columns:1fr 1fr;">
+    <div class="field" style="grid-column:span 2;">
+      <label class="field-label">Item Name <span style="color:var(--red)">*</span></label>
+      <input type="text" id="jc-cfg-f1" value="${escHTML(r.item_name||'')}" placeholder="e.g. 10mm Carbide End Mill">
+    </div>
+    <div class="field">
+      <label class="field-label">Stock Code</label>
+      <input type="text" id="jc-cfg-f2" value="${escHTML(r.stock_code||'')}" class="mono" placeholder="e.g. EM-10C">
+    </div>
+    <div class="field">
+      <label class="field-label">Unit</label>
+      <input type="text" id="jc-cfg-f3" value="${escHTML(r.unit||'')}" placeholder="e.g. pc">
+    </div>
+    <div class="field">
+      <label class="field-label">Default Unit Cost (TTD)</label>
+      <input type="number" id="jc-cfg-f4" value="${r.default_unit_cost_ttd??0}" min="0" step="0.01" class="mono">
+    </div>
+    ${sortField}${activeField}
+  </div>`;
+
+  if (tab === 'fuel') return `<div class="form-grid" style="grid-template-columns:1fr 1fr;">
+    <div class="field" style="grid-column:span 2;">
+      <label class="field-label">Item Name <span style="color:var(--red)">*</span></label>
+      <input type="text" id="jc-cfg-f1" value="${escHTML(r.item_name||'')}" placeholder="e.g. Diesel">
+    </div>
+    <div class="field">
+      <label class="field-label">Unit</label>
+      <input type="text" id="jc-cfg-f2" value="${escHTML(r.unit||'litre')}" placeholder="litre, gallon">
+    </div>
+    <div class="field">
+      <label class="field-label">Default Unit Cost (TTD)</label>
+      <input type="number" id="jc-cfg-f3" value="${r.default_unit_cost_ttd??0}" min="0" step="0.01" class="mono">
+    </div>
+    ${sortField}${activeField}
+  </div>`;
+
   if (tab === 'tasks') return `<div class="form-grid" style="grid-template-columns:1fr 1fr;">
     <div class="field" style="grid-column:span 2;">
       <label class="field-label">Task Name <span style="color:var(--red)">*</span></label>
@@ -7271,6 +7356,15 @@ async function jcCfgSave() {
     } else if (tab === 'consumables') {
       if (!gv('jc-cfg-f1')) { showToast('Item name is required.', 'warn'); return; }
       record = { item_name:gv('jc-cfg-f1'), category:gv('jc-cfg-f2')||null, unit:gv('jc-cfg-f3')||null, default_unit_cost_ttd:gn('jc-cfg-f4'), sort_order:gi('jc-cfg-sort'), is_active:gc('jc-cfg-active') };
+    } else if (tab === 'hardware') {
+      if (!gv('jc-cfg-f1')) { showToast('Item name is required.', 'warn'); return; }
+      record = { item_name:gv('jc-cfg-f1'), spec:gv('jc-cfg-f2')||null, unit:gv('jc-cfg-f3')||null, default_unit_cost_ttd:gn('jc-cfg-f4'), sort_order:gi('jc-cfg-sort'), is_active:gc('jc-cfg-active') };
+    } else if (tab === 'tooling') {
+      if (!gv('jc-cfg-f1')) { showToast('Item name is required.', 'warn'); return; }
+      record = { item_name:gv('jc-cfg-f1'), stock_code:gv('jc-cfg-f2')||null, unit:gv('jc-cfg-f3')||null, default_unit_cost_ttd:gn('jc-cfg-f4'), sort_order:gi('jc-cfg-sort'), is_active:gc('jc-cfg-active') };
+    } else if (tab === 'fuel') {
+      if (!gv('jc-cfg-f1')) { showToast('Item name is required.', 'warn'); return; }
+      record = { item_name:gv('jc-cfg-f1'), unit:gv('jc-cfg-f2')||null, default_unit_cost_ttd:gn('jc-cfg-f3'), sort_order:gi('jc-cfg-sort'), is_active:gc('jc-cfg-active') };
     } else if (tab === 'tasks') {
       if (!gv('jc-cfg-f1')) { showToast('Task name is required.', 'warn'); return; }
       record = { task_name:gv('jc-cfg-f1'), category:gv('jc-cfg-f2')||null, sort_order:gi('jc-cfg-sort'), is_active:gc('jc-cfg-active') };
