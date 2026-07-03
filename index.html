@@ -8476,6 +8476,90 @@ function jcUpdateConTotals() {
   const el=document.getElementById('jc-consumables-cost-total'); if(el) el.textContent='$'+total.toFixed(2);
 }
 
+// ── HARDWARE ──────────────────────────────────────────────────────
+function jcAddHardwareRow(d) {
+  const tbody=document.getElementById('jc-hardware-body'); if (!tbody) return;
+  const rid='jc-hr-'+Date.now()+Math.random().toString(36).substr(2,4);
+  const hwOpts='<option value="">Select…</option>'+jcConfig.hardware.map(r => `<option value="${escHTML(r.name)}" data-unit="${escHTML(r.unit)}" data-cost="${r.cost}" data-spec="${escHTML(r.spec)}">${escHTML(r.name)}</option>`).join('');
+  const tr=document.createElement('tr'); tr.id=rid;
+  tr.innerHTML=`
+    <td><input type="date" value="${d&&d.date||''}"></td>
+    <td><select onchange="jcOnHardwareChange(this,'${rid}')">${hwOpts}</select></td>
+    <td><input type="text" placeholder="Size / Spec" id="${rid}-spec" value="${d&&d.spec||''}"></td>
+    <td><input type="number" class="num" placeholder="0" value="${d&&d.qty||''}" step="1" oninput="jcUpdateHardwareRow('${rid}')"></td>
+    <td><input type="text" placeholder="Unit" id="${rid}-unit" value="${d&&d.unit||''}" style="width:60px;"></td>
+    <td><input type="number" class="num" placeholder="0.00" id="${rid}-cost" value="${d&&d.unitCost||''}" oninput="jcUpdateHardwareRow('${rid}')"></td>
+    <td><span class="row-total" id="${rid}-amount">$0.00</span></td>
+    <td><button class="btn-del" onclick="document.getElementById('${rid}').remove();jcUpdateHwTotals();jcUpdateCostSummary();">✕</button></td>`;
+  tbody.appendChild(tr);
+  if (d&&d.desc) tr.querySelector('select').value=d.desc;
+  jcUpdateHardwareRow(rid);
+}
+function jcOnHardwareChange(sel, rid) {
+  const opt=sel.options[sel.selectedIndex];
+  if (opt) {
+    const u=document.getElementById(rid+'-unit'),c=document.getElementById(rid+'-cost'),s=document.getElementById(rid+'-spec');
+    if(u)u.value=opt.dataset.unit||''; if(c)c.value=parseFloat(opt.dataset.cost||0).toFixed(2); if(s&&!s.value)s.value=opt.dataset.spec||'';
+  }
+  jcUpdateHardwareRow(rid);
+}
+function jcUpdateHardwareRow(rid) {
+  const tr=document.getElementById(rid); if (!tr) return;
+  const qty=parseFloat(tr.querySelectorAll('input[type="number"]')[0]?.value)||0;
+  const cost=parseFloat(document.getElementById(rid+'-cost')?.value)||0;
+  const el=document.getElementById(rid+'-amount'); if(el) el.textContent='$'+(qty*cost).toFixed(2);
+  jcUpdateHwTotals(); jcUpdateCostSummary();
+}
+function jcUpdateHwTotals() {
+  let total=0;
+  document.querySelectorAll('#jc-hardware-body tr').forEach(tr => {
+    if (!tr.id) return; total+=parseFloat(document.getElementById(tr.id+'-amount')?.textContent.replace('$',''))||0;
+  });
+  const el=document.getElementById('jc-hardware-cost-total'); if(el) el.textContent='$'+total.toFixed(2);
+}
+
+// ── TOOLING ───────────────────────────────────────────────────────
+function jcAddToolingRow(d) {
+  const tbody=document.getElementById('jc-tooling-body'); if (!tbody) return;
+  const rid='jc-tr-'+Date.now()+Math.random().toString(36).substr(2,4);
+  const toolOpts='<option value="">Select…</option>'+jcConfig.tooling.map(r => `<option value="${escHTML(r.name)}" data-unit="${escHTML(r.unit)}" data-cost="${r.cost}" data-code="${escHTML(r.code)}">${escHTML(r.name)}</option>`).join('');
+  const tr=document.createElement('tr'); tr.id=rid;
+  tr.innerHTML=`
+    <td><input type="date" value="${d&&d.date||''}"></td>
+    <td><select onchange="jcOnToolingChange(this,'${rid}')">${toolOpts}</select></td>
+    <td><input type="text" placeholder="Stock code" id="${rid}-code" value="${d&&d.code||''}"></td>
+    <td><input type="number" class="num" placeholder="0" value="${d&&d.qty||''}" step="1" oninput="jcUpdateToolingRow('${rid}')"></td>
+    <td><input type="text" placeholder="Unit" id="${rid}-unit" value="${d&&d.unit||''}" style="width:60px;"></td>
+    <td><input type="number" class="num" placeholder="0.00" id="${rid}-cost" value="${d&&d.unitCost||''}" oninput="jcUpdateToolingRow('${rid}')"></td>
+    <td><span class="row-total" id="${rid}-amount">$0.00</span></td>
+    <td><button class="btn-del" onclick="document.getElementById('${rid}').remove();jcUpdateToolTotals();jcUpdateCostSummary();">✕</button></td>`;
+  tbody.appendChild(tr);
+  if (d&&d.desc) tr.querySelector('select').value=d.desc;
+  jcUpdateToolingRow(rid);
+}
+function jcOnToolingChange(sel, rid) {
+  const opt=sel.options[sel.selectedIndex];
+  if (opt) {
+    const u=document.getElementById(rid+'-unit'),c=document.getElementById(rid+'-cost'),code=document.getElementById(rid+'-code');
+    if(u)u.value=opt.dataset.unit||''; if(c)c.value=parseFloat(opt.dataset.cost||0).toFixed(2); if(code&&!code.value)code.value=opt.dataset.code||'';
+  }
+  jcUpdateToolingRow(rid);
+}
+function jcUpdateToolingRow(rid) {
+  const tr=document.getElementById(rid); if (!tr) return;
+  const qty=parseFloat(tr.querySelectorAll('input[type="number"]')[0]?.value)||0;
+  const cost=parseFloat(document.getElementById(rid+'-cost')?.value)||0;
+  const el=document.getElementById(rid+'-amount'); if(el) el.textContent='$'+(qty*cost).toFixed(2);
+  jcUpdateToolTotals(); jcUpdateCostSummary();
+}
+function jcUpdateToolTotals() {
+  let total=0;
+  document.querySelectorAll('#jc-tooling-body tr').forEach(tr => {
+    if (!tr.id) return; total+=parseFloat(document.getElementById(tr.id+'-amount')?.textContent.replace('$',''))||0;
+  });
+  const el=document.getElementById('jc-tooling-cost-total'); if(el) el.textContent='$'+total.toFixed(2);
+}
+
 // ── SUB-CONTRACTORS ───────────────────────────────────────────────
 function jcAddSubRow(d) {
   const tbody=document.getElementById('jc-subs-body'); if (!tbody) return;
