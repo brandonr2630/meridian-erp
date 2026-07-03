@@ -4651,7 +4651,7 @@ body.light .global-search-results, body.light .split-btn-menu {
     <div class="modal-header">
       <div class="modal-title">Invoice Preview</div>
       <div style="display:flex;gap:8px;">
-        <button class="btn btn-primary btn-sm" onclick="downloadDocumentPDF()">⬇ Download PDF</button>
+        <button class="btn btn-primary btn-sm" onclick="printPDF(this)">⬇ Download PDF</button>
         <button class="modal-close" onclick="closeModal('modal-pdf-preview')">✕</button>
       </div>
     </div>
@@ -4823,7 +4823,7 @@ body.light .global-search-results, body.light .split-btn-menu {
     <div class="modal-header">
       <div class="modal-title">Quotation Preview</div>
       <div style="display:flex;gap:8px;">
-        <button class="btn btn-primary btn-sm" onclick="downloadDocumentPDF()">⬇ Download PDF</button>
+        <button class="btn btn-primary btn-sm" onclick="printPDF(this)">⬇ Download PDF</button>
         <button class="modal-close" onclick="closeModal('modal-quo-pdf')">✕</button>
       </div>
     </div>
@@ -15263,28 +15263,6 @@ async function generatePDFBase64(source) {
     throw new Error(`Unknown email document type: ${type}`);
   }
 
-  // Native window.print()/iframe.contentWindow.print() won't reliably paginate
-  // multi-page quote/invoice content across physical pages (Chromium only
-  // captures what fits on page 1 of the printed iframe). _buildEmailPDF already
-  // produces a correct multi-page PDF via html2pdf's canvas-slicing, so reuse
-  // it here and trigger a real file download instead of the print dialog.
-  let _pdfPreviewCtx = null;
-  async function downloadDocumentPDF() {
-    if (!_pdfPreviewCtx) return;
-    try {
-      const { type, id, filename } = _pdfPreviewCtx;
-      const dataUri = await _buildEmailPDF(type, id);
-      const a = document.createElement('a');
-      a.href = dataUri;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    } catch (e) {
-      showToast('PDF download failed: ' + e.message, 'error');
-    }
-  }
-
   function _sendNotification(eventKey, companyId, entityType, entityId, context) {
     if (!currentCompany?.send_from_email) return;
     fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
@@ -15356,7 +15334,6 @@ async function openInvoicePDF(id) {
     parseFloat(inv.total||0), inv.incoterms, inv.incoterms_place,
     inv.notes, co.bank_details, co.name, docNo);
 
-  _pdfPreviewCtx = { type: 'invoice', id: inv.id, filename: `Invoice-${docNo}.pdf` };
   document.getElementById('modal-pdf-preview').classList.add('show');
 }
 
@@ -15389,7 +15366,6 @@ async function openQuoPDF(id) {
     parseFloat(quo.total||0), quo.incoterms, quo.incoterms_place,
     quo.notes, null, co.name, quo.quote_no);
 
-  _pdfPreviewCtx = { type: 'quotation', id: quo.id, filename: `Quotation-${quo.quote_no || 'DRAFT'}.pdf` };
   document.getElementById('modal-quo-pdf').classList.add('show');
 }
 
