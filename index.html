@@ -14782,13 +14782,13 @@ function renderMultiPagePDF(containerId, pages, headerHTML, showPricing, currenc
 </html>`);
   doc.close();
 
-  // Resize iframe to fit content
-  iframe.onload = () => {
-    try {
-      const h = iframe.contentDocument.body.scrollHeight;
-      iframe.style.minHeight = h + 'px';
-    } catch(e) {}
-  };
+  // Resize iframe to fit content. Must run synchronously here — iframe.onload
+  // never fires for document.write()-based content, so page 2+ stayed clipped
+  // to the CSS min-height and was silently dropped from print/PDF output.
+  try {
+    const h = doc.body.scrollHeight;
+    iframe.style.minHeight = h + 'px';
+  } catch(e) {}
 }
 
 // ── Email PDF helpers ──────────────────────────────────────────────────────
