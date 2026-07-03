@@ -14800,13 +14800,23 @@ function renderMultiPagePDF(containerId, pages, headerHTML, showPricing, currenc
 </html>`);
   doc.close();
 
-  // Resize iframe to fit content. Must run synchronously here — iframe.onload
-  // never fires for document.write()-based content, so page 2+ stayed clipped
-  // to the CSS min-height and was silently dropped from print/PDF output.
-  try {
-    const h = doc.body.scrollHeight;
-    iframe.style.minHeight = h + 'px';
-  } catch(e) {}
+  // Resize iframe to fit content. iframe.onload never fires for
+  // document.write()-based content, so we can't rely on it. A synchronous
+  // read right after doc.close() is a reasonable fast path but isn't
+  // reliable on its own — on a long-lived, reused iframe the internal
+  // layout isn't always settled yet at that exact instant, so a bare sync
+  // read can measure 0 and collapse the box before the real content is
+  // clipped. Match the same synchronous + deferred re-measure + minimum-
+  // height-guard pattern already used by previewReport()'s resizeIframe().
+  const resizeToFit = () => {
+    try {
+      const h = doc.body.scrollHeight;
+      if (h > 200) iframe.style.minHeight = h + 'px';
+    } catch(e) {}
+  };
+  resizeToFit();
+  setTimeout(resizeToFit, 300);
+  setTimeout(resizeToFit, 600);
 }
 
 // ── Email PDF helpers ──────────────────────────────────────────────────────
