@@ -7805,7 +7805,7 @@ async function jcSaveJobData(data, jobId) {
     const rows = await sbPost('jobs', jobRecord);
     savedId = rows[0].id;
   }
-  await Promise.all(['labour_entries','equipment_entries','material_entries','consumable_entries','subcontractor_entries']
+  await Promise.all(['labour_entries','equipment_entries','material_entries','consumable_entries','hardware_entries','tooling_entries','subcontractor_entries']
     .map(t => sbDeleteWhere(t, `job_id=eq.${savedId}`)));
   const labour = parse(data.labourDetail);
   if (labour.length) await sbPost('labour_entries', labour.map((r,i) => ({
@@ -7817,7 +7817,9 @@ async function jcSaveJobData(data, jobId) {
   if (equip.length) await sbPost('equipment_entries', equip.map((r,i) => ({
     job_id:savedId, sort_order:i, entry_date:r.date||null, machine_name:r.machine||null,
     asset_no:r.asset||null, location:r.location||'Workshop', setup_hours:parseFloat(r.setup)||0,
-    run_hours:parseFloat(r.run)||0, rate_ttd:parseFloat(r.rate)||0, amount_ttd:parseFloat(r.amount)||0, tasks:r.tasks||[]
+    run_hours:parseFloat(r.run)||0, rate_ttd:parseFloat(r.rate)||0, amount_ttd:parseFloat(r.amount)||0, tasks:r.tasks||[],
+    fuel_type:r.fuelType||null, fuel_qty:parseFloat(r.fuelQty)||0, fuel_unit_cost_ttd:parseFloat(r.fuelUnitCost)||0,
+    fuel_amount_ttd:parseFloat(r.fuelAmount)||0
   })));
   const mats = parse(data.matsDetail);
   if (mats.length) await sbPost('material_entries', mats.map((r,i) => ({
@@ -7828,6 +7830,18 @@ async function jcSaveJobData(data, jobId) {
   const cons = parse(data.consDetail);
   if (cons.length) await sbPost('consumable_entries', cons.map((r,i) => ({
     job_id:savedId, sort_order:i, entry_date:r.date||null, description:r.desc||null, category:r.cat||null,
+    quantity:parseFloat(r.qty)||0, unit:r.unit||null, unit_cost_ttd:parseFloat(r.unitCost)||0,
+    total_cost_ttd:(parseFloat(r.qty)||0)*(parseFloat(r.unitCost)||0)
+  })));
+  const hw = parse(data.hwDetail);
+  if (hw.length) await sbPost('hardware_entries', hw.map((r,i) => ({
+    job_id:savedId, sort_order:i, entry_date:r.date||null, description:r.desc||null, spec:r.spec||null,
+    quantity:parseFloat(r.qty)||0, unit:r.unit||null, unit_cost_ttd:parseFloat(r.unitCost)||0,
+    total_cost_ttd:(parseFloat(r.qty)||0)*(parseFloat(r.unitCost)||0)
+  })));
+  const tool = parse(data.toolDetail);
+  if (tool.length) await sbPost('tooling_entries', tool.map((r,i) => ({
+    job_id:savedId, sort_order:i, entry_date:r.date||null, description:r.desc||null, stock_code:r.code||null,
     quantity:parseFloat(r.qty)||0, unit:r.unit||null, unit_cost_ttd:parseFloat(r.unitCost)||0,
     total_cost_ttd:(parseFloat(r.qty)||0)*(parseFloat(r.unitCost)||0)
   })));
@@ -8053,7 +8067,12 @@ function jcCollectFormData() {
     const inputs=tr.querySelectorAll('input'), sels=tr.querySelectorAll('select'), tasks=[];
     const tc = document.getElementById(rid+'-taskcontainer');
     if (tc) tc.querySelectorAll('.jc-task-subrow').forEach(d => tasks.push({ task:d.querySelector('select')?.value||'', note:d.querySelector('input')?.value||'' }));
-    equipDetail.push({ date:inputs[0]?.value||'', machine:sels[0]?.value||'', asset:inputs[1]?.value||'', location:sels[1]?.value||'Workshop', setup:inputs[2]?.value||'0', run:inputs[3]?.value||'0', rate:document.getElementById(rid+'-rate')?.value||'0', amount:(document.getElementById(rid+'-amount')?.textContent||'$0').replace('$',''), tasks });
+    equipDetail.push({ date:inputs[0]?.value||'', machine:sels[0]?.value||'', asset:inputs[1]?.value||'', location:sels[1]?.value||'Workshop', setup:inputs[2]?.value||'0', run:inputs[3]?.value||'0', rate:document.getElementById(rid+'-rate')?.value||'0', amount:(document.getElementById(rid+'-amount')?.textContent||'$0').replace('$',''), tasks,
+      fuelType: document.getElementById(rid+'-fueltype')?.value||'',
+      fuelQty: document.getElementById(rid+'-fuelqty')?.value||'0',
+      fuelUnitCost: document.getElementById(rid+'-fuelcost')?.value||'0',
+      fuelAmount: (document.getElementById(rid+'-fuelamount')?.textContent||'$0').replace('$',''),
+    });
   });
   const matsDetail = [];
   document.querySelectorAll('#jc-materials-body tr').forEach(tr => {
@@ -8069,6 +8088,16 @@ function jcCollectFormData() {
   document.querySelectorAll('#jc-subs-body tr').forEach(tr => {
     if (!tr.id) return; const inputs=tr.querySelectorAll('input');
     subsDetail.push({ date:inputs[0]?.value||'', name:inputs[1]?.value||'', service:inputs[2]?.value||'', inv:inputs[3]?.value||'', cost:document.getElementById(tr.id+'-cost')?.value||'0' });
+  });
+  const hwDetail = [];
+  document.querySelectorAll('#jc-hardware-body tr').forEach(tr => {
+    if (!tr.id) return; const inputs=tr.querySelectorAll('input');
+    hwDetail.push({ date:inputs[0]?.value||'', desc:tr.querySelector('select')?.value||'', spec:document.getElementById(tr.id+'-spec')?.value||'', qty:inputs[2]?.value||'0', unit:document.getElementById(tr.id+'-unit')?.value||'', unitCost:document.getElementById(tr.id+'-cost')?.value||'0' });
+  });
+  const toolDetail = [];
+  document.querySelectorAll('#jc-tooling-body tr').forEach(tr => {
+    if (!tr.id) return; const inputs=tr.querySelectorAll('input');
+    toolDetail.push({ date:inputs[0]?.value||'', desc:tr.querySelector('select')?.value||'', code:document.getElementById(tr.id+'-code')?.value||'', qty:inputs[2]?.value||'0', unit:document.getElementById(tr.id+'-unit')?.value||'', unitCost:document.getElementById(tr.id+'-cost')?.value||'0' });
   });
   const drawings = [];
   document.querySelectorAll('#jc-drawings-body tr[data-drawing-id]').forEach(tr => {
@@ -8118,6 +8147,7 @@ function jcCollectFormData() {
     labourDetail:  JSON.stringify(labourDetail), equipDetail: JSON.stringify(equipDetail),
     matsDetail:    JSON.stringify(matsDetail),   consDetail:  JSON.stringify(consDetail),
     subsDetail:    JSON.stringify(subsDetail),
+    hwDetail:      JSON.stringify(hwDetail),     toolDetail:  JSON.stringify(toolDetail),
   };
 }
 
