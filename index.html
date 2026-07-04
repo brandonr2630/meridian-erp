@@ -3310,13 +3310,15 @@ body.light .global-search-results, body.light .split-btn-menu {
                       <th style="width:100px">Asset No.</th><th style="width:110px">Location</th>
                       <th style="width:85px" class="right">Setup (hrs)</th><th style="width:85px" class="right">Run (hrs)</th>
                       <th style="width:105px" class="right">Rate/hr (TTD)</th><th style="width:95px" class="right">Amount</th>
+                      <th style="width:110px">Fuel Type</th><th style="width:70px" class="right">Fuel Qty</th>
+                      <th style="width:100px" class="right">Fuel Cost</th><th style="width:100px" class="right">Fuel Amount</th>
                       <th style="width:28px"></th>
                     </tr></thead>
                     <tbody id="jc-equip-body"></tbody>
                     <tfoot><tr>
                       <td colspan="7" class="right" style="font-size:11px;">Total Machine Cost:</td>
                       <td id="jc-equip-cost-total" class="right" style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:var(--gold);">$0.00</td>
-                      <td></td>
+                      <td colspan="4"></td>
                     </tr></tfoot>
                   </table>
                 </div>
@@ -8398,6 +8400,7 @@ function jcAddEquipRow(d) {
   const rid = 'jc-er-'+Date.now()+Math.random().toString(36).substr(2,4);
   const eqOpts   = '<option value="">Select…</option>'+jcConfig.equipment.map(r => `<option value="${escHTML(r.name)}">${escHTML(r.name)}</option>`).join('');
   const taskOpts = '<option value="">Select task…</option>'+jcConfig.tasks.map(t => `<option value="${escHTML(t)}">${escHTML(t)}</option>`).join('');
+  const fuelOpts = '<option value="">None</option>'+jcConfig.fuel.map(r => `<option value="${escHTML(r.name)}" data-cost="${r.cost}">${escHTML(r.name)}</option>`).join('');
   const tr=document.createElement('tr'); tr.id=rid;
   tr.innerHTML=`
     <td><input type="date" value="${d&&d.date||''}"></td>
@@ -8410,13 +8413,18 @@ function jcAddEquipRow(d) {
     <td><input type="number" class="num" placeholder="0.00" value="${d&&d.run||''}" step="0.25" oninput="jcUpdateEquipRow('${rid}')"></td>
     <td><input type="number" class="num" placeholder="0.00" id="${rid}-rate" value="${d&&d.rate||''}" oninput="jcUpdateEquipRow('${rid}')"></td>
     <td><span class="row-total" id="${rid}-amount">$0.00</span></td>
+    <td><select id="${rid}-fueltype" onchange="jcOnFuelTypeChange('${rid}')">${fuelOpts}</select></td>
+    <td><input type="number" class="num" placeholder="0" id="${rid}-fuelqty" value="${d&&d.fuelQty||''}" step="0.1" oninput="jcUpdateEquipRow('${rid}')"></td>
+    <td><input type="number" class="num" placeholder="0.00" id="${rid}-fuelcost" value="${d&&d.fuelUnitCost||''}" oninput="jcUpdateEquipRow('${rid}')"></td>
+    <td><span class="row-total" id="${rid}-fuelamount">$0.00</span></td>
     <td><button class="btn-del" onclick="jcRemoveEquipRow('${rid}')">✕</button></td>`;
   tbody.appendChild(tr);
   const taskTr=document.createElement('tr'); taskTr.className='jc-task-subrows'; taskTr.id=rid+'-tasks';
-  taskTr.innerHTML=`<td colspan="9"><div id="${rid}-taskcontainer"></div><button class="btn-add-task" onclick="jcAddTaskSubRow('${rid}-taskcontainer')">+ Add Task</button></td>`;
+  taskTr.innerHTML=`<td colspan="13"><div id="${rid}-taskcontainer"></div><button class="btn-add-task" onclick="jcAddTaskSubRow('${rid}-taskcontainer')">+ Add Task</button></td>`;
   tbody.appendChild(taskTr);
   if (d&&d.machine) { tr.querySelectorAll('select')[0].value=d.machine; jcOnEquipChange(tr.querySelectorAll('select')[0],rid); }
   if (d&&d.location) tr.querySelectorAll('select')[1].value=d.location;
+  if (d&&d.fuelType) document.getElementById(rid+'-fueltype').value = d.fuelType;
   if (d&&d.tasks) d.tasks.forEach(t => jcAddTaskSubRow(rid+'-taskcontainer',t));
   jcUpdateEquipRow(rid);
 }
@@ -8428,11 +8436,21 @@ function jcOnEquipChange(sel, rid) {
   if (row&&rateEl) rateEl.value=(loc==='Workshop'?row.workshopRate:row.onsiteRate).toFixed(2);
   jcUpdateEquipRow(rid);
 }
+function jcOnFuelTypeChange(rid) {
+  const sel = document.getElementById(rid+'-fueltype');
+  const opt = sel?.options[sel.selectedIndex];
+  const costEl = document.getElementById(rid+'-fuelcost');
+  if (opt && costEl) costEl.value = parseFloat(opt.dataset.cost||0).toFixed(2);
+  jcUpdateEquipRow(rid);
+}
 function jcUpdateEquipRow(rid) {
   const tr=document.getElementById(rid); if (!tr) return;
   const nums=tr.querySelectorAll('input[type="number"]');
   const amt=((parseFloat(nums[0]?.value)||0)+(parseFloat(nums[1]?.value)||0))*(parseFloat(document.getElementById(rid+'-rate')?.value)||0);
   const amtEl=document.getElementById(rid+'-amount'); if (amtEl) amtEl.textContent='$'+amt.toFixed(2);
+  const fuelQty=parseFloat(document.getElementById(rid+'-fuelqty')?.value)||0;
+  const fuelCost=parseFloat(document.getElementById(rid+'-fuelcost')?.value)||0;
+  const fuelAmtEl=document.getElementById(rid+'-fuelamount'); if (fuelAmtEl) fuelAmtEl.textContent='$'+(fuelQty*fuelCost).toFixed(2);
   jcUpdateEquipTotals(); jcUpdateCostSummary();
 }
 function jcRemoveEquipRow(rid) {
@@ -8444,6 +8462,7 @@ function jcUpdateEquipTotals() {
   document.querySelectorAll('#jc-equip-body tr:not(.jc-task-subrows)').forEach(tr => {
     const rid=tr.id; if (!rid||!rid.startsWith('jc-er-')) return;
     total+=parseFloat(document.getElementById(rid+'-amount')?.textContent.replace('$',''))||0;
+    total+=parseFloat(document.getElementById(rid+'-fuelamount')?.textContent.replace('$',''))||0;
   });
   const el=document.getElementById('jc-equip-cost-total'); if (el) el.textContent='$'+total.toFixed(2);
 }
