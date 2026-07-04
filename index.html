@@ -7955,7 +7955,7 @@ function jcPopulateForm(row) {
   set('jc-f-jsa-date',      row['JSA Date Issued']);    set('jc-f-jsa-by',        row['JSA Issued By']);
   const lastSavedEl = document.getElementById('jc-last-saved');
   if (lastSavedEl && row['Last Saved']) lastSavedEl.textContent = 'Saved ' + new Date(row['Last Saved']).toLocaleString('en-TT');
-  ['jc-labour-body','jc-equip-body','jc-materials-body','jc-consumables-body','jc-hardware-body','jc-tooling-body','jc-subs-body','jc-drawings-body','jc-specs-body','jc-reports-body']
+  ['jc-labour-body','jc-equip-body','jc-materials-body','jc-hardware-body','jc-consumables-body','jc-tooling-body','jc-subs-body','jc-drawings-body','jc-specs-body','jc-reports-body']
     .forEach(id => { const el=document.getElementById(id); if (el) el.innerHTML=''; });
   const parse = str => { try { return JSON.parse(str)||[]; } catch(e) { return []; } };
   parse(row['Labour Detail']).forEach(d => jcAddLabourRow(d));
@@ -8027,7 +8027,7 @@ async function jcDuplicateJob() {
   set('jc-f-payment-terms',original.paymentTerms);  set('jc-f-jsa-title',    original.jsaTitle);
   set('jc-f-jsa-by',       original.jsaBy);
   const ps = document.getElementById('jc-priority-select'); if (ps && original.priority) ps.value = original.priority;
-  ['jc-labour-body','jc-equip-body','jc-materials-body','jc-consumables-body','jc-hardware-body','jc-tooling-body','jc-subs-body','jc-drawings-body','jc-specs-body','jc-reports-body']
+  ['jc-labour-body','jc-equip-body','jc-materials-body','jc-hardware-body','jc-consumables-body','jc-tooling-body','jc-subs-body','jc-drawings-body','jc-specs-body','jc-reports-body']
     .forEach(id => { const el=document.getElementById(id); if(el) el.innerHTML=''; });
   const parse = str => { try { return JSON.parse(str)||[]; } catch(e) { return []; } };
   parse(original.labourDetail).forEach(d => jcAddLabourRow(d));
