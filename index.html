@@ -7705,7 +7705,7 @@ async function jcNewJob() {
 function jcResetForm() {
   document.querySelectorAll('#jc-form-wrap input:not([readonly]), #jc-form-wrap select, #jc-form-wrap textarea').forEach(el => { el.value = ''; });
   const miscEl = document.getElementById('jc-cs-misc'); if (miscEl) miscEl.value = '0';
-  ['jc-labour-body','jc-equip-body','jc-materials-body','jc-consumables-body','jc-subs-body','jc-drawings-body','jc-specs-body','jc-reports-body'].forEach(id => {
+  ['jc-labour-body','jc-equip-body','jc-materials-body','jc-hardware-body','jc-consumables-body','jc-tooling-body','jc-subs-body','jc-drawings-body','jc-specs-body','jc-reports-body'].forEach(id => {
     const el = document.getElementById(id); if (el) el.innerHTML = '';
   });
   document.querySelectorAll('#jc-status-btns .jc-status-btn').forEach(b => b.classList.remove('active','green','red','blue','dark'));
