@@ -7876,7 +7876,7 @@ async function jcOpenJob(jobId) {
     if (!ok) return;
   }
   try {
-    const [jr, lr, er, mr, cr, sr, dr] = await Promise.all([
+    const [jr, lr, er, mr, cr, sr, dr, hr, tr2] = await Promise.all([
       sbGet('jobs',                  `id=eq.${jobId}&limit=1`),
       sbGet('labour_entries',        `job_id=eq.${jobId}&order=sort_order`),
       sbGet('equipment_entries',     `job_id=eq.${jobId}&order=sort_order`),
@@ -7884,6 +7884,8 @@ async function jcOpenJob(jobId) {
       sbGet('consumable_entries',    `job_id=eq.${jobId}&order=sort_order`),
       sbGet('subcontractor_entries', `job_id=eq.${jobId}&order=sort_order`),
       sbGet('job_drawings',          `job_id=eq.${jobId}&order=created_at.asc`),
+      sbGet('hardware_entries',      `job_id=eq.${jobId}&order=sort_order`),
+      sbGet('tooling_entries',       `job_id=eq.${jobId}&order=sort_order`),
     ]);
     if (!jr.length) throw new Error('Job not found.');
     const j = jr[0];
@@ -7909,10 +7911,12 @@ async function jcOpenJob(jobId) {
       'Reports Detail': JSON.stringify(j.reports||[]),
       'Last Saved': j.updated_at,
       'Labour Detail': JSON.stringify((lr||[]).map(r => ({ date:r.entry_date||'', employee:r.technician||'', classification:r.classification||'', location:r.location||'Workshop', start:r.start_time||'', end:r.end_time||'', hrs:String(r.hours||0), rate:String(r.rate_ttd||0), amount:String(r.amount_ttd||0), tasks:r.tasks||[] }))),
-      'Equipment Detail': JSON.stringify((er||[]).map(r => ({ date:r.entry_date||'', machine:r.machine_name||'', asset:r.asset_no||'', location:r.location||'Workshop', setup:String(r.setup_hours||0), run:String(r.run_hours||0), rate:String(r.rate_ttd||0), amount:String(r.amount_ttd||0), tasks:r.tasks||[] }))),
+      'Equipment Detail': JSON.stringify((er||[]).map(r => ({ date:r.entry_date||'', machine:r.machine_name||'', asset:r.asset_no||'', location:r.location||'Workshop', setup:String(r.setup_hours||0), run:String(r.run_hours||0), rate:String(r.rate_ttd||0), amount:String(r.amount_ttd||0), tasks:r.tasks||[], fuelType:r.fuel_type||'', fuelQty:String(r.fuel_qty||0), fuelUnitCost:String(r.fuel_unit_cost_ttd||0), fuelAmount:String(r.fuel_amount_ttd||0) }))),
       'Materials Detail': JSON.stringify((mr||[]).map(r => ({ date:r.entry_date||'', desc:r.description||'', code:r.stock_code||'', qty:String(r.quantity||0), unit:r.unit||'', unitCost:String(r.unit_cost_ttd||0) }))),
       'Consumables Detail': JSON.stringify((cr||[]).map(r => ({ date:r.entry_date||'', desc:r.description||'', cat:r.category||'', qty:String(r.quantity||0), unit:r.unit||'', unitCost:String(r.unit_cost_ttd||0) }))),
       'Subs Detail': JSON.stringify((sr||[]).map(r => ({ date:r.entry_date||'', name:r.name||'', service:r.service_description||'', inv:r.invoice_ref||'', cost:String(r.cost_ttd||0) }))),
+      'Hardware Detail': JSON.stringify((hr||[]).map(r => ({ date:r.entry_date||'', desc:r.description||'', spec:r.spec||'', qty:String(r.quantity||0), unit:r.unit||'', unitCost:String(r.unit_cost_ttd||0) }))),
+      'Tooling Detail': JSON.stringify((tr2||[]).map(r => ({ date:r.entry_date||'', desc:r.description||'', code:r.stock_code||'', qty:String(r.quantity||0), unit:r.unit||'', unitCost:String(r.unit_cost_ttd||0) }))),
     };
     jcPopulateForm(row);
     const activeDrawings   = (dr || []).filter(d => !d.archived);
@@ -7951,7 +7955,7 @@ function jcPopulateForm(row) {
   set('jc-f-jsa-date',      row['JSA Date Issued']);    set('jc-f-jsa-by',        row['JSA Issued By']);
   const lastSavedEl = document.getElementById('jc-last-saved');
   if (lastSavedEl && row['Last Saved']) lastSavedEl.textContent = 'Saved ' + new Date(row['Last Saved']).toLocaleString('en-TT');
-  ['jc-labour-body','jc-equip-body','jc-materials-body','jc-consumables-body','jc-subs-body','jc-drawings-body','jc-specs-body','jc-reports-body']
+  ['jc-labour-body','jc-equip-body','jc-materials-body','jc-consumables-body','jc-hardware-body','jc-tooling-body','jc-subs-body','jc-drawings-body','jc-specs-body','jc-reports-body']
     .forEach(id => { const el=document.getElementById(id); if (el) el.innerHTML=''; });
   const parse = str => { try { return JSON.parse(str)||[]; } catch(e) { return []; } };
   parse(row['Labour Detail']).forEach(d => jcAddLabourRow(d));
@@ -7959,6 +7963,8 @@ function jcPopulateForm(row) {
   parse(row['Equipment Detail']).forEach(d => jcAddEquipRow(d));
   parse(row['Materials Detail']).forEach(d => jcAddMaterialRow(d));
   parse(row['Consumables Detail']).forEach(d => jcAddConsumableRow(d));
+  parse(row['Hardware Detail']).forEach(d => jcAddHardwareRow(d));
+  parse(row['Tooling Detail']).forEach(d => jcAddToolingRow(d));
   parse(row['Subs Detail']).forEach(d => jcAddSubRow(d));
   parse(row['Specs Detail']).forEach(d => jcAddSpecRow(d));
   parse(row['Reports Detail']).forEach(d => jcAddReportRow(d));
@@ -8021,7 +8027,7 @@ async function jcDuplicateJob() {
   set('jc-f-payment-terms',original.paymentTerms);  set('jc-f-jsa-title',    original.jsaTitle);
   set('jc-f-jsa-by',       original.jsaBy);
   const ps = document.getElementById('jc-priority-select'); if (ps && original.priority) ps.value = original.priority;
-  ['jc-labour-body','jc-equip-body','jc-materials-body','jc-consumables-body','jc-subs-body','jc-drawings-body','jc-specs-body','jc-reports-body']
+  ['jc-labour-body','jc-equip-body','jc-materials-body','jc-consumables-body','jc-hardware-body','jc-tooling-body','jc-subs-body','jc-drawings-body','jc-specs-body','jc-reports-body']
     .forEach(id => { const el=document.getElementById(id); if(el) el.innerHTML=''; });
   const parse = str => { try { return JSON.parse(str)||[]; } catch(e) { return []; } };
   parse(original.labourDetail).forEach(d => jcAddLabourRow(d));
@@ -8029,6 +8035,8 @@ async function jcDuplicateJob() {
   parse(original.equipDetail).forEach(d => jcAddEquipRow(d));
   parse(original.matsDetail).forEach(d => jcAddMaterialRow(d));
   parse(original.consDetail).forEach(d => jcAddConsumableRow(d));
+  parse(original.hwDetail).forEach(d => jcAddHardwareRow(d));
+  parse(original.toolDetail).forEach(d => jcAddToolingRow(d));
   parse(original.subsDetail).forEach(d => jcAddSubRow(d));
   parse(original.drawings).forEach(d => jcAddDrawingRow(d));
   parse(original.specs).forEach(d => jcAddSpecRow(d));
