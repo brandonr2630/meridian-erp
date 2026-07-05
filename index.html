@@ -11817,13 +11817,7 @@ async function jcSyncBillCatalogOnApproval(lines) {
   jcLoadConfig().catch(() => {});
 }
 
-async function saveBill(status) {
-  const vendorId = document.getElementById('bill-vendor-id').value;
-  const date     = document.getElementById('bill-date').value;
-  const currency = document.getElementById('bill-currency').value;
-  if (!vendorId){ showToast('Please select a vendor.', 'warn'); return; }
-  if (!date)    { showToast('Bill date is required.', 'warn');  return; }
-
+function collectBillFormLines(status) {
   const lines = []; let subtotal = 0;
   document.querySelectorAll('#bill-lines-body tr[id^="billl-"]:not([id$="-link"])').forEach(tr => {
     const idx = lines.length;
@@ -11867,7 +11861,20 @@ async function saveBill(status) {
     }
     lines.push(line);
   });
-  if (!lines.length) { showToast('Add at least one line item.', 'warn'); return; }
+  if (!lines.length) { showToast('Add at least one line item.', 'warn'); return null; }
+  return { lines, subtotal };
+}
+
+async function saveBill(status) {
+  const vendorId = document.getElementById('bill-vendor-id').value;
+  const date     = document.getElementById('bill-date').value;
+  const currency = document.getElementById('bill-currency').value;
+  if (!vendorId){ showToast('Please select a vendor.', 'warn'); return; }
+  if (!date)    { showToast('Bill date is required.', 'warn');  return; }
+
+  const collected = collectBillFormLines(status);
+  if (!collected) return;
+  const { lines, subtotal } = collected;
 
   const taxRate = parseFloat(document.getElementById('bill-tax-rate').value)||0;
   const taxAmt  = round2(subtotal * taxRate / 100);
