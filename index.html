@@ -4088,10 +4088,14 @@ body.light .global-search-results, body.light .split-btn-menu {
   <div class="modal" style="max-width:660px;">
     <div class="modal-header">
       <div>
-        <div class="modal-title">Payment History</div>
+        <div class="modal-title">Bill History</div>
         <div style="font-size:11px;color:var(--text-3);margin-top:3px;" id="bill-history-subtitle">—</div>
       </div>
       <button class="modal-close" onclick="closeModal('modal-bill-pay-history')">✕</button>
+    </div>
+    <div class="c360-tabs">
+      <div class="c360-tab active" id="bill-hist-tab-payments" onclick="switchBillHistoryTab('payments')">Payments</div>
+      <div class="c360-tab" id="bill-hist-tab-edits" onclick="switchBillHistoryTab('edits')">Edits</div>
     </div>
     <div class="modal-body" style="padding:0;">
       <div id="bill-history-list" style="min-height:80px;"></div>
@@ -9965,17 +9969,31 @@ async function saveVendorPayment() {
   }
 }
 
+let _billHistoryBillId = null;
+
 async function openBillPaymentHistory(billId) {
   const bill = bills.find(b => b.id === billId);
   if (!bill) return;
+  _billHistoryBillId = billId;
   const contact = contacts.find(c => c.id === bill.contact_id) || {};
   document.getElementById('bill-history-subtitle').textContent =
     `${bill.bill_no || 'Draft'} — ${contact?.trading_name || contact?.name || '—'} · Total: ${fmt(bill.total, bill.currency)}`;
+  document.getElementById('modal-bill-pay-history').classList.add('show');
+  await switchBillHistoryTab('payments');
+}
 
+async function switchBillHistoryTab(tab) {
+  document.getElementById('bill-hist-tab-payments').classList.toggle('active', tab === 'payments');
+  document.getElementById('bill-hist-tab-edits').classList.toggle('active', tab === 'edits');
+  if (tab === 'payments') await renderBillHistoryPayments(_billHistoryBillId);
+  else await renderBillHistoryEdits(_billHistoryBillId);
+}
+
+async function renderBillHistoryPayments(billId) {
+  const bill = bills.find(b => b.id === billId);
+  if (!bill) return;
   const listEl = document.getElementById('bill-history-list');
   listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3);">Loading…</div>';
-  document.getElementById('modal-bill-pay-history').classList.add('show');
-
   try {
     const allocations = await sbGet('payment_allocations', `bill_id=eq.${billId}&order=created_at.desc`);
     if (!allocations.length) {
@@ -10018,6 +10036,56 @@ async function openBillPaymentHistory(billId) {
   } catch(e) {
     listEl.innerHTML = `<div style="padding:20px;color:var(--red);">Error: ${escHTML(e.message)}</div>`;
   }
+}
+
+async function renderBillHistoryEdits(billId) {
+  const listEl = document.getElementById('bill-history-list');
+  listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3);">Loading…</div>';
+  try {
+    const events = await sbGet('bill_edit_events', `bill_id=eq.${billId}&order=edited_at.desc`);
+    if (!events.length) {
+      listEl.innerHTML = '<div style="padding:28px;text-align:center;color:var(--text-3);font-size:13px;">No edits recorded for this bill.</div>';
+      return;
+    }
+    const userIds = [...new Set(events.map(e => e.edited_by).filter(Boolean))];
+    const userMap = {};
+    if (userIds.length) {
+      const users = await sbGet('erp_users', `auth_user_id=in.(${userIds.join(',')})&select=auth_user_id,full_name`);
+      users.forEach(u => { userMap[u.auth_user_id] = u.full_name; });
+    }
+    const archived = await sbGet('bill_lines_archive', `edit_event_id=in.(${events.map(e=>e.id).join(',')})&order=line_order.asc`);
+    const archByEvent = {};
+    archived.forEach(a => { (archByEvent[a.edit_event_id] ||= []).push(a); });
+
+    listEl.innerHTML = events.map(ev => `
+      <div style="padding:12px 20px;border-bottom:1px solid var(--border);">
+        <div style="display:flex;justify-content:space-between;font-size:12px;">
+          <span><b>${escHTML(userMap[ev.edited_by] || 'Unknown user')}</b> — ${new Date(ev.edited_at).toLocaleString()}</span>
+          <span style="color:var(--gold);cursor:pointer;font-size:11px;" onclick="toggleBillEditLines('${ev.id}')">Show prior lines</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-2);margin-top:4px;">${escHTML(ev.reason)}</div>
+        <div class="bill-edit-lines" id="bill-edit-lines-${ev.id}" style="display:none;margin-top:8px;">
+          <table class="data-table" style="margin:0;">
+            <thead><tr><th>Description</th><th class="right">Qty</th><th class="right">Rate</th><th class="right">Amount</th></tr></thead>
+            <tbody>
+              ${(archByEvent[ev.id]||[]).map(l => `<tr>
+                <td>${escHTML(l.description)}</td>
+                <td class="right mono">${l.quantity}</td>
+                <td class="right mono">${fmtNum(l.unit_price)}</td>
+                <td class="right mono">${fmtNum(l.amount)}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    listEl.innerHTML = `<div style="padding:20px;color:var(--red);">Error: ${escHTML(e.message)}</div>`;
+  }
+}
+
+function toggleBillEditLines(eventId) {
+  const el = document.getElementById('bill-edit-lines-' + eventId);
+  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
 }
 
 // ── Void reason prompt (async, returns string | null) ────────────
