@@ -11999,6 +11999,79 @@ async function saveBill(status) {
   finally { btn.disabled = false; btn.textContent = status === 'draft' ? 'Save Draft' : 'Save & Approve'; }
 }
 
+async function saveBillEdit() {
+  const billId = _billEditId;
+  if (!billId) return;
+  const bill = bills.find(b => b.id === billId);
+  if (!bill) { showToast('Bill not found — reload and try again.', 'error'); return; }
+  if (!isAdmin()) { showToast('Admin access required.', 'error'); return; }
+  if (!['draft','approved'].includes(bill.status)) { showToast('Only Draft or Approved bills can be edited.', 'warn'); return; }
+
+  const reason = document.getElementById('bill-edit-reason').value.trim();
+  if (!reason) { showToast('A reason for this edit is required.', 'warn'); return; }
+
+  const collected = collectBillFormLines(bill.status);
+  if (!collected) return;
+  const { lines, subtotal } = collected;
+
+  const taxRate = parseFloat(document.getElementById('bill-tax-rate').value) || 0;
+  const taxAmt  = round2(subtotal * taxRate / 100);
+  const total   = round2(subtotal + taxAmt);
+  const notes   = document.getElementById('bill-notes').value.trim() || null;
+
+  const btn = document.getElementById('bill-save-edit-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  try {
+    const [event] = await sbPost('bill_edit_events', {
+      bill_id: billId, edited_by: currentUser.auth_user_id, edited_at: nowISO(), reason
+    });
+
+    const oldLines = await sbGet('bill_lines', `bill_id=eq.${billId}`);
+    if (oldLines.length) {
+      await sbPost('bill_lines_archive', oldLines.map(l => ({
+        edit_event_id: event.id,
+        original_line_id: l.id,
+        description: l.description,
+        quantity: l.quantity,
+        unit_price: l.unit_price,
+        amount: l.amount,
+        line_order: l.line_order,
+        item_category: l.item_category || null,
+        item_id: l.item_id || null,
+      })));
+    }
+
+    await sbDeleteWhere('bill_lines', `bill_id=eq.${billId}`);
+    await sbPost('bill_lines', lines.map(l => ({
+      bill_id: billId,
+      description: l.description,
+      quantity: l.quantity,
+      unit_price: l.unit_price,
+      amount: l.amount,
+      line_order: l.line_order,
+      item_category: l.item_category || null,
+      item_id: l.item_id || null,
+    })));
+
+    await sbPatch('bills', billId, {
+      subtotal, tax_rate: taxRate, tax_amount: taxAmt, total,
+      balance_due: total, notes
+    });
+
+    await jcSyncBillCatalogOnApproval(lines);
+
+    _billsWithEditHistory.add(billId);
+    showToast('Bill updated.', 'success');
+    closeModal('modal-bill');
+    await loadAP();
+  } catch(e) {
+    showToast('Error saving edit: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save Changes';
+  }
+}
+
 // ── FINANCIAL REPORTS ─────────────────────────────────────────────
 function initReportDates() {
   // Default to active fiscal year or current calendar year
