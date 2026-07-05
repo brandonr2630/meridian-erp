@@ -9692,6 +9692,8 @@ async function loadAP() {
   }
   try {
     bills = await sbGet('bills', `company_id=eq.${currentCompany.id}&order=bill_date.desc`);
+    const editEvents = await sbGet('bill_edit_events', `select=bill_id`);
+    _billsWithEditHistory = new Set((editEvents||[]).map(e => e.bill_id));
     const outstanding = bills.filter(b => !['paid','void'].includes(b.status));
     const totalAP   = outstanding.reduce((s,b) => s + parseFloat(b.balance_due||0), 0);
     const overdue   = bills.filter(b => b.status === 'overdue').reduce((s,b) => s + parseFloat(b.balance_due||0), 0);
@@ -9749,6 +9751,8 @@ function renderAPTable(list) {
         const canPay      = ['approved','partial'].includes(b.status) && parseFloat(b.balance_due||0) > 0.005;
         const hasPayments = parseFloat(b.amount_paid||0) > 0;
         const canVoid     = b.status === 'approved' && !hasPayments;
+        const canEdit     = isAdmin() && ['draft','approved'].includes(b.status) && !hasPayments;
+        const hasHistory  = hasPayments || _billsWithEditHistory.has(b.id);
         return `
         <tr>
           <td class="mono bold">${b.bill_no || '<span style="color:var(--text-3);font-style:italic;font-size:11px;">Draft</span>'}</td>
@@ -9764,7 +9768,8 @@ function renderAPTable(list) {
             ${b.status === 'draft' ? `<button class="btn btn-outline btn-sm" onclick="approveBill('${b.id}')">Approve</button>` : ''}
             ${b.status === 'draft' ? `<button class="btn btn-danger btn-sm" onclick="deleteDocument('bill','${b.id}','${b.bill_no||'this draft bill'}')">Delete</button>` : ''}
             ${canPay      ? `<button class="btn btn-primary btn-sm" onclick="openPayBillModal('${b.id}')">Pay</button>` : ''}
-            ${hasPayments ? `<button class="btn btn-ghost btn-sm" onclick="openBillPaymentHistory('${b.id}')">History</button>` : ''}
+            ${canEdit     ? `<button class="btn btn-ghost btn-sm" onclick="openEditBill('${b.id}')">Edit</button>` : ''}
+            ${hasHistory  ? `<button class="btn btn-ghost btn-sm" onclick="openBillPaymentHistory('${b.id}')">History</button>` : ''}
             ${canVoid     ? `<button class="btn btn-ghost btn-sm" onclick="voidBill('${b.id}')">Void</button>` : ''}
           </td>
         </tr>`;
@@ -12579,6 +12584,8 @@ async function voidBill(id) {
 
 // ── AP STATE ──────────────────────────────────────────────────────
 let bills = [], _apFiltered = []; let apPage = 0;
+let _billsWithEditHistory = new Set();
+let _billEditId = null;
 let apSortCol = null, apSortDir = 'asc';
 
 // ── INVOICE STATE ─────────────────────────────────────────────────
