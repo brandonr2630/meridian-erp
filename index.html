@@ -9692,7 +9692,7 @@ async function loadAP() {
   }
   try {
     bills = await sbGet('bills', `company_id=eq.${currentCompany.id}&order=bill_date.desc`);
-    const editEvents = await sbGet('bill_edit_events', `select=bill_id`);
+    const editEvents = await sbGet('bill_edit_events', `select=bill_id,bills!inner(company_id)&bills.company_id=eq.${currentCompany.id}`);
     _billsWithEditHistory = new Set((editEvents||[]).map(e => e.bill_id));
     const outstanding = bills.filter(b => !['paid','void'].includes(b.status));
     const totalAP   = outstanding.reduce((s,b) => s + parseFloat(b.balance_due||0), 0);
