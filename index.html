@@ -12042,7 +12042,6 @@ async function saveBillEdit() {
       })));
     }
 
-    await sbDeleteWhere('bill_lines', `bill_id=eq.${billId}`);
     await sbPost('bill_lines', lines.map(l => ({
       bill_id: billId,
       description: l.description,
@@ -12053,15 +12052,21 @@ async function saveBillEdit() {
       item_category: l.item_category || null,
       item_id: l.item_id || null,
     })));
+    if (oldLines.length) {
+      await sbDeleteWhere('bill_lines', `id=in.(${oldLines.map(l => l.id).join(',')})`);
+    }
 
     await sbPatch('bills', billId, {
       subtotal, tax_rate: taxRate, tax_amount: taxAmt, total,
       balance_due: total, notes
     });
 
+    // Called unconditionally (unlike saveBill()'s approval-gated call) — editing an approved bill
+    // is exactly how a previously-unlinked line gets its first catalog link; collectBillFormLines()
+    // already strips new-item/new-equipment attempts when bill.status is still 'draft', so this is
+    // a harmless idempotent cost-sync in that case.
     await jcSyncBillCatalogOnApproval(lines);
 
-    _billsWithEditHistory.add(billId);
     showToast('Bill updated.', 'success');
     closeModal('modal-bill');
     await loadAP();
