@@ -11579,7 +11579,14 @@ async function saveBankTxn() {
 }
 
 // ── BILLS (AP) ────────────────────────────────────────────────────
-function openNewBill() {
+async function ensureJobConfigLoaded() {
+  if (!jcConfig || !jcConfig.materials || !jcConfig.materials.length) {
+    await jcLoadConfig();
+  }
+}
+
+async function openNewBill() {
+  await ensureJobConfigLoaded();
   document.getElementById('bill-vendor-search').value   = '';
   document.getElementById('bill-vendor-id').value       = '';
   document.getElementById('bill-vendor-selected').textContent = '';
@@ -11604,25 +11611,95 @@ function calcBillDueDate() {
   document.getElementById('bill-due-date').value = due.toISOString().slice(0,10);
 }
 
+const BILL_LINE_CATEGORIES = [
+  { value:'material',   label:'Material',   cfgKey:'materials'   },
+  { value:'hardware',   label:'Hardware',   cfgKey:'hardware'    },
+  { value:'consumable', label:'Consumable', cfgKey:'consumables' },
+  { value:'tooling',    label:'Tooling',    cfgKey:'tooling'     },
+  { value:'equipment',  label:'Equipment',  cfgKey:null          },
+];
+
 function addBillLine() {
   const tbody = document.getElementById('bill-lines-body');
-  const n     = tbody.rows.length + 1;
-  const lid   = 'billl-' + Date.now() + '-' + n;
+  const n     = tbody.rows.length ? tbody.rows.length / 2 + 1 : 1;
+  const lid   = 'billl-' + Date.now() + '-' + Math.random().toString(36).substr(2,4);
   const tr    = document.createElement('tr');
   tr.id = lid;
   tr.innerHTML = `
     <td style="padding:6px 8px;color:var(--text-3);font-size:11px;font-family:'DM Mono',monospace;">${n}</td>
-    <td><input type="text" placeholder="Item description…" style="min-width:200px;"></td>
+    <td><input type="text" placeholder="Item description…" style="min-width:200px;" id="${lid}-desc"></td>
     <td><input type="number" class="mono" placeholder="1" value="1" min="0" step="any" oninput="recalcBillTotals()"></td>
-    <td><input type="number" class="mono" placeholder="0.00" min="0" step="0.01" oninput="recalcBillTotals()"></td>
+    <td><input type="number" class="mono" placeholder="0.00" min="0" step="0.01" oninput="recalcBillTotals()" id="${lid}-rate"></td>
     <td><div class="inv-line-amount" id="${lid}-amt">0.00</div></td>
-    <td><button class="btn btn-ghost btn-icon btn-sm" onclick="this.closest('tr').remove();recalcBillTotals();" style="color:var(--text-3);">✕</button></td>`;
+    <td><button class="btn btn-ghost btn-icon btn-sm" onclick="document.getElementById('${lid}').remove();document.getElementById('${lid}-link').remove();recalcBillTotals();" style="color:var(--text-3);">✕</button></td>`;
   tbody.appendChild(tr);
+
+  const linkTr = document.createElement('tr');
+  linkTr.id = lid + '-link';
+  linkTr.innerHTML = `<td></td><td colspan="5" style="padding:2px 8px 10px;">
+    <label style="font-size:10px;color:var(--text-3);display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+      <input type="checkbox" onchange="jcToggleBillLineLink('${lid}',this.checked)"> Link to Inventory
+    </label>
+    <div id="${lid}-linkbody" style="display:none;margin-top:6px;"></div>
+  </td>`;
+  tbody.appendChild(linkTr);
+}
+
+function jcToggleBillLineLink(lid, on) {
+  const body = document.getElementById(lid+'-linkbody');
+  if (!body) return;
+  if (!on) { body.style.display='none'; body.innerHTML=''; return; }
+  body.style.display='';
+  const catOpts = BILL_LINE_CATEGORIES.map(c => `<option value="${c.value}">${c.label}</option>`).join('');
+  body.innerHTML = `
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <select id="${lid}-cat" onchange="jcOnBillLineCategoryChange('${lid}')" style="max-width:140px;">
+        <option value="">Category…</option>${catOpts}
+      </select>
+      <div id="${lid}-itemwrap" style="flex:1;min-width:200px;"></div>
+    </div>`;
+}
+
+function jcOnBillLineCategoryChange(lid) {
+  const cat = document.getElementById(lid+'-cat')?.value;
+  const wrap = document.getElementById(lid+'-itemwrap');
+  if (!wrap) return;
+  const meta = BILL_LINE_CATEGORIES.find(c => c.value === cat);
+  if (!meta) { wrap.innerHTML=''; return; }
+  if (cat === 'equipment') {
+    wrap.innerHTML = `
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <input type="text" id="${lid}-eq-name" placeholder="Equipment name" style="min-width:140px;">
+        <input type="text" id="${lid}-eq-asset" placeholder="Asset No.">
+        <input type="number" id="${lid}-eq-wsrate" placeholder="Workshop rate/hr">
+        <input type="number" id="${lid}-eq-osrate" placeholder="Onsite rate/hr">
+      </div>
+      <div style="font-size:9px;color:var(--text-3);margin-top:3px;">Approving this bill will create a new Equipment asset with these details.</div>`;
+    return;
+  }
+  const items = jcConfig[meta.cfgKey] || [];
+  const opts = items.map((r,i) => `<option value="${i}">${escHTML(r.name)}</option>`).join('');
+  wrap.innerHTML = `
+    <select id="${lid}-item" onchange="jcOnBillLineItemChange('${lid}')" style="min-width:180px;">
+      <option value="">Select existing item…</option>${opts}
+      <option value="__new__">+ Add new item…</option>
+    </select>
+    <div id="${lid}-newitemwrap" style="margin-top:6px;"></div>`;
+}
+
+function jcOnBillLineItemChange(lid) {
+  const sel = document.getElementById(lid+'-item');
+  const newWrap = document.getElementById(lid+'-newitemwrap');
+  if (sel?.value === '__new__') {
+    newWrap.innerHTML = `<input type="text" id="${lid}-newitem-name" placeholder="New item name" style="min-width:180px;">`;
+  } else {
+    newWrap.innerHTML = '';
+  }
 }
 
 function recalcBillTotals() {
   let subtotal = 0;
-  document.querySelectorAll('#bill-lines-body tr').forEach(tr => {
+  document.querySelectorAll('#bill-lines-body tr[id^="billl-"]:not([id$="-link"])').forEach(tr => {
     const inputs = tr.querySelectorAll('input[type="number"]');
     const qty = parseFloat(inputs[0]?.value)||0, rate = parseFloat(inputs[1]?.value)||0;
     const amt = round2(qty * rate); subtotal += amt;
@@ -11683,15 +11760,40 @@ async function saveBill(status) {
   if (!date)    { showToast('Bill date is required.', 'warn');  return; }
 
   const lines = []; let subtotal = 0;
-  document.querySelectorAll('#bill-lines-body tr').forEach((tr, idx) => {
+  document.querySelectorAll('#bill-lines-body tr[id^="billl-"]:not([id$="-link"])').forEach(tr => {
+    const idx = lines.length;
     const inputs = tr.querySelectorAll('input[type="number"]');
-    const descEl = tr.querySelector('input[type="text"]');
+    const descEl = document.getElementById(tr.id+'-desc');
     const qty = parseFloat(inputs[0]?.value)||0, rate = parseFloat(inputs[1]?.value)||0;
     const desc = descEl?.value.trim()||'';
     if (!desc && !qty && !rate) return;
     if (!desc) { showToast(`Line ${idx+1}: description required.`, 'warn'); return; }
     const amt = round2(qty * rate); subtotal += amt;
-    lines.push({ description: desc, quantity: qty, unit_price: rate, amount: amt, line_order: idx });
+    const line = { description: desc, quantity: qty, unit_price: rate, amount: amt, line_order: idx };
+
+    const cat = document.getElementById(tr.id+'-cat')?.value;
+    if (cat) {
+      line.item_category = cat;
+      if (cat === 'equipment') {
+        line._newEquipment = {
+          name: document.getElementById(tr.id+'-eq-name')?.value.trim() || desc,
+          asset_no: document.getElementById(tr.id+'-eq-asset')?.value.trim() || null,
+          workshop_rate_ttd: parseFloat(document.getElementById(tr.id+'-eq-wsrate')?.value) || 0,
+          onsite_rate_ttd: parseFloat(document.getElementById(tr.id+'-eq-osrate')?.value) || 0,
+        };
+      } else {
+        const itemSel = document.getElementById(tr.id+'-item');
+        if (itemSel?.value === '__new__') {
+          line._newItemName = document.getElementById(tr.id+'-newitem-name')?.value.trim() || desc;
+          line._newItemTable = { material:'config_materials', hardware:'config_hardware', consumable:'config_consumables', tooling:'config_tooling' }[cat];
+        } else if (itemSel?.value) {
+          const meta = BILL_LINE_CATEGORIES.find(c => c.value === cat);
+          const catalogItem = (jcConfig[meta.cfgKey]||[])[parseInt(itemSel.value)];
+          if (catalogItem) line.item_id = catalogItem.id;
+        }
+      }
+    }
+    lines.push(line);
   });
   if (!lines.length) { showToast('Add at least one line item.', 'warn'); return; }
 
