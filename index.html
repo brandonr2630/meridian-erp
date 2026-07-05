@@ -11852,6 +11852,8 @@ function collectBillFormLines(status) {
         }
       }
     }
+    // New catalog items only sync to config tables on approval (see jcSyncBillCatalogOnApproval,
+    // called only when status === 'approved'), so block linking them from a draft.
     if (cat && status === 'draft' && (line._newEquipment || line._newItemName)) {
       showToast(`Line ${idx+1}: new catalog items can only be linked when saving with "Save & Approve". Saved without an inventory link.`, 'warn');
       delete line.item_category;
