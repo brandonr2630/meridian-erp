@@ -4264,7 +4264,7 @@ body.light .global-search-results, body.light .split-btn-menu {
   <div class="modal modal-lg" style="max-width:860px;">
     <div class="modal-header">
       <div>
-        <div class="modal-title">New Bill</div>
+        <div class="modal-title" id="bill-modal-title">New Bill</div>
         <div style="font-size:11px;color:var(--text-3);margin-top:3px;">
           Next number: <span style="font-family:'DM Mono',monospace;color:var(--gold);" id="bill-next-number">loading…</span>
         </div>
@@ -4335,11 +4335,16 @@ body.light .global-search-results, body.light .split-btn-menu {
       <div class="field" style="margin-top:16px;"><label class="field-label">Notes</label>
         <textarea id="bill-notes" rows="2" placeholder="Optional notes…"></textarea>
       </div>
+      <div class="field" id="bill-edit-reason-field" style="display:none;margin-top:16px;">
+        <label class="field-label">Reason for Edit <span style="color:var(--red);">*</span></label>
+        <textarea id="bill-edit-reason" rows="2" placeholder="Why is this bill being edited?"></textarea>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-bill')">Cancel</button>
       <button class="btn btn-outline" onclick="saveBill('draft')" id="bill-draft-btn">Save Draft</button>
       <button class="btn btn-primary" onclick="saveBill('approved')" id="bill-approve-btn">Save & Approve</button>
+      <button class="btn btn-primary" onclick="saveBillEdit()" id="bill-save-edit-btn" style="display:none;">Save Changes</button>
     </div>
   </div>
 </div>
@@ -11592,8 +11597,24 @@ async function ensureJobConfigLoaded() {
   }
 }
 
+function setBillModalMode(mode) {
+  const editing = mode === 'edit';
+  ['bill-vendor-search','bill-currency','bill-vendor-ref','bill-date','bill-due-date','bill-terms'].forEach(id => {
+    document.getElementById(id).disabled = editing;
+  });
+  document.getElementById('bill-edit-reason-field').style.display = editing ? '' : 'none';
+  document.getElementById('bill-draft-btn').style.display     = editing ? 'none' : '';
+  document.getElementById('bill-approve-btn').style.display   = editing ? 'none' : '';
+  document.getElementById('bill-save-edit-btn').style.display = editing ? '' : 'none';
+  if (!editing) {
+    document.getElementById('bill-modal-title').textContent = 'New Bill';
+    _billEditId = null;
+  }
+}
+
 async function openNewBill() {
   await ensureJobConfigLoaded();
+  setBillModalMode('create');
   document.getElementById('bill-vendor-search').value   = '';
   document.getElementById('bill-vendor-id').value       = '';
   document.getElementById('bill-vendor-selected').textContent = '';
