@@ -1,15 +1,61 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-07-03 · Session 43 (in progress)*
+*Last updated: 2026-07-05 · Session 44 (paused mid-brainstorm — see "Next steps" below)*
 
 ---
 
-## Session 43 — Inventory-Linked Purchasing, Phase 1 (IN PROGRESS)
+## Session 44 — Edit Bill feature (BRAINSTORMING IN PROGRESS, not yet designed/planned/built)
 
-**Date:** 2026-07-03
-**Branch:** `feat/inventory-linked-purchasing` (off `master`, local only — not pushed, no PR yet)
+**Date:** 2026-07-05
+**Trigger:** After Phase 1 verification (Session 43), user tried to open an existing/already-approved bill in AP to retroactively link its lines to inventory. Discovered this app has **no way to open or edit an existing bill at all** — bill rows only ever had Pay/Void/History buttons (`index.html` ~line 9766-9768), confirmed via code search, not a bug in Phase 1's work. The "Link to Inventory" UI built in Phase 1 only exists in the New Bill creation modal.
+
+**Decision so far:** build a full Edit Bill feature (not just a narrow "link inventory retroactively" patch) — admin-only, with change tracking and archiving of prior data, per user's explicit request.
+
+### Brainstorming progress — using `superpowers:brainstorming` skill, PAUSED mid-questions
+
+Answered so far:
+- **Q1 (which bill statuses are editable):** **A — Draft + Approved only (no payments recorded yet).** Matches the existing safety boundary already in `voidBill()` (refuses to void a bill with payments). Partial/Paid/Void bills stay locked from editing.
+- **Q2 (how to store change history + archived data):** **B — Relational archive tables** (`bills_archive`, `bill_lines_archive` — real copied rows, not a JSONB snapshot blob). User explicitly chose the more heavyweight relational option over the simpler JSONB-log approach I recommended, for future reporting flexibility.
+- **Q3 (require a "reason for edit" text field on save?):** **ASKED, NOT YET ANSWERED.** Options were: (A) required reason field for audit justification, (B) no reason field, just who/when/before/after.
+
+### Research already done (don't re-derive — reuse these findings)
+
+- **No existing generic audit/change-log table** — `job_audit_log` is the only audit table in the schema, and it's Work-Order-specific (columns: `job_id`, `job_no`, `user_id`, `username`, `action_type`, `description`). A new mechanism is needed for bills.
+- **`isAdmin()`** (`index.html` ~line 5685): `return can('admin:users') || can('admin:settings');` — the established gating pattern (e.g. `if (!isAdmin()) { showToast('Admin access required.', 'error'); return; }` at ~line 6584). Use this to gate the new Edit Bill button/save.
+- **`bills` columns:** `company_id, bill_no, contact_id, bill_date, due_date, currency, vendor_ref, subtotal, tax_rate, tax_amount, total, balance_due, status, notes, approved_at` (plus `amount_paid`, tracked via payment allocations).
+- **`bill_lines` columns:** `bill_id, description, quantity, unit_price, amount, line_order, item_category, item_id` (the last two added in Phase 1). **Currently INSERT-only** — no `sbPatch()` on `bill_lines` anywhere; the existing pattern elsewhere in this codebase for "editing" a set of child rows is delete-all-then-reinsert (see `jcSaveJobData`'s `sbDeleteWhere` + `sbPost` pattern for `material_entries` etc.) — likely the right model here too, but the *old* rows need to be captured into `bill_lines_archive` before deletion rather than just discarded.
+- **`voidBill()`** (~line 12562): flips `status` to `'void'` only — no reversals, no GL/payment adjustments. Confirms bills currently have zero post-approval mutability; this feature is genuinely new ground for the app.
+- **Re-sync on edit (not yet asked as an explicit question, but reasoned through):** plan is to re-run the same `jcSyncBillCatalogOnApproval()` logic (from Phase 1) across all currently-linked lines on every edit-save — idempotent (just re-patches current cost / creates new item if still unset), so no complex diffing needed. The edit modal's item-link picker should pre-fill each line's existing `item_category`/`item_id` so admins can add new links to previously-unlinked lines without disturbing already-linked ones.
+
+### Next steps when resuming
+
+1. Resume the brainstorming skill — ask Q3 (reason-for-edit field), then move to "propose 2-3 approaches" → "present design sections" → write spec to `docs/superpowers/specs/` → get user approval → `writing-plans` skill → implement.
+2. This is a genuinely new capability (bills have never been editable), so expect a real spec + plan cycle, not a quick patch.
+3. Still outstanding from Session 43: rotate the ERP password shared in plaintext during live testing.
+
+---
+
+## Session 43 — Inventory-Linked Purchasing, Phase 1 — DONE, MERGED, DEPLOYED
+
+**Date:** 2026-07-03 to 2026-07-05
+**Branch:** `feat/inventory-linked-purchasing` — merged to `master` via [PR #118](https://github.com/brandonr2630/meridian-erp/pull/118), deployed live.
+**Hotfix:** [PR #119](https://github.com/brandonr2630/meridian-erp/pull/119) — merged, deployed.
 **Spec:** `docs/superpowers/specs/2026-07-03-inventory-linked-purchasing-design.md`
 **Plan:** `docs/superpowers/plans/2026-07-03-inventory-phase1-catalog-link.md`
+
+### Status: Phase 1 fully shipped and live-verified
+
+All 14 plan tasks complete, merged, deployed to `erp.terranresources.com`. Then did a full manual click-through on production (logged in as Brandon, Q2 Machines company) covering:
+- Job Config admin CRUD for Hardware/Tooling/Fuel catalogs — all 3 tabs verified working
+- Work Order form: Hardware row, Tooling row, Equipment row's new Fuel Type/Qty/Cost/Amount sub-fields — all auto-fill and total correctly, Costing Summary math confirmed exact
+- Save → reload → reopen round-trip — confirmed all new entry types persist correctly
+- AP → Bill Lines "Link to Inventory": existing-item cost sync (5.00→7.00 confirmed), new-item creation (new Consumable catalog row created), plain/unlinked bill regression (unaffected)
+
+**Real bug found + fixed during live testing:** `saveBill()`'s `bill_lines` bulk insert failed with `"Error saving bill: All object keys must match"` whenever one line was linked to an existing catalog item (carries `item_id`) and another line created a new item (no `item_id`) — PostgREST rejects a bulk insert where array elements don't share an identical key set. Fixed by building every line with the same explicit 8 keys, defaulting `item_category`/`item_id` to `null`. Shipped as PR #119, verified live after fix (BILL0039 saved cleanly with mixed line types).
+
+All test data (ZZTEST-prefixed bills, catalog rows, Work Order WO-007) deleted from production after verification — confirmed zero residue via SQL.
+
+**Outstanding — not yet done:** rotate the `brandon_r@terranresources.com` ERP password (it went through this chat in plaintext when the user shared it for live testing). Reminder given to user, not actioned by Claude.
 
 ### What this is
 
