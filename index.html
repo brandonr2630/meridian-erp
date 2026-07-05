@@ -11631,6 +11631,47 @@ async function openNewBill() {
   document.getElementById('modal-bill').classList.add('show');
 }
 
+async function openEditBill(billId) {
+  const bill = bills.find(b => b.id === billId);
+  if (!bill) return;
+  if (!isAdmin()) { showToast('Admin access required.', 'error'); return; }
+  if (!['draft','approved'].includes(bill.status)) { showToast('Only Draft or Approved bills can be edited.', 'warn'); return; }
+  if (parseFloat(bill.amount_paid||0) > 0) { showToast('Bills with payments recorded cannot be edited.', 'warn'); return; }
+
+  await ensureJobConfigLoaded();
+  const contact = contacts.find(c => c.id === bill.contact_id) || {};
+
+  _billEditId = billId;
+  document.getElementById('bill-modal-title').textContent = `Edit Bill — ${bill.bill_no || 'Draft'}`;
+  document.getElementById('bill-next-number').textContent = bill.bill_no || 'draft (unassigned)';
+  document.getElementById('bill-vendor-search').value = contact.trading_name || contact.name || '';
+  document.getElementById('bill-vendor-id').value     = bill.contact_id;
+  document.getElementById('bill-vendor-selected').textContent = contact.name ? '✓ ' + contact.name : '';
+  document.getElementById('bill-currency').value      = bill.currency;
+  document.getElementById('bill-vendor-ref').value    = bill.vendor_ref || '';
+  document.getElementById('bill-date').value          = bill.bill_date;
+  document.getElementById('bill-due-date').value      = bill.due_date || '';
+  document.getElementById('bill-notes').value         = bill.notes || '';
+  document.getElementById('bill-tax-rate').value      = bill.tax_rate;
+  document.getElementById('bill-edit-reason').value   = '';
+
+  setBillModalMode('edit');
+
+  const existingLines = await sbGet('bill_lines', `bill_id=eq.${billId}&order=line_order.asc`);
+  document.getElementById('bill-lines-body').innerHTML = '';
+  (existingLines.length ? existingLines : [{}]).forEach(l => {
+    addBillLine();
+    const rows = document.querySelectorAll('#bill-lines-body tr[id^="billl-"]:not([id$="-link"])');
+    const tr = rows[rows.length - 1];
+    document.getElementById(tr.id + '-desc').value = l.description || '';
+    tr.querySelectorAll('input[type="number"]')[0].value = l.quantity ?? '';
+    document.getElementById(tr.id + '-rate').value = l.unit_price ?? '';
+    if (l.item_category) jcPrefillBillLineLink(tr.id, l.item_category, l.item_id);
+  });
+  recalcBillTotals();
+  document.getElementById('modal-bill').classList.add('show');
+}
+
 function calcBillDueDate() {
   const d = document.getElementById('bill-date').value;
   const t = parseInt(document.getElementById('bill-terms').value) || 0;
@@ -11713,6 +11754,34 @@ function jcOnBillLineCategoryChange(lid) {
       <option value="__new__">+ Add new item…</option>
     </select>
     <div id="${lid}-newitemwrap" style="margin-top:6px;"></div>`;
+}
+
+function jcPrefillBillLineLink(lid, category, itemId) {
+  // Equipment links are create-a-new-asset-once, at approval time (see jcOnBillLineCategoryChange's
+  // equipment branch — there is no "select existing equipment" path). Re-checking this box on edit
+  // would cause collectBillFormLines() to rebuild a fresh _newEquipment object and create a *second*
+  // asset on every edit-save. So equipment-category lines are intentionally left unlinked on prefill —
+  // an admin who wants to (re-)link one must explicitly check the box and fill in the fields again.
+  if (!category || category === 'equipment') return;
+  const checkbox = document.querySelector(`#${lid}-link input[type="checkbox"]`);
+  if (!checkbox) return;
+  checkbox.checked = true;
+  jcToggleBillLineLink(lid, true);
+  const catSel = document.getElementById(lid + '-cat');
+  catSel.value = category;
+  jcOnBillLineCategoryChange(lid);
+  if (itemId) {
+    const meta = BILL_LINE_CATEGORIES.find(c => c.value === category);
+    const idx = (jcConfig[meta.cfgKey] || []).findIndex(r => r.id === itemId);
+    if (idx > -1) {
+      const itemSel = document.getElementById(lid + '-item');
+      if (itemSel) { itemSel.value = String(idx); jcOnBillLineItemChange(lid); }
+    }
+  }
+  // If itemId is null but category is set, this line was linked to a *newly created* catalog item at
+  // original approval time whose id was never written back to bill_lines (a pre-existing Phase 1 gap,
+  // out of scope here). The category is still preserved above; the item dropdown is simply left on its
+  // default "Select existing item…" option since we have no id to match against.
 }
 
 function jcOnBillLineItemChange(lid) {
