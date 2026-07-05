@@ -9034,11 +9034,13 @@ function jcUpdateCostSummary() {
   const getNum = id => parseFloat(document.getElementById(id)?.textContent.replace('$',''))||0;
   const labour=getNum('jc-labour-cost-total'), equip=getNum('jc-equip-cost-total'),
         mats  =getNum('jc-materials-cost-total'), cons=getNum('jc-consumables-cost-total'),
+        hw    =getNum('jc-hardware-cost-total'), tool=getNum('jc-tooling-cost-total'),
         subs  =getNum('jc-subs-cost-total'), misc=parseFloat(document.getElementById('jc-cs-misc')?.value)||0;
-  const total = labour+equip+mats+cons+subs+misc;
+  const total = labour+equip+mats+cons+hw+tool+subs+misc;
   const setText=(id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v; };
   setText('jc-cs-labour','$'+labour.toFixed(2)); setText('jc-cs-equip','$'+equip.toFixed(2));
   setText('jc-cs-materials','$'+mats.toFixed(2)); setText('jc-cs-consumables','$'+cons.toFixed(2));
+  setText('jc-cs-hardware','$'+hw.toFixed(2));    setText('jc-cs-tooling','$'+tool.toFixed(2));
   setText('jc-cs-subs','$'+subs.toFixed(2));      setText('jc-cs-total','$'+total.toFixed(2));
   const markup  = parseFloat(document.getElementById('jc-markup-pct')?.value)||0;
   const selling = total*(1+markup/100), profit=selling-total;
