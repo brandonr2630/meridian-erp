@@ -9815,6 +9815,8 @@ async function approveBill(id) {
       await sbPatch('sequence_counters', counter.id, { last_number: nextNum });
     }
     await sbPatch('bills', id, { status: 'approved', bill_no: billNo, approved_at: nowISO() });
+    const billLines = await sbGet('bill_lines', `bill_id=eq.${id}`);
+    await jcSyncBillCatalogOnApproval(billLines || []);
     showToast(`Bill ${billNo} approved.`, 'success');
     await loadAP();
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
@@ -11752,6 +11754,43 @@ function selectBillVendor(id, displayName, legalName) {
   document.getElementById('bill-vendor-results').classList.remove('open');
 }
 
+async function jcSyncBillLineCatalog(line) {
+  // line: one entry from the `lines` array built in saveBill(), carrying
+  // _newEquipment (new asset) or _newItemName+_newItemTable (new catalog item)
+  // or item_category+item_id (existing catalog item, cost sync only)
+  if (line._newEquipment) {
+    await sbPost('config_equipment', {
+      equipment_name: line._newEquipment.name,
+      shop_number: line._newEquipment.asset_no,
+      workshop_rate_ttd: line._newEquipment.workshop_rate_ttd,
+      onsite_rate_ttd: line._newEquipment.onsite_rate_ttd,
+      status: 'approved', is_active: true,
+      submitted_by: currentUser.auth_user_id,
+    });
+    return;
+  }
+  if (line._newItemTable && line._newItemName) {
+    await sbPost(line._newItemTable, {
+      item_name: line._newItemName,
+      default_unit_cost_ttd: line.unit_price,
+      status: 'approved', is_active: true,
+      submitted_by: currentUser.auth_user_id,
+    });
+    return;
+  }
+  if (line.item_category && line.item_category !== 'equipment' && line.item_id) {
+    const table = { material:'config_materials', hardware:'config_hardware', consumable:'config_consumables', tooling:'config_tooling' }[line.item_category];
+    await sbPatch(table, line.item_id, { default_unit_cost_ttd: line.unit_price });
+  }
+}
+
+async function jcSyncBillCatalogOnApproval(lines) {
+  const linked = (lines||[]).filter(l => l.item_category);
+  if (!linked.length) return;
+  await Promise.all(linked.map(l => jcSyncBillLineCatalog(l).catch(e => console.error('jcSyncBillLineCatalog:', e))));
+  jcLoadConfig().catch(() => {});
+}
+
 async function saveBill(status) {
   const vendorId = document.getElementById('bill-vendor-id').value;
   const date     = document.getElementById('bill-date').value;
@@ -11793,6 +11832,13 @@ async function saveBill(status) {
         }
       }
     }
+    if (cat && status === 'draft' && (line._newEquipment || line._newItemName)) {
+      showToast(`Line ${idx+1}: new catalog items can only be linked when saving with "Save & Approve". Saved without an inventory link.`, 'warn');
+      delete line.item_category;
+      delete line._newEquipment;
+      delete line._newItemName;
+      delete line._newItemTable;
+    }
     lines.push(line);
   });
   if (!lines.length) { showToast('Add at least one line item.', 'warn'); return; }
@@ -11828,7 +11874,13 @@ async function saveBill(status) {
       status, notes: document.getElementById('bill-notes').value.trim()||null,
       approved_at: status === 'approved' ? nowISO() : null
     });
-    await sbPost('bill_lines', lines.map(l => ({ bill_id: bill.id, ...l })));
+    await sbPost('bill_lines', lines.map(l => {
+      const { _newEquipment, _newItemName, _newItemTable, ...clean } = l;
+      return { bill_id: bill.id, ...clean };
+    }));
+    if (status === 'approved') {
+      await jcSyncBillCatalogOnApproval(lines);
+    }
 
     showToast(`Bill ${billNo || '(draft)'} ${status === 'approved' ? 'approved' : 'saved as draft'}.`, 'success');
     closeModal('modal-bill');
