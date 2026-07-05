@@ -11874,10 +11874,16 @@ async function saveBill(status) {
       status, notes: document.getElementById('bill-notes').value.trim()||null,
       approved_at: status === 'approved' ? nowISO() : null
     });
-    await sbPost('bill_lines', lines.map(l => {
-      const { _newEquipment, _newItemName, _newItemTable, ...clean } = l;
-      return { bill_id: bill.id, ...clean };
-    }));
+    await sbPost('bill_lines', lines.map(l => ({
+      bill_id: bill.id,
+      description: l.description,
+      quantity: l.quantity,
+      unit_price: l.unit_price,
+      amount: l.amount,
+      line_order: l.line_order,
+      item_category: l.item_category || null,
+      item_id: l.item_id || null,
+    })));
     if (status === 'approved') {
       await jcSyncBillCatalogOnApproval(lines);
     }
