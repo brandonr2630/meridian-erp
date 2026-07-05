@@ -1,6 +1,68 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-07-03 · Session 42*
+*Last updated: 2026-07-03 · Session 43 (in progress)*
+
+---
+
+## Session 43 — Inventory-Linked Purchasing, Phase 1 (IN PROGRESS)
+
+**Date:** 2026-07-03
+**Branch:** `feat/inventory-linked-purchasing` (off `master`, local only — not pushed, no PR yet)
+**Spec:** `docs/superpowers/specs/2026-07-03-inventory-linked-purchasing-design.md`
+**Plan:** `docs/superpowers/plans/2026-07-03-inventory-phase1-catalog-link.md`
+
+### What this is
+
+Materials/Consumables in Work Orders are entered manually with no link to what Finance/AP actually purchased — costs drift, every purchase needs a duplicate Job Config edit. This phase links AP bill lines to job-costing catalogs so approving a purchase auto-updates the catalog (cost sync now; full stock-quantity tracking is a later phase, deliberately deferred). Also adds two new machine-shop-specific cost categories: **Hardware** (fasteners/bearings, split from Materials — different suppliers/cost profile) and **Tooling** (cutting tools, split from Consumables — different cost profile, reported separately in job costing). **Fuel** is a third new category but explicitly NOT stocked (just-in-time purchase per user) — it's a price-reference catalog only, consumed via a sub-entry on Equipment rows (tied to the specific generator/vehicle), not a standalone job-entry table.
+
+Full category set going forward: Materials · **Hardware** · Consumables · **Tooling** · Equipment (Fuel rides under Equipment).
+
+Phased roadmap (user explicitly asked to phase toward full inventory):
+- **Phase 1 (this session, in progress):** new categories + AP-bill-line → catalog cost sync only. No stock quantities yet.
+- **Phase 2 (not started):** `stock_moves` ledger, `qty_on_hand`/`avg_unit_cost_ttd` on catalogs, weighted-average costing.
+- **Phase 3 (not started):** job-form UI shows qty on hand, warns (not blocks) on overdraw.
+- **Phase 4 (named only, not designed):** reorder alerts.
+
+Executed via `superpowers:subagent-driven-development` — fresh subagent per plan task, two-stage review (spec compliance, then code quality) each.
+
+### Progress (Phase 1 plan, 14 tasks total)
+
+| Task | Status | Commit |
+|---|---|---|
+| 1. Schema: `config_hardware`/`config_tooling`/`config_fuel` | ✅ done | (Supabase migration only, no commit — see note) |
+| 2. Schema: `hardware_entries`/`tooling_entries` + `equipment_entries` fuel columns | ✅ done | (Supabase migration only) |
+| 3. Schema: `bill_lines.item_category`/`item_id` | ✅ done | (Supabase migration only) |
+| 4. Job Config admin CRUD tabs (Hardware/Tooling/Fuel) | ✅ done | `09f0c6e` |
+| 5. Load new catalogs into `jcConfig` | ✅ done | `60ef4c2` |
+| 6. Hardware/Tooling row functions (Work Order form JS) | ✅ done | `8e8b1b7` |
+| 7. Hardware/Tooling cards HTML + Costing Summary rows | ✅ spec-approved, code-quality review was in flight when paused | `b514dd2` |
+| 8. Equipment row fuel sub-fields | ⬜ not started | — |
+| 9. Save — `jcCollectFormData`/`jcSaveJobData` | ⬜ not started | — |
+| 10. Load — `jcOpenJob`/`jcPopulateForm`/`jcDuplicateJob` | ⬜ not started | — |
+| 11. Costing Summary totals wiring | ⬜ not started | — |
+| 12. AP Bill Lines — inventory link UI | ⬜ not started | — |
+| 13. Approval-time catalog sync | ⬜ not started | — |
+| 14. End-to-end manual verification | ⬜ not started | — |
+
+**Schema migrations applied live** (Supabase project `fcagxvjxfqqkmuposmcb`, no local migration files — matches existing convention for this table family):
+- `add_config_hardware_tooling`, `add_config_fuel` + follow-up fixes `fix_config_hw_tool_fuel_rls_role` (RLS was scoped to `public` instead of `authenticated` — caught by code review, fixed), `add_config_hw_tool_fuel_submitted_by_fkey` (missing FK vs. sibling tables — caught by code review, fixed)
+- `add_hardware_tooling_entries` (RLS role scoped correctly on first try, having learned from the above), `add_fuel_columns_to_equipment_entries`, `add_hardware_tooling_entries_job_id_index` (missing index vs. sibling — caught by code review, fixed)
+- `add_bill_lines_inventory_link` (bill_lines.item_category + item_id, no FK — intentionally polymorphic across 5 catalog tables, app-enforced)
+
+### Review findings worth remembering
+
+- This table family's RLS convention is `for all to authenticated using (true) with check (true)` — **must include `to authenticated` explicitly**, or Postgres defaults the policy to role `public`, silently widening access to the `anon` key. Caught on Task 1, applied correctly from Task 2 onward.
+- `config_*` catalog tables have a `submitted_by → auth.users(id) ON DELETE SET NULL` FK; entry tables (`*_entries`) have a `job_id → jobs(id) ON DELETE CASCADE` FK **and** a btree index on `job_id` — both must be replicated on any new table in either family.
+- `jcConfig.materials`/`.consumables` mappings were retrofitted with `id:r.id` (previously only had name/unit/cost) — needed for Task 12/13's AP bill-line linking. Confirmed safe: nothing in the codebase destructures these objects positionally or checks their key count.
+- `jcRefreshRowDropdowns` intentionally has no Fuel block — fuel has no standalone job-entry table/dropdown of its own; it's only consumed inside Equipment rows (Task 8). **Task 8 must add a fuel-select refresh to the existing `#jc-equip-body` refresh loop in `jcRefreshRowDropdowns`**, not just wire fuel into newly-created rows — this was flagged mid-session and must not be dropped.
+
+### Next steps when resuming
+
+1. Finish Task 7's code-quality review (result was in-flight when the session paused — just re-dispatch a fresh code-quality reviewer against commit `b514dd2` if the prior one didn't land, or check for its output first).
+2. Continue Tasks 8–14 in order via the same subagent-driven-development loop (implementer → spec reviewer → code-quality reviewer, fix loops as needed).
+3. Remember the Fuel-dropdown-refresh note above when doing Task 8.
+4. Task 14 is manual E2E verification against the live Supabase project — no automated tests exist for this repo.
+5. Branch is **not pushed, no PR yet** — that's appropriate for `superpowers:finishing-a-development-branch`, to run once all 14 tasks are done and reviewed.
 
 ---
 

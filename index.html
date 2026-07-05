@@ -3310,13 +3310,15 @@ body.light .global-search-results, body.light .split-btn-menu {
                       <th style="width:100px">Asset No.</th><th style="width:110px">Location</th>
                       <th style="width:85px" class="right">Setup (hrs)</th><th style="width:85px" class="right">Run (hrs)</th>
                       <th style="width:105px" class="right">Rate/hr (TTD)</th><th style="width:95px" class="right">Amount</th>
+                      <th style="width:110px">Fuel Type</th><th style="width:70px" class="right">Fuel Qty</th>
+                      <th style="width:100px" class="right">Fuel Cost</th><th style="width:100px" class="right">Fuel Amount</th>
                       <th style="width:28px"></th>
                     </tr></thead>
                     <tbody id="jc-equip-body"></tbody>
                     <tfoot><tr>
                       <td colspan="7" class="right" style="font-size:11px;">Total Machine Cost:</td>
                       <td id="jc-equip-cost-total" class="right" style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:var(--gold);">$0.00</td>
-                      <td></td>
+                      <td colspan="4"></td>
                     </tr></tfoot>
                   </table>
                 </div>
@@ -3348,6 +3350,30 @@ body.light .global-search-results, body.light .split-btn-menu {
               </div>
             </div>
 
+            <!-- 5b. Hardware -->
+            <div class="card">
+              <div class="card-header"><span class="card-header-icon">🔩</span><span class="card-header-title">Hardware &amp; Fasteners Used</span></div>
+              <div class="card-body">
+                <p class="scroll-hint">← scroll to see all columns →</p>
+                <div class="dyn-table-wrap">
+                  <table class="dyn-table">
+                    <thead><tr>
+                      <th style="width:110px">Date</th><th>Hardware / Description</th>
+                      <th style="width:130px">Size / Spec</th><th style="width:60px">Qty</th>
+                      <th style="width:70px">Unit</th><th style="width:110px" class="right">Unit Cost (TTD)</th>
+                      <th style="width:110px" class="right">Total Cost</th><th style="width:28px"></th>
+                    </tr></thead>
+                    <tbody id="jc-hardware-body"></tbody>
+                    <tfoot><tr>
+                      <td colspan="6" class="right" style="font-size:11px;">Total Hardware:</td>
+                      <td id="jc-hardware-cost-total" class="right" style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:var(--gold);">$0.00</td><td></td>
+                    </tr></tfoot>
+                  </table>
+                </div>
+                <button class="btn-add-row" onclick="jcAddHardwareRow()">+ Add Hardware</button>
+              </div>
+            </div>
+
             <!-- 6. Consumables -->
             <div class="card">
               <div class="card-header"><span class="card-header-icon">🧪</span><span class="card-header-title">Consumables Used</span></div>
@@ -3369,6 +3395,30 @@ body.light .global-search-results, body.light .split-btn-menu {
                   </table>
                 </div>
                 <button class="btn-add-row" onclick="jcAddConsumableRow()">+ Add Consumable</button>
+              </div>
+            </div>
+
+            <!-- 6b. Tooling -->
+            <div class="card">
+              <div class="card-header"><span class="card-header-icon">⚙️</span><span class="card-header-title">Tooling Used</span></div>
+              <div class="card-body">
+                <p class="scroll-hint">← scroll to see all columns →</p>
+                <div class="dyn-table-wrap">
+                  <table class="dyn-table">
+                    <thead><tr>
+                      <th style="width:110px">Date</th><th>Tool / Description</th>
+                      <th style="width:110px">Stock Code</th><th style="width:60px">Qty</th>
+                      <th style="width:70px">Unit</th><th style="width:110px" class="right">Unit Cost (TTD)</th>
+                      <th style="width:110px" class="right">Total Cost</th><th style="width:28px"></th>
+                    </tr></thead>
+                    <tbody id="jc-tooling-body"></tbody>
+                    <tfoot><tr>
+                      <td colspan="6" class="right" style="font-size:11px;">Total Tooling:</td>
+                      <td id="jc-tooling-cost-total" class="right" style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:var(--gold);">$0.00</td><td></td>
+                    </tr></tfoot>
+                  </table>
+                </div>
+                <button class="btn-add-row" onclick="jcAddToolingRow()">+ Add Tool</button>
               </div>
             </div>
 
@@ -3405,7 +3455,9 @@ body.light .global-search-results, body.light .split-btn-menu {
                         <tr><td>Labour</td><td id="jc-cs-labour">$0.00</td></tr>
                         <tr><td>Machine / Equipment</td><td id="jc-cs-equip">$0.00</td></tr>
                         <tr><td>Materials &amp; Stock</td><td id="jc-cs-materials">$0.00</td></tr>
+                        <tr><td>Hardware</td><td id="jc-cs-hardware">$0.00</td></tr>
                         <tr><td>Consumables</td><td id="jc-cs-consumables">$0.00</td></tr>
+                        <tr><td>Tooling</td><td id="jc-cs-tooling">$0.00</td></tr>
                         <tr><td>Sub-contractors</td><td id="jc-cs-subs">$0.00</td></tr>
                         <tr><td>Other / Miscellaneous</td><td><input type="number" id="jc-cs-misc" style="background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:12px;text-align:right;width:90px;outline:none;padding:2px 4px;" placeholder="0.00" value="0" oninput="jcUpdateCostSummary()"></td></tr>
                         <tr class="total-row"><td>Total Job Cost</td><td id="jc-cs-total">$0.00</td></tr>
@@ -6906,6 +6958,9 @@ const JC_CFG_TABS = [
   { id:'equipment',   label:'Equipment',       table:'config_equipment' },
   { id:'materials',   label:'Materials',       table:'config_materials' },
   { id:'consumables', label:'Consumables',     table:'config_consumables' },
+  { id:'hardware',    label:'Hardware',        table:'config_hardware' },
+  { id:'tooling',     label:'Tooling',         table:'config_tooling' },
+  { id:'fuel',        label:'Fuel',            table:'config_fuel' },
   { id:'tasks',       label:'Tasks',           table:'config_tasks' },
   { id:'qc',          label:'QC Checklists',   table:'config_qc_checklists' },
   { id:'employees',   label:'Employees',       table:'employees' },
@@ -6991,6 +7046,32 @@ function jcCfgRenderTab(tab, rows) {
     body = rows.map(r => `<tr>
       <td style="font-weight:500;">${escHTML(r.item_name||'')}</td>
       <td>${escHTML(r.category||'—')}</td>
+      <td>${escHTML(r.unit||'—')}</td>
+      <td class="right mono">${jcFmtTTD(r.default_unit_cost_ttd)}</td>
+      <td><span class="badge ${r.is_active?'badge-posted':'badge-void'}">${r.is_active?'Active':'Inactive'}</span></td>
+      <td class="right">${jcCfgActions(tab,r.id)}</td></tr>`).join('');
+  } else if (tab === 'hardware') {
+    head = '<th>Item Name</th><th>Size / Spec</th><th>Unit</th><th class="right">Default Unit Cost</th><th>Active</th><th class="right">Actions</th>';
+    body = rows.map(r => `<tr>
+      <td style="font-weight:500;">${escHTML(r.item_name||'')}</td>
+      <td>${escHTML(r.spec||'—')}</td>
+      <td>${escHTML(r.unit||'—')}</td>
+      <td class="right mono">${jcFmtTTD(r.default_unit_cost_ttd)}</td>
+      <td><span class="badge ${r.is_active?'badge-posted':'badge-void'}">${r.is_active?'Active':'Inactive'}</span></td>
+      <td class="right">${jcCfgActions(tab,r.id)}</td></tr>`).join('');
+  } else if (tab === 'tooling') {
+    head = '<th>Item Name</th><th>Stock Code</th><th>Unit</th><th class="right">Default Unit Cost</th><th>Active</th><th class="right">Actions</th>';
+    body = rows.map(r => `<tr>
+      <td style="font-weight:500;">${escHTML(r.item_name||'')}</td>
+      <td class="mono">${escHTML(r.stock_code||'—')}</td>
+      <td>${escHTML(r.unit||'—')}</td>
+      <td class="right mono">${jcFmtTTD(r.default_unit_cost_ttd)}</td>
+      <td><span class="badge ${r.is_active?'badge-posted':'badge-void'}">${r.is_active?'Active':'Inactive'}</span></td>
+      <td class="right">${jcCfgActions(tab,r.id)}</td></tr>`).join('');
+  } else if (tab === 'fuel') {
+    head = '<th>Item Name</th><th>Unit</th><th class="right">Default Unit Cost</th><th>Active</th><th class="right">Actions</th>';
+    body = rows.map(r => `<tr>
+      <td style="font-weight:500;">${escHTML(r.item_name||'')}</td>
       <td>${escHTML(r.unit||'—')}</td>
       <td class="right mono">${jcFmtTTD(r.default_unit_cost_ttd)}</td>
       <td><span class="badge ${r.is_active?'badge-posted':'badge-void'}">${r.is_active?'Active':'Inactive'}</span></td>
@@ -7151,6 +7232,62 @@ function jcCfgBuildModalBody(tab, r) {
     ${sortField}${activeField}
   </div>`;
 
+  if (tab === 'hardware') return `<div class="form-grid" style="grid-template-columns:1fr 1fr;">
+    <div class="field" style="grid-column:span 2;">
+      <label class="field-label">Item Name <span style="color:var(--red)">*</span></label>
+      <input type="text" id="jc-cfg-f1" value="${escHTML(r.item_name||'')}" placeholder="e.g. M8 Hex Bolt Stainless">
+    </div>
+    <div class="field">
+      <label class="field-label">Size / Spec</label>
+      <input type="text" id="jc-cfg-f2" value="${escHTML(r.spec||'')}" placeholder="e.g. M8 x 40mm">
+    </div>
+    <div class="field">
+      <label class="field-label">Unit</label>
+      <input type="text" id="jc-cfg-f3" value="${escHTML(r.unit||'')}" placeholder="e.g. pc, box">
+    </div>
+    <div class="field">
+      <label class="field-label">Default Unit Cost (TTD)</label>
+      <input type="number" id="jc-cfg-f4" value="${r.default_unit_cost_ttd??0}" min="0" step="0.01" class="mono">
+    </div>
+    ${sortField}${activeField}
+  </div>`;
+
+  if (tab === 'tooling') return `<div class="form-grid" style="grid-template-columns:1fr 1fr;">
+    <div class="field" style="grid-column:span 2;">
+      <label class="field-label">Item Name <span style="color:var(--red)">*</span></label>
+      <input type="text" id="jc-cfg-f1" value="${escHTML(r.item_name||'')}" placeholder="e.g. 10mm Carbide End Mill">
+    </div>
+    <div class="field">
+      <label class="field-label">Stock Code</label>
+      <input type="text" id="jc-cfg-f2" value="${escHTML(r.stock_code||'')}" class="mono" placeholder="e.g. EM-10C">
+    </div>
+    <div class="field">
+      <label class="field-label">Unit</label>
+      <input type="text" id="jc-cfg-f3" value="${escHTML(r.unit||'')}" placeholder="e.g. pc">
+    </div>
+    <div class="field">
+      <label class="field-label">Default Unit Cost (TTD)</label>
+      <input type="number" id="jc-cfg-f4" value="${r.default_unit_cost_ttd??0}" min="0" step="0.01" class="mono">
+    </div>
+    ${sortField}${activeField}
+  </div>`;
+
+  if (tab === 'fuel') return `<div class="form-grid" style="grid-template-columns:1fr 1fr;">
+    <div class="field" style="grid-column:span 2;">
+      <label class="field-label">Item Name <span style="color:var(--red)">*</span></label>
+      <input type="text" id="jc-cfg-f1" value="${escHTML(r.item_name||'')}" placeholder="e.g. Diesel">
+    </div>
+    <div class="field">
+      <label class="field-label">Unit</label>
+      <input type="text" id="jc-cfg-f2" value="${escHTML(r.unit||'litre')}" placeholder="litre, gallon">
+    </div>
+    <div class="field">
+      <label class="field-label">Default Unit Cost (TTD)</label>
+      <input type="number" id="jc-cfg-f3" value="${r.default_unit_cost_ttd??0}" min="0" step="0.01" class="mono">
+    </div>
+    ${sortField}${activeField}
+  </div>`;
+
   if (tab === 'tasks') return `<div class="form-grid" style="grid-template-columns:1fr 1fr;">
     <div class="field" style="grid-column:span 2;">
       <label class="field-label">Task Name <span style="color:var(--red)">*</span></label>
@@ -7271,6 +7408,15 @@ async function jcCfgSave() {
     } else if (tab === 'consumables') {
       if (!gv('jc-cfg-f1')) { showToast('Item name is required.', 'warn'); return; }
       record = { item_name:gv('jc-cfg-f1'), category:gv('jc-cfg-f2')||null, unit:gv('jc-cfg-f3')||null, default_unit_cost_ttd:gn('jc-cfg-f4'), sort_order:gi('jc-cfg-sort'), is_active:gc('jc-cfg-active') };
+    } else if (tab === 'hardware') {
+      if (!gv('jc-cfg-f1')) { showToast('Item name is required.', 'warn'); return; }
+      record = { item_name:gv('jc-cfg-f1'), spec:gv('jc-cfg-f2')||null, unit:gv('jc-cfg-f3')||null, default_unit_cost_ttd:gn('jc-cfg-f4'), sort_order:gi('jc-cfg-sort'), is_active:gc('jc-cfg-active') };
+    } else if (tab === 'tooling') {
+      if (!gv('jc-cfg-f1')) { showToast('Item name is required.', 'warn'); return; }
+      record = { item_name:gv('jc-cfg-f1'), stock_code:gv('jc-cfg-f2')||null, unit:gv('jc-cfg-f3')||null, default_unit_cost_ttd:gn('jc-cfg-f4'), sort_order:gi('jc-cfg-sort'), is_active:gc('jc-cfg-active') };
+    } else if (tab === 'fuel') {
+      if (!gv('jc-cfg-f1')) { showToast('Item name is required.', 'warn'); return; }
+      record = { item_name:gv('jc-cfg-f1'), unit:gv('jc-cfg-f2')||null, default_unit_cost_ttd:gn('jc-cfg-f3'), sort_order:gi('jc-cfg-sort'), is_active:gc('jc-cfg-active') };
     } else if (tab === 'tasks') {
       if (!gv('jc-cfg-f1')) { showToast('Task name is required.', 'warn'); return; }
       record = { task_name:gv('jc-cfg-f1'), category:gv('jc-cfg-f2')||null, sort_order:gi('jc-cfg-sort'), is_active:gc('jc-cfg-active') };
@@ -7319,21 +7465,27 @@ async function jcCfgDelete(tab, id) {
 
 // ── CONFIG ────────────────────────────────────────────────────────
 async function jcLoadConfig() {
-  jcConfig = { labour:[], equipment:[], tasks:[], materials:[], consumables:[], qcChecklists:[], employees:[] };
+  jcConfig = { labour:[], equipment:[], tasks:[], materials:[], consumables:[], hardware:[], tooling:[], fuel:[], qcChecklists:[], employees:[] };
   try {
-    const [labRows, eqRows, matRows, conRows, taskRows, qcRows, empRows] = await Promise.all([
+    const [labRows, eqRows, matRows, conRows, hwRows, toolRows, fuelRows, taskRows, qcRows, empRows] = await Promise.all([
       sbGet('config_labour',       'status=eq.approved&is_active=eq.true&order=sort_order'),
       sbGet('config_equipment',    'status=eq.approved&is_active=eq.true&order=sort_order'),
       sbGet('config_materials',    'status=eq.approved&is_active=eq.true&order=sort_order'),
       sbGet('config_consumables',  'status=eq.approved&is_active=eq.true&order=sort_order'),
+      sbGet('config_hardware',     'status=eq.approved&is_active=eq.true&order=sort_order'),
+      sbGet('config_tooling',      'status=eq.approved&is_active=eq.true&order=sort_order'),
+      sbGet('config_fuel',         'status=eq.approved&is_active=eq.true&order=sort_order'),
       sbGet('config_tasks',        'status=eq.approved&is_active=eq.true&order=sort_order'),
       sbGet('config_qc_checklists','status=eq.approved&is_active=eq.true&order=sort_order'),
       sbGet('employees',           'order=name'),
     ]);
     jcConfig.labour      = (labRows ||[]).map(r => ({ classification:r.classification, workshopRate:parseFloat(r.workshop_rate_ttd)||0, onsiteRate:parseFloat(r.onsite_rate_ttd)||0 }));
     jcConfig.equipment   = (eqRows  ||[]).map(r => ({ name:r.equipment_name, assetNo:r.asset_no||'', workshopRate:parseFloat(r.workshop_rate_ttd)||0, onsiteRate:parseFloat(r.onsite_rate_ttd)||0 }));
-    jcConfig.materials   = (matRows ||[]).map(r => ({ name:r.item_name, unit:r.unit||'', cost:parseFloat(r.default_unit_cost_ttd)||0 }));
-    jcConfig.consumables = (conRows ||[]).map(r => ({ name:r.item_name, unit:r.unit||'', cost:parseFloat(r.default_unit_cost_ttd)||0 }));
+    jcConfig.materials   = (matRows ||[]).map(r => ({ id:r.id, name:r.item_name, unit:r.unit||'', cost:parseFloat(r.default_unit_cost_ttd)||0 }));
+    jcConfig.consumables = (conRows ||[]).map(r => ({ id:r.id, name:r.item_name, unit:r.unit||'', cost:parseFloat(r.default_unit_cost_ttd)||0 }));
+    jcConfig.hardware    = (hwRows  ||[]).map(r => ({ id:r.id, name:r.item_name, spec:r.spec||'', unit:r.unit||'', cost:parseFloat(r.default_unit_cost_ttd)||0 }));
+    jcConfig.tooling     = (toolRows||[]).map(r => ({ id:r.id, name:r.item_name, code:r.stock_code||'', unit:r.unit||'', cost:parseFloat(r.default_unit_cost_ttd)||0 }));
+    jcConfig.fuel        = (fuelRows||[]).map(r => ({ id:r.id, name:r.item_name, unit:r.unit||'', cost:parseFloat(r.default_unit_cost_ttd)||0 }));
     jcConfig.tasks       = (taskRows||[]).map(r => r.task_name);
     jcConfig.qcChecklists= (qcRows  ||[]).map(r => ({ item:r.checklist_item, jobType:r.job_type||'All' }));
     jcConfig.employees   = (empRows ||[]).map(r => ({ name:r.name, classification:r.job_classification||'' }));
@@ -7346,6 +7498,8 @@ function jcRefreshRowDropdowns() {
   const taskOpts = '<option value="">Select task…</option>' + jcConfig.tasks.map(t => `<option value="${escHTML(t)}">${escHTML(t)}</option>`).join('');
   const matOpts  = '<option value="">Select…</option>' + jcConfig.materials.map(r => `<option value="${escHTML(r.name)}">${escHTML(r.name)}</option>`).join('');
   const conOpts  = '<option value="">Select…</option>' + jcConfig.consumables.map(r => `<option value="${escHTML(r.name)}">${escHTML(r.name)}</option>`).join('');
+  const hwOpts   = '<option value="">Select…</option>' + jcConfig.hardware.map(r => `<option value="${escHTML(r.name)}">${escHTML(r.name)}</option>`).join('');
+  const toolOpts = '<option value="">Select…</option>' + jcConfig.tooling.map(r => `<option value="${escHTML(r.name)}">${escHTML(r.name)}</option>`).join('');
   document.querySelectorAll('#jc-labour-body tr').forEach(tr => {
     const rid = tr.id; if (!rid || !rid.startsWith('jc-lr-')) return;
     const empSel = document.getElementById(rid+'-emp'); if (!empSel) return;
@@ -7364,6 +7518,14 @@ function jcRefreshRowDropdowns() {
   document.querySelectorAll('#jc-consumables-body tr').forEach(tr => {
     const sel = tr.querySelector('select'); if (!sel) return;
     const cur = sel.value; sel.innerHTML = conOpts; sel.value = cur;
+  });
+  document.querySelectorAll('#jc-hardware-body tr').forEach(tr => {
+    const sel = tr.querySelector('select'); if (!sel) return;
+    const cur = sel.value; sel.innerHTML = hwOpts; sel.value = cur;
+  });
+  document.querySelectorAll('#jc-tooling-body tr').forEach(tr => {
+    const sel = tr.querySelector('select'); if (!sel) return;
+    const cur = sel.value; sel.innerHTML = toolOpts; sel.value = cur;
   });
 }
 
@@ -7543,7 +7705,7 @@ async function jcNewJob() {
 function jcResetForm() {
   document.querySelectorAll('#jc-form-wrap input:not([readonly]), #jc-form-wrap select, #jc-form-wrap textarea').forEach(el => { el.value = ''; });
   const miscEl = document.getElementById('jc-cs-misc'); if (miscEl) miscEl.value = '0';
-  ['jc-labour-body','jc-equip-body','jc-materials-body','jc-consumables-body','jc-subs-body','jc-drawings-body','jc-specs-body','jc-reports-body'].forEach(id => {
+  ['jc-labour-body','jc-equip-body','jc-materials-body','jc-hardware-body','jc-consumables-body','jc-tooling-body','jc-subs-body','jc-drawings-body','jc-specs-body','jc-reports-body'].forEach(id => {
     const el = document.getElementById(id); if (el) el.innerHTML = '';
   });
   document.querySelectorAll('#jc-status-btns .jc-status-btn').forEach(b => b.classList.remove('active','green','red','blue','dark'));
@@ -7643,7 +7805,7 @@ async function jcSaveJobData(data, jobId) {
     const rows = await sbPost('jobs', jobRecord);
     savedId = rows[0].id;
   }
-  await Promise.all(['labour_entries','equipment_entries','material_entries','consumable_entries','subcontractor_entries']
+  await Promise.all(['labour_entries','equipment_entries','material_entries','consumable_entries','hardware_entries','tooling_entries','subcontractor_entries']
     .map(t => sbDeleteWhere(t, `job_id=eq.${savedId}`)));
   const labour = parse(data.labourDetail);
   if (labour.length) await sbPost('labour_entries', labour.map((r,i) => ({
@@ -7655,7 +7817,9 @@ async function jcSaveJobData(data, jobId) {
   if (equip.length) await sbPost('equipment_entries', equip.map((r,i) => ({
     job_id:savedId, sort_order:i, entry_date:r.date||null, machine_name:r.machine||null,
     asset_no:r.asset||null, location:r.location||'Workshop', setup_hours:parseFloat(r.setup)||0,
-    run_hours:parseFloat(r.run)||0, rate_ttd:parseFloat(r.rate)||0, amount_ttd:parseFloat(r.amount)||0, tasks:r.tasks||[]
+    run_hours:parseFloat(r.run)||0, rate_ttd:parseFloat(r.rate)||0, amount_ttd:parseFloat(r.amount)||0, tasks:r.tasks||[],
+    fuel_type:r.fuelType||null, fuel_qty:parseFloat(r.fuelQty)||0, fuel_unit_cost_ttd:parseFloat(r.fuelUnitCost)||0,
+    fuel_amount_ttd:parseFloat(r.fuelAmount)||0
   })));
   const mats = parse(data.matsDetail);
   if (mats.length) await sbPost('material_entries', mats.map((r,i) => ({
@@ -7666,6 +7830,18 @@ async function jcSaveJobData(data, jobId) {
   const cons = parse(data.consDetail);
   if (cons.length) await sbPost('consumable_entries', cons.map((r,i) => ({
     job_id:savedId, sort_order:i, entry_date:r.date||null, description:r.desc||null, category:r.cat||null,
+    quantity:parseFloat(r.qty)||0, unit:r.unit||null, unit_cost_ttd:parseFloat(r.unitCost)||0,
+    total_cost_ttd:(parseFloat(r.qty)||0)*(parseFloat(r.unitCost)||0)
+  })));
+  const hw = parse(data.hwDetail);
+  if (hw.length) await sbPost('hardware_entries', hw.map((r,i) => ({
+    job_id:savedId, sort_order:i, entry_date:r.date||null, description:r.desc||null, spec:r.spec||null,
+    quantity:parseFloat(r.qty)||0, unit:r.unit||null, unit_cost_ttd:parseFloat(r.unitCost)||0,
+    total_cost_ttd:(parseFloat(r.qty)||0)*(parseFloat(r.unitCost)||0)
+  })));
+  const tool = parse(data.toolDetail);
+  if (tool.length) await sbPost('tooling_entries', tool.map((r,i) => ({
+    job_id:savedId, sort_order:i, entry_date:r.date||null, description:r.desc||null, stock_code:r.code||null,
     quantity:parseFloat(r.qty)||0, unit:r.unit||null, unit_cost_ttd:parseFloat(r.unitCost)||0,
     total_cost_ttd:(parseFloat(r.qty)||0)*(parseFloat(r.unitCost)||0)
   })));
@@ -7700,7 +7876,7 @@ async function jcOpenJob(jobId) {
     if (!ok) return;
   }
   try {
-    const [jr, lr, er, mr, cr, sr, dr] = await Promise.all([
+    const [jr, lr, er, mr, cr, sr, dr, hr, tr2] = await Promise.all([
       sbGet('jobs',                  `id=eq.${jobId}&limit=1`),
       sbGet('labour_entries',        `job_id=eq.${jobId}&order=sort_order`),
       sbGet('equipment_entries',     `job_id=eq.${jobId}&order=sort_order`),
@@ -7708,6 +7884,8 @@ async function jcOpenJob(jobId) {
       sbGet('consumable_entries',    `job_id=eq.${jobId}&order=sort_order`),
       sbGet('subcontractor_entries', `job_id=eq.${jobId}&order=sort_order`),
       sbGet('job_drawings',          `job_id=eq.${jobId}&order=created_at.asc`),
+      sbGet('hardware_entries',      `job_id=eq.${jobId}&order=sort_order`),
+      sbGet('tooling_entries',       `job_id=eq.${jobId}&order=sort_order`),
     ]);
     if (!jr.length) throw new Error('Job not found.');
     const j = jr[0];
@@ -7733,10 +7911,12 @@ async function jcOpenJob(jobId) {
       'Reports Detail': JSON.stringify(j.reports||[]),
       'Last Saved': j.updated_at,
       'Labour Detail': JSON.stringify((lr||[]).map(r => ({ date:r.entry_date||'', employee:r.technician||'', classification:r.classification||'', location:r.location||'Workshop', start:r.start_time||'', end:r.end_time||'', hrs:String(r.hours||0), rate:String(r.rate_ttd||0), amount:String(r.amount_ttd||0), tasks:r.tasks||[] }))),
-      'Equipment Detail': JSON.stringify((er||[]).map(r => ({ date:r.entry_date||'', machine:r.machine_name||'', asset:r.asset_no||'', location:r.location||'Workshop', setup:String(r.setup_hours||0), run:String(r.run_hours||0), rate:String(r.rate_ttd||0), amount:String(r.amount_ttd||0), tasks:r.tasks||[] }))),
+      'Equipment Detail': JSON.stringify((er||[]).map(r => ({ date:r.entry_date||'', machine:r.machine_name||'', asset:r.asset_no||'', location:r.location||'Workshop', setup:String(r.setup_hours||0), run:String(r.run_hours||0), rate:String(r.rate_ttd||0), amount:String(r.amount_ttd||0), tasks:r.tasks||[], fuelType:r.fuel_type||'', fuelQty:String(r.fuel_qty||0), fuelUnitCost:String(r.fuel_unit_cost_ttd||0), fuelAmount:String(r.fuel_amount_ttd||0) }))),
       'Materials Detail': JSON.stringify((mr||[]).map(r => ({ date:r.entry_date||'', desc:r.description||'', code:r.stock_code||'', qty:String(r.quantity||0), unit:r.unit||'', unitCost:String(r.unit_cost_ttd||0) }))),
       'Consumables Detail': JSON.stringify((cr||[]).map(r => ({ date:r.entry_date||'', desc:r.description||'', cat:r.category||'', qty:String(r.quantity||0), unit:r.unit||'', unitCost:String(r.unit_cost_ttd||0) }))),
       'Subs Detail': JSON.stringify((sr||[]).map(r => ({ date:r.entry_date||'', name:r.name||'', service:r.service_description||'', inv:r.invoice_ref||'', cost:String(r.cost_ttd||0) }))),
+      'Hardware Detail': JSON.stringify((hr||[]).map(r => ({ date:r.entry_date||'', desc:r.description||'', spec:r.spec||'', qty:String(r.quantity||0), unit:r.unit||'', unitCost:String(r.unit_cost_ttd||0) }))),
+      'Tooling Detail': JSON.stringify((tr2||[]).map(r => ({ date:r.entry_date||'', desc:r.description||'', code:r.stock_code||'', qty:String(r.quantity||0), unit:r.unit||'', unitCost:String(r.unit_cost_ttd||0) }))),
     };
     jcPopulateForm(row);
     const activeDrawings   = (dr || []).filter(d => !d.archived);
@@ -7775,7 +7955,7 @@ function jcPopulateForm(row) {
   set('jc-f-jsa-date',      row['JSA Date Issued']);    set('jc-f-jsa-by',        row['JSA Issued By']);
   const lastSavedEl = document.getElementById('jc-last-saved');
   if (lastSavedEl && row['Last Saved']) lastSavedEl.textContent = 'Saved ' + new Date(row['Last Saved']).toLocaleString('en-TT');
-  ['jc-labour-body','jc-equip-body','jc-materials-body','jc-consumables-body','jc-subs-body','jc-drawings-body','jc-specs-body','jc-reports-body']
+  ['jc-labour-body','jc-equip-body','jc-materials-body','jc-hardware-body','jc-consumables-body','jc-tooling-body','jc-subs-body','jc-drawings-body','jc-specs-body','jc-reports-body']
     .forEach(id => { const el=document.getElementById(id); if (el) el.innerHTML=''; });
   const parse = str => { try { return JSON.parse(str)||[]; } catch(e) { return []; } };
   parse(row['Labour Detail']).forEach(d => jcAddLabourRow(d));
@@ -7783,6 +7963,8 @@ function jcPopulateForm(row) {
   parse(row['Equipment Detail']).forEach(d => jcAddEquipRow(d));
   parse(row['Materials Detail']).forEach(d => jcAddMaterialRow(d));
   parse(row['Consumables Detail']).forEach(d => jcAddConsumableRow(d));
+  parse(row['Hardware Detail']).forEach(d => jcAddHardwareRow(d));
+  parse(row['Tooling Detail']).forEach(d => jcAddToolingRow(d));
   parse(row['Subs Detail']).forEach(d => jcAddSubRow(d));
   parse(row['Specs Detail']).forEach(d => jcAddSpecRow(d));
   parse(row['Reports Detail']).forEach(d => jcAddReportRow(d));
@@ -7845,7 +8027,7 @@ async function jcDuplicateJob() {
   set('jc-f-payment-terms',original.paymentTerms);  set('jc-f-jsa-title',    original.jsaTitle);
   set('jc-f-jsa-by',       original.jsaBy);
   const ps = document.getElementById('jc-priority-select'); if (ps && original.priority) ps.value = original.priority;
-  ['jc-labour-body','jc-equip-body','jc-materials-body','jc-consumables-body','jc-subs-body','jc-drawings-body','jc-specs-body','jc-reports-body']
+  ['jc-labour-body','jc-equip-body','jc-materials-body','jc-hardware-body','jc-consumables-body','jc-tooling-body','jc-subs-body','jc-drawings-body','jc-specs-body','jc-reports-body']
     .forEach(id => { const el=document.getElementById(id); if(el) el.innerHTML=''; });
   const parse = str => { try { return JSON.parse(str)||[]; } catch(e) { return []; } };
   parse(original.labourDetail).forEach(d => jcAddLabourRow(d));
@@ -7853,6 +8035,8 @@ async function jcDuplicateJob() {
   parse(original.equipDetail).forEach(d => jcAddEquipRow(d));
   parse(original.matsDetail).forEach(d => jcAddMaterialRow(d));
   parse(original.consDetail).forEach(d => jcAddConsumableRow(d));
+  parse(original.hwDetail).forEach(d => jcAddHardwareRow(d));
+  parse(original.toolDetail).forEach(d => jcAddToolingRow(d));
   parse(original.subsDetail).forEach(d => jcAddSubRow(d));
   parse(original.drawings).forEach(d => jcAddDrawingRow(d));
   parse(original.specs).forEach(d => jcAddSpecRow(d));
@@ -7891,7 +8075,12 @@ function jcCollectFormData() {
     const inputs=tr.querySelectorAll('input'), sels=tr.querySelectorAll('select'), tasks=[];
     const tc = document.getElementById(rid+'-taskcontainer');
     if (tc) tc.querySelectorAll('.jc-task-subrow').forEach(d => tasks.push({ task:d.querySelector('select')?.value||'', note:d.querySelector('input')?.value||'' }));
-    equipDetail.push({ date:inputs[0]?.value||'', machine:sels[0]?.value||'', asset:inputs[1]?.value||'', location:sels[1]?.value||'Workshop', setup:inputs[2]?.value||'0', run:inputs[3]?.value||'0', rate:document.getElementById(rid+'-rate')?.value||'0', amount:(document.getElementById(rid+'-amount')?.textContent||'$0').replace('$',''), tasks });
+    equipDetail.push({ date:inputs[0]?.value||'', machine:sels[0]?.value||'', asset:inputs[1]?.value||'', location:sels[1]?.value||'Workshop', setup:inputs[2]?.value||'0', run:inputs[3]?.value||'0', rate:document.getElementById(rid+'-rate')?.value||'0', amount:(document.getElementById(rid+'-amount')?.textContent||'$0').replace('$',''), tasks,
+      fuelType: document.getElementById(rid+'-fueltype')?.value||'',
+      fuelQty: document.getElementById(rid+'-fuelqty')?.value||'0',
+      fuelUnitCost: document.getElementById(rid+'-fuelcost')?.value||'0',
+      fuelAmount: (document.getElementById(rid+'-fuelamount')?.textContent||'$0').replace('$',''),
+    });
   });
   const matsDetail = [];
   document.querySelectorAll('#jc-materials-body tr').forEach(tr => {
@@ -7907,6 +8096,16 @@ function jcCollectFormData() {
   document.querySelectorAll('#jc-subs-body tr').forEach(tr => {
     if (!tr.id) return; const inputs=tr.querySelectorAll('input');
     subsDetail.push({ date:inputs[0]?.value||'', name:inputs[1]?.value||'', service:inputs[2]?.value||'', inv:inputs[3]?.value||'', cost:document.getElementById(tr.id+'-cost')?.value||'0' });
+  });
+  const hwDetail = [];
+  document.querySelectorAll('#jc-hardware-body tr').forEach(tr => {
+    if (!tr.id) return; const inputs=tr.querySelectorAll('input');
+    hwDetail.push({ date:inputs[0]?.value||'', desc:tr.querySelector('select')?.value||'', spec:document.getElementById(tr.id+'-spec')?.value||'', qty:inputs[2]?.value||'0', unit:document.getElementById(tr.id+'-unit')?.value||'', unitCost:document.getElementById(tr.id+'-cost')?.value||'0' });
+  });
+  const toolDetail = [];
+  document.querySelectorAll('#jc-tooling-body tr').forEach(tr => {
+    if (!tr.id) return; const inputs=tr.querySelectorAll('input');
+    toolDetail.push({ date:inputs[0]?.value||'', desc:tr.querySelector('select')?.value||'', code:document.getElementById(tr.id+'-code')?.value||'', qty:inputs[2]?.value||'0', unit:document.getElementById(tr.id+'-unit')?.value||'', unitCost:document.getElementById(tr.id+'-cost')?.value||'0' });
   });
   const drawings = [];
   document.querySelectorAll('#jc-drawings-body tr[data-drawing-id]').forEach(tr => {
@@ -7956,6 +8155,7 @@ function jcCollectFormData() {
     labourDetail:  JSON.stringify(labourDetail), equipDetail: JSON.stringify(equipDetail),
     matsDetail:    JSON.stringify(matsDetail),   consDetail:  JSON.stringify(consDetail),
     subsDetail:    JSON.stringify(subsDetail),
+    hwDetail:      JSON.stringify(hwDetail),     toolDetail:  JSON.stringify(toolDetail),
   };
 }
 
@@ -8238,6 +8438,7 @@ function jcAddEquipRow(d) {
   const rid = 'jc-er-'+Date.now()+Math.random().toString(36).substr(2,4);
   const eqOpts   = '<option value="">Select…</option>'+jcConfig.equipment.map(r => `<option value="${escHTML(r.name)}">${escHTML(r.name)}</option>`).join('');
   const taskOpts = '<option value="">Select task…</option>'+jcConfig.tasks.map(t => `<option value="${escHTML(t)}">${escHTML(t)}</option>`).join('');
+  const fuelOpts = '<option value="">None</option>'+jcConfig.fuel.map(r => `<option value="${escHTML(r.name)}" data-cost="${r.cost}">${escHTML(r.name)}</option>`).join('');
   const tr=document.createElement('tr'); tr.id=rid;
   tr.innerHTML=`
     <td><input type="date" value="${d&&d.date||''}"></td>
@@ -8250,13 +8451,18 @@ function jcAddEquipRow(d) {
     <td><input type="number" class="num" placeholder="0.00" value="${d&&d.run||''}" step="0.25" oninput="jcUpdateEquipRow('${rid}')"></td>
     <td><input type="number" class="num" placeholder="0.00" id="${rid}-rate" value="${d&&d.rate||''}" oninput="jcUpdateEquipRow('${rid}')"></td>
     <td><span class="row-total" id="${rid}-amount">$0.00</span></td>
+    <td><select id="${rid}-fueltype" onchange="jcOnFuelTypeChange('${rid}')">${fuelOpts}</select></td>
+    <td><input type="number" class="num" placeholder="0" id="${rid}-fuelqty" value="${d&&d.fuelQty||''}" step="0.1" oninput="jcUpdateEquipRow('${rid}')"></td>
+    <td><input type="number" class="num" placeholder="0.00" id="${rid}-fuelcost" value="${d&&d.fuelUnitCost||''}" oninput="jcUpdateEquipRow('${rid}')"></td>
+    <td><span class="row-total" id="${rid}-fuelamount">$0.00</span></td>
     <td><button class="btn-del" onclick="jcRemoveEquipRow('${rid}')">✕</button></td>`;
   tbody.appendChild(tr);
   const taskTr=document.createElement('tr'); taskTr.className='jc-task-subrows'; taskTr.id=rid+'-tasks';
-  taskTr.innerHTML=`<td colspan="9"><div id="${rid}-taskcontainer"></div><button class="btn-add-task" onclick="jcAddTaskSubRow('${rid}-taskcontainer')">+ Add Task</button></td>`;
+  taskTr.innerHTML=`<td colspan="13"><div id="${rid}-taskcontainer"></div><button class="btn-add-task" onclick="jcAddTaskSubRow('${rid}-taskcontainer')">+ Add Task</button></td>`;
   tbody.appendChild(taskTr);
   if (d&&d.machine) { tr.querySelectorAll('select')[0].value=d.machine; jcOnEquipChange(tr.querySelectorAll('select')[0],rid); }
   if (d&&d.location) tr.querySelectorAll('select')[1].value=d.location;
+  if (d&&d.fuelType) document.getElementById(rid+'-fueltype').value = d.fuelType;
   if (d&&d.tasks) d.tasks.forEach(t => jcAddTaskSubRow(rid+'-taskcontainer',t));
   jcUpdateEquipRow(rid);
 }
@@ -8268,11 +8474,21 @@ function jcOnEquipChange(sel, rid) {
   if (row&&rateEl) rateEl.value=(loc==='Workshop'?row.workshopRate:row.onsiteRate).toFixed(2);
   jcUpdateEquipRow(rid);
 }
+function jcOnFuelTypeChange(rid) {
+  const sel = document.getElementById(rid+'-fueltype');
+  const opt = sel?.options[sel.selectedIndex];
+  const costEl = document.getElementById(rid+'-fuelcost');
+  if (opt && costEl) costEl.value = parseFloat(opt.dataset.cost||0).toFixed(2);
+  jcUpdateEquipRow(rid);
+}
 function jcUpdateEquipRow(rid) {
   const tr=document.getElementById(rid); if (!tr) return;
   const nums=tr.querySelectorAll('input[type="number"]');
   const amt=((parseFloat(nums[0]?.value)||0)+(parseFloat(nums[1]?.value)||0))*(parseFloat(document.getElementById(rid+'-rate')?.value)||0);
   const amtEl=document.getElementById(rid+'-amount'); if (amtEl) amtEl.textContent='$'+amt.toFixed(2);
+  const fuelQty=parseFloat(document.getElementById(rid+'-fuelqty')?.value)||0;
+  const fuelCost=parseFloat(document.getElementById(rid+'-fuelcost')?.value)||0;
+  const fuelAmtEl=document.getElementById(rid+'-fuelamount'); if (fuelAmtEl) fuelAmtEl.textContent='$'+(fuelQty*fuelCost).toFixed(2);
   jcUpdateEquipTotals(); jcUpdateCostSummary();
 }
 function jcRemoveEquipRow(rid) {
@@ -8284,6 +8500,7 @@ function jcUpdateEquipTotals() {
   document.querySelectorAll('#jc-equip-body tr:not(.jc-task-subrows)').forEach(tr => {
     const rid=tr.id; if (!rid||!rid.startsWith('jc-er-')) return;
     total+=parseFloat(document.getElementById(rid+'-amount')?.textContent.replace('$',''))||0;
+    total+=parseFloat(document.getElementById(rid+'-fuelamount')?.textContent.replace('$',''))||0;
   });
   const el=document.getElementById('jc-equip-cost-total'); if (el) el.textContent='$'+total.toFixed(2);
 }
@@ -8364,6 +8581,90 @@ function jcUpdateConTotals() {
     if (!tr.id) return; total+=parseFloat(document.getElementById(tr.id+'-amount')?.textContent.replace('$',''))||0;
   });
   const el=document.getElementById('jc-consumables-cost-total'); if(el) el.textContent='$'+total.toFixed(2);
+}
+
+// ── HARDWARE ──────────────────────────────────────────────────────
+function jcAddHardwareRow(d) {
+  const tbody=document.getElementById('jc-hardware-body'); if (!tbody) return;
+  const rid='jc-hr-'+Date.now()+Math.random().toString(36).substr(2,4);
+  const hwOpts='<option value="">Select…</option>'+jcConfig.hardware.map(r => `<option value="${escHTML(r.name)}" data-unit="${escHTML(r.unit)}" data-cost="${r.cost}" data-spec="${escHTML(r.spec)}">${escHTML(r.name)}</option>`).join('');
+  const tr=document.createElement('tr'); tr.id=rid;
+  tr.innerHTML=`
+    <td><input type="date" value="${d&&d.date||''}"></td>
+    <td><select onchange="jcOnHardwareChange(this,'${rid}')">${hwOpts}</select></td>
+    <td><input type="text" placeholder="Size / Spec" id="${rid}-spec" value="${d&&d.spec||''}"></td>
+    <td><input type="number" class="num" placeholder="0" value="${d&&d.qty||''}" step="1" oninput="jcUpdateHardwareRow('${rid}')"></td>
+    <td><input type="text" placeholder="Unit" id="${rid}-unit" value="${d&&d.unit||''}" style="width:60px;"></td>
+    <td><input type="number" class="num" placeholder="0.00" id="${rid}-cost" value="${d&&d.unitCost||''}" oninput="jcUpdateHardwareRow('${rid}')"></td>
+    <td><span class="row-total" id="${rid}-amount">$0.00</span></td>
+    <td><button class="btn-del" onclick="document.getElementById('${rid}').remove();jcUpdateHwTotals();jcUpdateCostSummary();">✕</button></td>`;
+  tbody.appendChild(tr);
+  if (d&&d.desc) tr.querySelector('select').value=d.desc;
+  jcUpdateHardwareRow(rid);
+}
+function jcOnHardwareChange(sel, rid) {
+  const opt=sel.options[sel.selectedIndex];
+  if (opt) {
+    const u=document.getElementById(rid+'-unit'),c=document.getElementById(rid+'-cost'),s=document.getElementById(rid+'-spec');
+    if(u)u.value=opt.dataset.unit||''; if(c)c.value=parseFloat(opt.dataset.cost||0).toFixed(2); if(s&&!s.value)s.value=opt.dataset.spec||'';
+  }
+  jcUpdateHardwareRow(rid);
+}
+function jcUpdateHardwareRow(rid) {
+  const tr=document.getElementById(rid); if (!tr) return;
+  const qty=parseFloat(tr.querySelectorAll('input[type="number"]')[0]?.value)||0;
+  const cost=parseFloat(document.getElementById(rid+'-cost')?.value)||0;
+  const el=document.getElementById(rid+'-amount'); if(el) el.textContent='$'+(qty*cost).toFixed(2);
+  jcUpdateHwTotals(); jcUpdateCostSummary();
+}
+function jcUpdateHwTotals() {
+  let total=0;
+  document.querySelectorAll('#jc-hardware-body tr').forEach(tr => {
+    if (!tr.id) return; total+=parseFloat(document.getElementById(tr.id+'-amount')?.textContent.replace('$',''))||0;
+  });
+  const el=document.getElementById('jc-hardware-cost-total'); if(el) el.textContent='$'+total.toFixed(2);
+}
+
+// ── TOOLING ───────────────────────────────────────────────────────
+function jcAddToolingRow(d) {
+  const tbody=document.getElementById('jc-tooling-body'); if (!tbody) return;
+  const rid='jc-tr-'+Date.now()+Math.random().toString(36).substr(2,4);
+  const toolOpts='<option value="">Select…</option>'+jcConfig.tooling.map(r => `<option value="${escHTML(r.name)}" data-unit="${escHTML(r.unit)}" data-cost="${r.cost}" data-code="${escHTML(r.code)}">${escHTML(r.name)}</option>`).join('');
+  const tr=document.createElement('tr'); tr.id=rid;
+  tr.innerHTML=`
+    <td><input type="date" value="${d&&d.date||''}"></td>
+    <td><select onchange="jcOnToolingChange(this,'${rid}')">${toolOpts}</select></td>
+    <td><input type="text" placeholder="Stock code" id="${rid}-code" value="${d&&d.code||''}"></td>
+    <td><input type="number" class="num" placeholder="0" value="${d&&d.qty||''}" step="1" oninput="jcUpdateToolingRow('${rid}')"></td>
+    <td><input type="text" placeholder="Unit" id="${rid}-unit" value="${d&&d.unit||''}" style="width:60px;"></td>
+    <td><input type="number" class="num" placeholder="0.00" id="${rid}-cost" value="${d&&d.unitCost||''}" oninput="jcUpdateToolingRow('${rid}')"></td>
+    <td><span class="row-total" id="${rid}-amount">$0.00</span></td>
+    <td><button class="btn-del" onclick="document.getElementById('${rid}').remove();jcUpdateToolTotals();jcUpdateCostSummary();">✕</button></td>`;
+  tbody.appendChild(tr);
+  if (d&&d.desc) tr.querySelector('select').value=d.desc;
+  jcUpdateToolingRow(rid);
+}
+function jcOnToolingChange(sel, rid) {
+  const opt=sel.options[sel.selectedIndex];
+  if (opt) {
+    const u=document.getElementById(rid+'-unit'),c=document.getElementById(rid+'-cost'),code=document.getElementById(rid+'-code');
+    if(u)u.value=opt.dataset.unit||''; if(c)c.value=parseFloat(opt.dataset.cost||0).toFixed(2); if(code&&!code.value)code.value=opt.dataset.code||'';
+  }
+  jcUpdateToolingRow(rid);
+}
+function jcUpdateToolingRow(rid) {
+  const tr=document.getElementById(rid); if (!tr) return;
+  const qty=parseFloat(tr.querySelectorAll('input[type="number"]')[0]?.value)||0;
+  const cost=parseFloat(document.getElementById(rid+'-cost')?.value)||0;
+  const el=document.getElementById(rid+'-amount'); if(el) el.textContent='$'+(qty*cost).toFixed(2);
+  jcUpdateToolTotals(); jcUpdateCostSummary();
+}
+function jcUpdateToolTotals() {
+  let total=0;
+  document.querySelectorAll('#jc-tooling-body tr').forEach(tr => {
+    if (!tr.id) return; total+=parseFloat(document.getElementById(tr.id+'-amount')?.textContent.replace('$',''))||0;
+  });
+  const el=document.getElementById('jc-tooling-cost-total'); if(el) el.textContent='$'+total.toFixed(2);
 }
 
 // ── SUB-CONTRACTORS ───────────────────────────────────────────────
@@ -8733,11 +9034,13 @@ function jcUpdateCostSummary() {
   const getNum = id => parseFloat(document.getElementById(id)?.textContent.replace('$',''))||0;
   const labour=getNum('jc-labour-cost-total'), equip=getNum('jc-equip-cost-total'),
         mats  =getNum('jc-materials-cost-total'), cons=getNum('jc-consumables-cost-total'),
+        hw    =getNum('jc-hardware-cost-total'), tool=getNum('jc-tooling-cost-total'),
         subs  =getNum('jc-subs-cost-total'), misc=parseFloat(document.getElementById('jc-cs-misc')?.value)||0;
-  const total = labour+equip+mats+cons+subs+misc;
+  const total = labour+equip+mats+cons+hw+tool+subs+misc;
   const setText=(id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v; };
   setText('jc-cs-labour','$'+labour.toFixed(2)); setText('jc-cs-equip','$'+equip.toFixed(2));
   setText('jc-cs-materials','$'+mats.toFixed(2)); setText('jc-cs-consumables','$'+cons.toFixed(2));
+  setText('jc-cs-hardware','$'+hw.toFixed(2));    setText('jc-cs-tooling','$'+tool.toFixed(2));
   setText('jc-cs-subs','$'+subs.toFixed(2));      setText('jc-cs-total','$'+total.toFixed(2));
   const markup  = parseFloat(document.getElementById('jc-markup-pct')?.value)||0;
   const selling = total*(1+markup/100), profit=selling-total;
@@ -9512,6 +9815,8 @@ async function approveBill(id) {
       await sbPatch('sequence_counters', counter.id, { last_number: nextNum });
     }
     await sbPatch('bills', id, { status: 'approved', bill_no: billNo, approved_at: nowISO() });
+    const billLines = await sbGet('bill_lines', `bill_id=eq.${id}`);
+    await jcSyncBillCatalogOnApproval(billLines || []);
     showToast(`Bill ${billNo} approved.`, 'success');
     await loadAP();
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
@@ -11276,7 +11581,14 @@ async function saveBankTxn() {
 }
 
 // ── BILLS (AP) ────────────────────────────────────────────────────
-function openNewBill() {
+async function ensureJobConfigLoaded() {
+  if (!jcConfig || !jcConfig.materials || !jcConfig.materials.length) {
+    await jcLoadConfig();
+  }
+}
+
+async function openNewBill() {
+  await ensureJobConfigLoaded();
   document.getElementById('bill-vendor-search').value   = '';
   document.getElementById('bill-vendor-id').value       = '';
   document.getElementById('bill-vendor-selected').textContent = '';
@@ -11301,25 +11613,95 @@ function calcBillDueDate() {
   document.getElementById('bill-due-date').value = due.toISOString().slice(0,10);
 }
 
+const BILL_LINE_CATEGORIES = [
+  { value:'material',   label:'Material',   cfgKey:'materials'   },
+  { value:'hardware',   label:'Hardware',   cfgKey:'hardware'    },
+  { value:'consumable', label:'Consumable', cfgKey:'consumables' },
+  { value:'tooling',    label:'Tooling',    cfgKey:'tooling'     },
+  { value:'equipment',  label:'Equipment',  cfgKey:null          },
+];
+
 function addBillLine() {
   const tbody = document.getElementById('bill-lines-body');
-  const n     = tbody.rows.length + 1;
-  const lid   = 'billl-' + Date.now() + '-' + n;
+  const n     = tbody.rows.length ? tbody.rows.length / 2 + 1 : 1;
+  const lid   = 'billl-' + Date.now() + '-' + Math.random().toString(36).substr(2,4);
   const tr    = document.createElement('tr');
   tr.id = lid;
   tr.innerHTML = `
     <td style="padding:6px 8px;color:var(--text-3);font-size:11px;font-family:'DM Mono',monospace;">${n}</td>
-    <td><input type="text" placeholder="Item description…" style="min-width:200px;"></td>
+    <td><input type="text" placeholder="Item description…" style="min-width:200px;" id="${lid}-desc"></td>
     <td><input type="number" class="mono" placeholder="1" value="1" min="0" step="any" oninput="recalcBillTotals()"></td>
-    <td><input type="number" class="mono" placeholder="0.00" min="0" step="0.01" oninput="recalcBillTotals()"></td>
+    <td><input type="number" class="mono" placeholder="0.00" min="0" step="0.01" oninput="recalcBillTotals()" id="${lid}-rate"></td>
     <td><div class="inv-line-amount" id="${lid}-amt">0.00</div></td>
-    <td><button class="btn btn-ghost btn-icon btn-sm" onclick="this.closest('tr').remove();recalcBillTotals();" style="color:var(--text-3);">✕</button></td>`;
+    <td><button class="btn btn-ghost btn-icon btn-sm" onclick="document.getElementById('${lid}').remove();document.getElementById('${lid}-link').remove();recalcBillTotals();" style="color:var(--text-3);">✕</button></td>`;
   tbody.appendChild(tr);
+
+  const linkTr = document.createElement('tr');
+  linkTr.id = lid + '-link';
+  linkTr.innerHTML = `<td></td><td colspan="5" style="padding:2px 8px 10px;">
+    <label style="font-size:10px;color:var(--text-3);display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+      <input type="checkbox" onchange="jcToggleBillLineLink('${lid}',this.checked)"> Link to Inventory
+    </label>
+    <div id="${lid}-linkbody" style="display:none;margin-top:6px;"></div>
+  </td>`;
+  tbody.appendChild(linkTr);
+}
+
+function jcToggleBillLineLink(lid, on) {
+  const body = document.getElementById(lid+'-linkbody');
+  if (!body) return;
+  if (!on) { body.style.display='none'; body.innerHTML=''; return; }
+  body.style.display='';
+  const catOpts = BILL_LINE_CATEGORIES.map(c => `<option value="${c.value}">${c.label}</option>`).join('');
+  body.innerHTML = `
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <select id="${lid}-cat" onchange="jcOnBillLineCategoryChange('${lid}')" style="max-width:140px;">
+        <option value="">Category…</option>${catOpts}
+      </select>
+      <div id="${lid}-itemwrap" style="flex:1;min-width:200px;"></div>
+    </div>`;
+}
+
+function jcOnBillLineCategoryChange(lid) {
+  const cat = document.getElementById(lid+'-cat')?.value;
+  const wrap = document.getElementById(lid+'-itemwrap');
+  if (!wrap) return;
+  const meta = BILL_LINE_CATEGORIES.find(c => c.value === cat);
+  if (!meta) { wrap.innerHTML=''; return; }
+  if (cat === 'equipment') {
+    wrap.innerHTML = `
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <input type="text" id="${lid}-eq-name" placeholder="Equipment name" style="min-width:140px;">
+        <input type="text" id="${lid}-eq-asset" placeholder="Asset No.">
+        <input type="number" id="${lid}-eq-wsrate" placeholder="Workshop rate/hr">
+        <input type="number" id="${lid}-eq-osrate" placeholder="Onsite rate/hr">
+      </div>
+      <div style="font-size:9px;color:var(--text-3);margin-top:3px;">Approving this bill will create a new Equipment asset with these details.</div>`;
+    return;
+  }
+  const items = jcConfig[meta.cfgKey] || [];
+  const opts = items.map((r,i) => `<option value="${i}">${escHTML(r.name)}</option>`).join('');
+  wrap.innerHTML = `
+    <select id="${lid}-item" onchange="jcOnBillLineItemChange('${lid}')" style="min-width:180px;">
+      <option value="">Select existing item…</option>${opts}
+      <option value="__new__">+ Add new item…</option>
+    </select>
+    <div id="${lid}-newitemwrap" style="margin-top:6px;"></div>`;
+}
+
+function jcOnBillLineItemChange(lid) {
+  const sel = document.getElementById(lid+'-item');
+  const newWrap = document.getElementById(lid+'-newitemwrap');
+  if (sel?.value === '__new__') {
+    newWrap.innerHTML = `<input type="text" id="${lid}-newitem-name" placeholder="New item name" style="min-width:180px;">`;
+  } else {
+    newWrap.innerHTML = '';
+  }
 }
 
 function recalcBillTotals() {
   let subtotal = 0;
-  document.querySelectorAll('#bill-lines-body tr').forEach(tr => {
+  document.querySelectorAll('#bill-lines-body tr[id^="billl-"]:not([id$="-link"])').forEach(tr => {
     const inputs = tr.querySelectorAll('input[type="number"]');
     const qty = parseFloat(inputs[0]?.value)||0, rate = parseFloat(inputs[1]?.value)||0;
     const amt = round2(qty * rate); subtotal += amt;
@@ -11372,6 +11754,43 @@ function selectBillVendor(id, displayName, legalName) {
   document.getElementById('bill-vendor-results').classList.remove('open');
 }
 
+async function jcSyncBillLineCatalog(line) {
+  // line: one entry from the `lines` array built in saveBill(), carrying
+  // _newEquipment (new asset) or _newItemName+_newItemTable (new catalog item)
+  // or item_category+item_id (existing catalog item, cost sync only)
+  if (line._newEquipment) {
+    await sbPost('config_equipment', {
+      equipment_name: line._newEquipment.name,
+      shop_number: line._newEquipment.asset_no,
+      workshop_rate_ttd: line._newEquipment.workshop_rate_ttd,
+      onsite_rate_ttd: line._newEquipment.onsite_rate_ttd,
+      status: 'approved', is_active: true,
+      submitted_by: currentUser.auth_user_id,
+    });
+    return;
+  }
+  if (line._newItemTable && line._newItemName) {
+    await sbPost(line._newItemTable, {
+      item_name: line._newItemName,
+      default_unit_cost_ttd: line.unit_price,
+      status: 'approved', is_active: true,
+      submitted_by: currentUser.auth_user_id,
+    });
+    return;
+  }
+  if (line.item_category && line.item_category !== 'equipment' && line.item_id) {
+    const table = { material:'config_materials', hardware:'config_hardware', consumable:'config_consumables', tooling:'config_tooling' }[line.item_category];
+    await sbPatch(table, line.item_id, { default_unit_cost_ttd: line.unit_price });
+  }
+}
+
+async function jcSyncBillCatalogOnApproval(lines) {
+  const linked = (lines||[]).filter(l => l.item_category);
+  if (!linked.length) return;
+  await Promise.all(linked.map(l => jcSyncBillLineCatalog(l).catch(e => console.error('jcSyncBillLineCatalog:', e))));
+  jcLoadConfig().catch(() => {});
+}
+
 async function saveBill(status) {
   const vendorId = document.getElementById('bill-vendor-id').value;
   const date     = document.getElementById('bill-date').value;
@@ -11380,15 +11799,47 @@ async function saveBill(status) {
   if (!date)    { showToast('Bill date is required.', 'warn');  return; }
 
   const lines = []; let subtotal = 0;
-  document.querySelectorAll('#bill-lines-body tr').forEach((tr, idx) => {
+  document.querySelectorAll('#bill-lines-body tr[id^="billl-"]:not([id$="-link"])').forEach(tr => {
+    const idx = lines.length;
     const inputs = tr.querySelectorAll('input[type="number"]');
-    const descEl = tr.querySelector('input[type="text"]');
+    const descEl = document.getElementById(tr.id+'-desc');
     const qty = parseFloat(inputs[0]?.value)||0, rate = parseFloat(inputs[1]?.value)||0;
     const desc = descEl?.value.trim()||'';
     if (!desc && !qty && !rate) return;
     if (!desc) { showToast(`Line ${idx+1}: description required.`, 'warn'); return; }
     const amt = round2(qty * rate); subtotal += amt;
-    lines.push({ description: desc, quantity: qty, unit_price: rate, amount: amt, line_order: idx });
+    const line = { description: desc, quantity: qty, unit_price: rate, amount: amt, line_order: idx };
+
+    const cat = document.getElementById(tr.id+'-cat')?.value;
+    if (cat) {
+      line.item_category = cat;
+      if (cat === 'equipment') {
+        line._newEquipment = {
+          name: document.getElementById(tr.id+'-eq-name')?.value.trim() || desc,
+          asset_no: document.getElementById(tr.id+'-eq-asset')?.value.trim() || null,
+          workshop_rate_ttd: parseFloat(document.getElementById(tr.id+'-eq-wsrate')?.value) || 0,
+          onsite_rate_ttd: parseFloat(document.getElementById(tr.id+'-eq-osrate')?.value) || 0,
+        };
+      } else {
+        const itemSel = document.getElementById(tr.id+'-item');
+        if (itemSel?.value === '__new__') {
+          line._newItemName = document.getElementById(tr.id+'-newitem-name')?.value.trim() || desc;
+          line._newItemTable = { material:'config_materials', hardware:'config_hardware', consumable:'config_consumables', tooling:'config_tooling' }[cat];
+        } else if (itemSel?.value) {
+          const meta = BILL_LINE_CATEGORIES.find(c => c.value === cat);
+          const catalogItem = (jcConfig[meta.cfgKey]||[])[parseInt(itemSel.value)];
+          if (catalogItem) line.item_id = catalogItem.id;
+        }
+      }
+    }
+    if (cat && status === 'draft' && (line._newEquipment || line._newItemName)) {
+      showToast(`Line ${idx+1}: new catalog items can only be linked when saving with "Save & Approve". Saved without an inventory link.`, 'warn');
+      delete line.item_category;
+      delete line._newEquipment;
+      delete line._newItemName;
+      delete line._newItemTable;
+    }
+    lines.push(line);
   });
   if (!lines.length) { showToast('Add at least one line item.', 'warn'); return; }
 
@@ -11423,7 +11874,13 @@ async function saveBill(status) {
       status, notes: document.getElementById('bill-notes').value.trim()||null,
       approved_at: status === 'approved' ? nowISO() : null
     });
-    await sbPost('bill_lines', lines.map(l => ({ bill_id: bill.id, ...l })));
+    await sbPost('bill_lines', lines.map(l => {
+      const { _newEquipment, _newItemName, _newItemTable, ...clean } = l;
+      return { bill_id: bill.id, ...clean };
+    }));
+    if (status === 'approved') {
+      await jcSyncBillCatalogOnApproval(lines);
+    }
 
     showToast(`Bill ${billNo || '(draft)'} ${status === 'approved' ? 'approved' : 'saved as draft'}.`, 'success');
     closeModal('modal-bill');
