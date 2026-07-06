@@ -495,6 +495,20 @@ body {
 }
 #report-dl-menu.open { display: block; }
 
+/* ── AP ROW ACTIONS OVERFLOW MENU (fixed, shared, one instance reused per row) ── */
+#ap-row-menu {
+  position: fixed;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  min-width: 150px;
+  z-index: var(--z-dropdown);
+  display: none;
+  overflow: hidden;
+}
+#ap-row-menu.open { display: block; }
+
 /* ── STAT CARDS ── */
 .stat-grid {
   display: grid;
@@ -3985,6 +3999,9 @@ body.light .global-search-results, body.light .split-btn-menu {
     <div><div class="menu-label">HTML</div><div class="menu-sub">Branded web page for sharing</div></div>
   </div>
 </div>
+
+<!-- ── AP ROW ACTIONS OVERFLOW MENU (fixed, shared, content built per-row on open) ── -->
+<div id="ap-row-menu"></div>
 
 <!-- ── REPORT PREVIEW MODAL ── -->
 <div class="modal-overlay" id="modal-report-preview" onclick="if(event.target===this)closeModal('modal-report-preview')">
@@ -9753,7 +9770,7 @@ function renderAPTable(list) {
   };
   const page = sorted.slice(apPage * PAGE_SIZE, (apPage + 1) * PAGE_SIZE);
   document.getElementById('ap-table-wrap').innerHTML = `
-    <table class="data-table">
+    <table class="data-table data-table-compact">
       <thead><tr>
         ${thAP('bill_no','Bill No.')}<th>Invoice No.</th>${thAP('supplier','Supplier')}${thAP('bill_date','Date')}${thAP('due_date','Due Date')}
         <th>Currency</th><th class="right">Total</th><th class="right">Balance Due</th>
@@ -9765,6 +9782,27 @@ function renderAPTable(list) {
         const canVoid     = b.status === 'approved' && !hasPayments;
         const canEdit     = isAdmin() && ['draft','approved'].includes(b.status) && !hasPayments;
         const hasHistory  = hasPayments || _billsWithEditHistory.has(b.id);
+
+        // Primary action (the one contextual button worth always showing) — everything
+        // else collapses into the "⋯" overflow menu so the row never needs to grow wide
+        // enough to require horizontal scrolling, regardless of how many actions apply.
+        const primaryBtn = b.status === 'draft'
+          ? `<button class="btn btn-outline btn-sm" onclick="approveBill('${b.id}')">Approve</button>`
+          : canPay
+            ? `<button class="btn btn-primary btn-sm" onclick="openPayBillModal('${b.id}')">Pay</button>`
+            : '';
+
+        const menuActions = [];
+        if (b.status === 'draft') menuActions.push({ label: 'Delete', onclick: `deleteDocument('bill','${b.id}','${b.bill_no||'this draft bill'}')` });
+        if (canEdit)               menuActions.push({ label: 'Edit', onclick: `openEditBill('${b.id}')` });
+        if (hasHistory)            menuActions.push({ label: 'History', onclick: `openBillPaymentHistory('${b.id}')` });
+        if (canVoid)               menuActions.push({ label: 'Void', onclick: `voidBill('${b.id}')` });
+        _apRowMenuActions[b.id] = menuActions;
+
+        const menuBtn = menuActions.length
+          ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="toggleApRowMenu(event,'${b.id}')" title="More actions">⋯</button>`
+          : '';
+
         return `
         <tr>
           <td class="mono bold">${b.bill_no || '<span style="color:var(--text-3);font-style:italic;font-size:11px;">Draft</span>'}</td>
@@ -9776,20 +9814,37 @@ function renderAPTable(list) {
           <td class="right mono">${fmt(b.total, b.currency)}</td>
           <td class="right mono">${fmt(b.balance_due, b.currency)}</td>
           <td><span class="badge badge-${b.status}">${b.status}</span></td>
-          <td class="right" style="white-space:nowrap;">
-            ${b.status === 'draft' ? `<button class="btn btn-outline btn-sm" onclick="approveBill('${b.id}')">Approve</button>` : ''}
-            ${b.status === 'draft' ? `<button class="btn btn-danger btn-sm" onclick="deleteDocument('bill','${b.id}','${b.bill_no||'this draft bill'}')">Delete</button>` : ''}
-            ${canPay      ? `<button class="btn btn-primary btn-sm" onclick="openPayBillModal('${b.id}')">Pay</button>` : ''}
-            ${canEdit     ? `<button class="btn btn-ghost btn-sm" onclick="openEditBill('${b.id}')">Edit</button>` : ''}
-            ${hasHistory  ? `<button class="btn btn-ghost btn-sm" onclick="openBillPaymentHistory('${b.id}')">History</button>` : ''}
-            ${canVoid     ? `<button class="btn btn-ghost btn-sm" onclick="voidBill('${b.id}')">Void</button>` : ''}
-          </td>
+          <td class="right" style="white-space:nowrap;">${primaryBtn}${menuBtn}</td>
         </tr>`;
       }).join('')}
       </tbody>
     </table>
     ${renderPager(total, apPage, PAGE_SIZE, 'setApPage')}`;
 }
+
+function toggleApRowMenu(e, billId) {
+  e.stopPropagation();
+  const menu = document.getElementById('ap-row-menu');
+  if (menu.dataset.billId === billId && menu.classList.contains('open')) {
+    menu.classList.remove('open');
+    return;
+  }
+  const actions = _apRowMenuActions[billId] || [];
+  menu.innerHTML = actions.map(a =>
+    `<div class="split-btn-menu-item" onclick="closeApRowMenu();${a.onclick}"><div class="menu-label">${escHTML(a.label)}</div></div>`
+  ).join('');
+  menu.dataset.billId = billId;
+  const rect = e.currentTarget.getBoundingClientRect();
+  const menuW = 150;
+  menu.style.top = (rect.bottom + 5) + 'px';
+  menu.style.left = Math.max(8, Math.min(rect.right - menuW, window.innerWidth - menuW - 8)) + 'px';
+  menu.classList.add('open');
+}
+function closeApRowMenu() { document.getElementById('ap-row-menu')?.classList.remove('open'); }
+document.addEventListener('click', e => {
+  if (!e.target.closest('#ap-row-menu') && !e.target.closest('.btn[onclick^="toggleApRowMenu"]')) closeApRowMenu();
+});
+
 function setApPage(n) { apPage = n; renderAPTable(_apFiltered); }
 function sortAP(col) {
   if (apSortCol === col) { apSortDir = apSortDir === 'asc' ? 'desc' : 'asc'; }
@@ -12834,6 +12889,7 @@ async function voidBill(id) {
 let bills = [], _apFiltered = []; let apPage = 0;
 let _billsWithEditHistory = new Set();
 let _billEditId = null;
+let _apRowMenuActions = {};
 let apSortCol = null, apSortDir = 'asc';
 
 // ── INVOICE STATE ─────────────────────────────────────────────────
