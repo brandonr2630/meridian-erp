@@ -1,6 +1,30 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-07-06 · Session 45*
+*Last updated: 2026-07-06 · Session 46*
+
+---
+
+## Session 46 — AP table Actions-column overflow — RESOLVED (3 iterations)
+
+**Date:** 2026-07-06
+**Trigger:** After Session 45 shipped the Edit Bill feature, the AP bills table's Actions column (now up to 4 buttons: Pay/Edit/History/Void) started spilling past the browser viewport on the live site.
+
+**Root cause:** `.main` (the flex layout pane next to the sidebar) had no `min-width`, so once a row's content got wide enough it refused to shrink and blew the whole app layout past the viewport edge instead of scrolling/clipping.
+
+**Fix history (each merged + deployed to `erp.terranresources.com`, verified live via `curl` each time before declaring done):**
+1. **PR #121** — `min-width:0` on `.main` (fixes the real layout bug) + `.table-wrap` `overflow:hidden→auto` (scroll fallback for wide tables). Correct but the scrollbar was default 4-5px, too subtle to notice — user reported "still cut off."
+2. **PR #122** — tried `position:sticky` on the Actions column. Wrong approach: sticky `<td>` in a `border-collapse` table doesn't reserve its own space, so it overlapped Balance Due. Reverted in #123.
+3. **PR #123** — reverted sticky; scoped a taller (8px), gold-colored scrollbar to `#ap-bills-wrap` only. Technically worked but the user correctly flagged it as tedious: reaching the scrollbar for a top-of-list row meant scrolling all the way down first.
+4. **PR #124 (final)** — actual root fix: collapsed all but one contextual action (Approve/Pay) into a "⋯" overflow menu per row, reusing the existing `#report-dl-menu` fixed-position dropdown pattern (avoids clipping inside the scrollable table). Also applied the pre-existing `.data-table-compact` class to tighten cell padding. Result: the table fits entirely within normal viewport widths with **zero horizontal scroll needed** — the actual problem (too many always-visible buttons) is gone, not just scrolled-around.
+
+**Lesson for next time:** when a table row needs more than ~2 actions, reach for the overflow-menu pattern immediately — don't iterate through scroll/sticky fixes first. The `#ap-row-menu` implementation (`toggleApRowMenu()`/`closeApRowMenu()`, ~line 9825) is a reusable reference for collapsing any other action-heavy table row in this app.
+
+**Also caught and fixed during Session 45's live verification (not a regression, just documenting):** editing a bill's inventory-linked line with a test rate silently overwrote a real catalog item's cost — restored via SQL, see Session 45 entry above. Reinforces: never edit an existing catalog item during live testing without confirming its current cost first.
+
+### Outstanding
+
+- **Rotate the ERP password** — plaintext in this chat twice now (Session 43, Session 45). Still not done.
+- **Double-check "BMS Bar Stock - 2-3/4" OD" cost in Job Config** — restored to TT$400.00 based on the most recent real job entry, not a confirmed pre-test snapshot.
 
 ---
 
