@@ -4088,10 +4088,14 @@ body.light .global-search-results, body.light .split-btn-menu {
   <div class="modal" style="max-width:660px;">
     <div class="modal-header">
       <div>
-        <div class="modal-title">Payment History</div>
+        <div class="modal-title">Bill History</div>
         <div style="font-size:11px;color:var(--text-3);margin-top:3px;" id="bill-history-subtitle">—</div>
       </div>
       <button class="modal-close" onclick="closeModal('modal-bill-pay-history')">✕</button>
+    </div>
+    <div class="c360-tabs">
+      <div class="c360-tab active" id="bill-hist-tab-payments" onclick="switchBillHistoryTab('payments')">Payments</div>
+      <div class="c360-tab" id="bill-hist-tab-edits" onclick="switchBillHistoryTab('edits')">Edits</div>
     </div>
     <div class="modal-body" style="padding:0;">
       <div id="bill-history-list" style="min-height:80px;"></div>
@@ -4264,7 +4268,7 @@ body.light .global-search-results, body.light .split-btn-menu {
   <div class="modal modal-lg" style="max-width:860px;">
     <div class="modal-header">
       <div>
-        <div class="modal-title">New Bill</div>
+        <div class="modal-title" id="bill-modal-title">New Bill</div>
         <div style="font-size:11px;color:var(--text-3);margin-top:3px;">
           Next number: <span style="font-family:'DM Mono',monospace;color:var(--gold);" id="bill-next-number">loading…</span>
         </div>
@@ -4335,11 +4339,16 @@ body.light .global-search-results, body.light .split-btn-menu {
       <div class="field" style="margin-top:16px;"><label class="field-label">Notes</label>
         <textarea id="bill-notes" rows="2" placeholder="Optional notes…"></textarea>
       </div>
+      <div class="field" id="bill-edit-reason-field" style="display:none;margin-top:16px;">
+        <label class="field-label">Reason for Edit <span style="color:var(--red);">*</span></label>
+        <textarea id="bill-edit-reason" rows="2" placeholder="Why is this bill being edited?"></textarea>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-bill')">Cancel</button>
       <button class="btn btn-outline" onclick="saveBill('draft')" id="bill-draft-btn">Save Draft</button>
       <button class="btn btn-primary" onclick="saveBill('approved')" id="bill-approve-btn">Save & Approve</button>
+      <button class="btn btn-primary" onclick="saveBillEdit()" id="bill-save-edit-btn" style="display:none;">Save Changes</button>
     </div>
   </div>
 </div>
@@ -9692,6 +9701,8 @@ async function loadAP() {
   }
   try {
     bills = await sbGet('bills', `company_id=eq.${currentCompany.id}&order=bill_date.desc`);
+    const editEvents = await sbGet('bill_edit_events', `select=bill_id,bills!inner(company_id)&bills.company_id=eq.${currentCompany.id}`);
+    _billsWithEditHistory = new Set((editEvents||[]).map(e => e.bill_id));
     const outstanding = bills.filter(b => !['paid','void'].includes(b.status));
     const totalAP   = outstanding.reduce((s,b) => s + parseFloat(b.balance_due||0), 0);
     const overdue   = bills.filter(b => b.status === 'overdue').reduce((s,b) => s + parseFloat(b.balance_due||0), 0);
@@ -9749,6 +9760,8 @@ function renderAPTable(list) {
         const canPay      = ['approved','partial'].includes(b.status) && parseFloat(b.balance_due||0) > 0.005;
         const hasPayments = parseFloat(b.amount_paid||0) > 0;
         const canVoid     = b.status === 'approved' && !hasPayments;
+        const canEdit     = isAdmin() && ['draft','approved'].includes(b.status) && !hasPayments;
+        const hasHistory  = hasPayments || _billsWithEditHistory.has(b.id);
         return `
         <tr>
           <td class="mono bold">${b.bill_no || '<span style="color:var(--text-3);font-style:italic;font-size:11px;">Draft</span>'}</td>
@@ -9764,7 +9777,8 @@ function renderAPTable(list) {
             ${b.status === 'draft' ? `<button class="btn btn-outline btn-sm" onclick="approveBill('${b.id}')">Approve</button>` : ''}
             ${b.status === 'draft' ? `<button class="btn btn-danger btn-sm" onclick="deleteDocument('bill','${b.id}','${b.bill_no||'this draft bill'}')">Delete</button>` : ''}
             ${canPay      ? `<button class="btn btn-primary btn-sm" onclick="openPayBillModal('${b.id}')">Pay</button>` : ''}
-            ${hasPayments ? `<button class="btn btn-ghost btn-sm" onclick="openBillPaymentHistory('${b.id}')">History</button>` : ''}
+            ${canEdit     ? `<button class="btn btn-ghost btn-sm" onclick="openEditBill('${b.id}')">Edit</button>` : ''}
+            ${hasHistory  ? `<button class="btn btn-ghost btn-sm" onclick="openBillPaymentHistory('${b.id}')">History</button>` : ''}
             ${canVoid     ? `<button class="btn btn-ghost btn-sm" onclick="voidBill('${b.id}')">Void</button>` : ''}
           </td>
         </tr>`;
@@ -9955,17 +9969,31 @@ async function saveVendorPayment() {
   }
 }
 
+let _billHistoryBillId = null;
+
 async function openBillPaymentHistory(billId) {
   const bill = bills.find(b => b.id === billId);
   if (!bill) return;
+  _billHistoryBillId = billId;
   const contact = contacts.find(c => c.id === bill.contact_id) || {};
   document.getElementById('bill-history-subtitle').textContent =
     `${bill.bill_no || 'Draft'} — ${contact?.trading_name || contact?.name || '—'} · Total: ${fmt(bill.total, bill.currency)}`;
+  document.getElementById('modal-bill-pay-history').classList.add('show');
+  await switchBillHistoryTab('payments');
+}
 
+async function switchBillHistoryTab(tab) {
+  document.getElementById('bill-hist-tab-payments').classList.toggle('active', tab === 'payments');
+  document.getElementById('bill-hist-tab-edits').classList.toggle('active', tab === 'edits');
+  if (tab === 'payments') await renderBillHistoryPayments(_billHistoryBillId);
+  else await renderBillHistoryEdits(_billHistoryBillId);
+}
+
+async function renderBillHistoryPayments(billId) {
+  const bill = bills.find(b => b.id === billId);
+  if (!bill) return;
   const listEl = document.getElementById('bill-history-list');
   listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3);">Loading…</div>';
-  document.getElementById('modal-bill-pay-history').classList.add('show');
-
   try {
     const allocations = await sbGet('payment_allocations', `bill_id=eq.${billId}&order=created_at.desc`);
     if (!allocations.length) {
@@ -10008,6 +10036,56 @@ async function openBillPaymentHistory(billId) {
   } catch(e) {
     listEl.innerHTML = `<div style="padding:20px;color:var(--red);">Error: ${escHTML(e.message)}</div>`;
   }
+}
+
+async function renderBillHistoryEdits(billId) {
+  const listEl = document.getElementById('bill-history-list');
+  listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3);">Loading…</div>';
+  try {
+    const events = await sbGet('bill_edit_events', `bill_id=eq.${billId}&order=edited_at.desc`);
+    if (!events.length) {
+      listEl.innerHTML = '<div style="padding:28px;text-align:center;color:var(--text-3);font-size:13px;">No edits recorded for this bill.</div>';
+      return;
+    }
+    const userIds = [...new Set(events.map(e => e.edited_by).filter(Boolean))];
+    const userMap = {};
+    if (userIds.length) {
+      const users = await sbGet('erp_users', `auth_user_id=in.(${userIds.join(',')})&select=auth_user_id,full_name`);
+      users.forEach(u => { userMap[u.auth_user_id] = u.full_name; });
+    }
+    const archived = await sbGet('bill_lines_archive', `edit_event_id=in.(${events.map(e=>e.id).join(',')})&order=line_order.asc`);
+    const archByEvent = {};
+    archived.forEach(a => { (archByEvent[a.edit_event_id] ||= []).push(a); });
+
+    listEl.innerHTML = events.map(ev => `
+      <div style="padding:12px 20px;border-bottom:1px solid var(--border);">
+        <div style="display:flex;justify-content:space-between;font-size:12px;">
+          <span><b>${escHTML(userMap[ev.edited_by] || 'Unknown user')}</b> — ${new Date(ev.edited_at).toLocaleString()}</span>
+          <span style="color:var(--gold);cursor:pointer;font-size:11px;" onclick="toggleBillEditLines('${ev.id}')">Show prior lines</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-2);margin-top:4px;">${escHTML(ev.reason)}</div>
+        <div class="bill-edit-lines" id="bill-edit-lines-${ev.id}" style="display:none;margin-top:8px;">
+          <table class="data-table" style="margin:0;">
+            <thead><tr><th>Description</th><th class="right">Qty</th><th class="right">Rate</th><th class="right">Amount</th></tr></thead>
+            <tbody>
+              ${(archByEvent[ev.id]||[]).map(l => `<tr>
+                <td>${escHTML(l.description)}</td>
+                <td class="right mono">${fmtNum(l.quantity)}</td>
+                <td class="right mono">${fmtNum(l.unit_price)}</td>
+                <td class="right mono">${fmtNum(l.amount)}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    listEl.innerHTML = `<div style="padding:20px;color:var(--red);">Error: ${escHTML(e.message)}</div>`;
+  }
+}
+
+function toggleBillEditLines(eventId) {
+  const el = document.getElementById('bill-edit-lines-' + eventId);
+  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
 }
 
 // ── Void reason prompt (async, returns string | null) ────────────
@@ -11587,8 +11665,24 @@ async function ensureJobConfigLoaded() {
   }
 }
 
+function setBillModalMode(mode) {
+  const editing = mode === 'edit';
+  ['bill-vendor-search','bill-currency','bill-vendor-ref','bill-date','bill-due-date','bill-terms'].forEach(id => {
+    document.getElementById(id).disabled = editing;
+  });
+  document.getElementById('bill-edit-reason-field').style.display = editing ? '' : 'none';
+  document.getElementById('bill-draft-btn').style.display     = editing ? 'none' : '';
+  document.getElementById('bill-approve-btn').style.display   = editing ? 'none' : '';
+  document.getElementById('bill-save-edit-btn').style.display = editing ? '' : 'none';
+  if (!editing) {
+    document.getElementById('bill-modal-title').textContent = 'New Bill';
+    _billEditId = null;
+  }
+}
+
 async function openNewBill() {
   await ensureJobConfigLoaded();
+  setBillModalMode('create');
   document.getElementById('bill-vendor-search').value   = '';
   document.getElementById('bill-vendor-id').value       = '';
   document.getElementById('bill-vendor-selected').textContent = '';
@@ -11602,6 +11696,47 @@ async function openNewBill() {
   recalcBillTotals();
   calcBillDueDate();
   document.getElementById('bill-next-number').textContent = 'assigned when approved';
+  document.getElementById('modal-bill').classList.add('show');
+}
+
+async function openEditBill(billId) {
+  const bill = bills.find(b => b.id === billId);
+  if (!bill) return;
+  if (!isAdmin()) { showToast('Admin access required.', 'error'); return; }
+  if (!['draft','approved'].includes(bill.status)) { showToast('Only Draft or Approved bills can be edited.', 'warn'); return; }
+  if (parseFloat(bill.amount_paid||0) > 0) { showToast('Bills with payments recorded cannot be edited.', 'warn'); return; }
+
+  await ensureJobConfigLoaded();
+  const contact = contacts.find(c => c.id === bill.contact_id) || {};
+
+  _billEditId = billId;
+  document.getElementById('bill-modal-title').textContent = `Edit Bill — ${bill.bill_no || 'Draft'}`;
+  document.getElementById('bill-next-number').textContent = bill.bill_no || 'draft (unassigned)';
+  document.getElementById('bill-vendor-search').value = contact.trading_name || contact.name || '';
+  document.getElementById('bill-vendor-id').value     = bill.contact_id;
+  document.getElementById('bill-vendor-selected').textContent = contact.name ? '✓ ' + contact.name : '';
+  document.getElementById('bill-currency').value      = bill.currency;
+  document.getElementById('bill-vendor-ref').value    = bill.vendor_ref || '';
+  document.getElementById('bill-date').value          = bill.bill_date;
+  document.getElementById('bill-due-date').value      = bill.due_date || '';
+  document.getElementById('bill-notes').value         = bill.notes || '';
+  document.getElementById('bill-tax-rate').value      = bill.tax_rate;
+  document.getElementById('bill-edit-reason').value   = '';
+
+  setBillModalMode('edit');
+
+  const existingLines = await sbGet('bill_lines', `bill_id=eq.${billId}&order=line_order.asc`);
+  document.getElementById('bill-lines-body').innerHTML = '';
+  (existingLines.length ? existingLines : [{}]).forEach(l => {
+    addBillLine();
+    const rows = document.querySelectorAll('#bill-lines-body tr[id^="billl-"]:not([id$="-link"])');
+    const tr = rows[rows.length - 1];
+    document.getElementById(tr.id + '-desc').value = l.description || '';
+    tr.querySelectorAll('input[type="number"]')[0].value = l.quantity ?? '';
+    document.getElementById(tr.id + '-rate').value = l.unit_price ?? '';
+    if (l.item_category) jcPrefillBillLineLink(tr.id, l.item_category, l.item_id);
+  });
+  recalcBillTotals();
   document.getElementById('modal-bill').classList.add('show');
 }
 
@@ -11687,6 +11822,34 @@ function jcOnBillLineCategoryChange(lid) {
       <option value="__new__">+ Add new item…</option>
     </select>
     <div id="${lid}-newitemwrap" style="margin-top:6px;"></div>`;
+}
+
+function jcPrefillBillLineLink(lid, category, itemId) {
+  // Equipment links are create-a-new-asset-once, at approval time (see jcOnBillLineCategoryChange's
+  // equipment branch — there is no "select existing equipment" path). Re-checking this box on edit
+  // would cause collectBillFormLines() to rebuild a fresh _newEquipment object and create a *second*
+  // asset on every edit-save. So equipment-category lines are intentionally left unlinked on prefill —
+  // an admin who wants to (re-)link one must explicitly check the box and fill in the fields again.
+  if (!category || category === 'equipment') return;
+  const checkbox = document.querySelector(`#${lid}-link input[type="checkbox"]`);
+  if (!checkbox) return;
+  checkbox.checked = true;
+  jcToggleBillLineLink(lid, true);
+  const catSel = document.getElementById(lid + '-cat');
+  catSel.value = category;
+  jcOnBillLineCategoryChange(lid);
+  if (itemId) {
+    const meta = BILL_LINE_CATEGORIES.find(c => c.value === category);
+    const idx = (jcConfig[meta.cfgKey] || []).findIndex(r => r.id === itemId);
+    if (idx > -1) {
+      const itemSel = document.getElementById(lid + '-item');
+      if (itemSel) { itemSel.value = String(idx); jcOnBillLineItemChange(lid); }
+    }
+  }
+  // If itemId is null but category is set, this line was linked to a *newly created* catalog item at
+  // original approval time whose id was never written back to bill_lines (a pre-existing Phase 1 gap,
+  // out of scope here). The category is still preserved above; the item dropdown is simply left on its
+  // default "Select existing item…" option since we have no id to match against.
 }
 
 function jcOnBillLineItemChange(lid) {
@@ -11791,13 +11954,7 @@ async function jcSyncBillCatalogOnApproval(lines) {
   jcLoadConfig().catch(() => {});
 }
 
-async function saveBill(status) {
-  const vendorId = document.getElementById('bill-vendor-id').value;
-  const date     = document.getElementById('bill-date').value;
-  const currency = document.getElementById('bill-currency').value;
-  if (!vendorId){ showToast('Please select a vendor.', 'warn'); return; }
-  if (!date)    { showToast('Bill date is required.', 'warn');  return; }
-
+function collectBillFormLines(status) {
   const lines = []; let subtotal = 0;
   document.querySelectorAll('#bill-lines-body tr[id^="billl-"]:not([id$="-link"])').forEach(tr => {
     const idx = lines.length;
@@ -11832,6 +11989,8 @@ async function saveBill(status) {
         }
       }
     }
+    // New catalog items only sync to config tables on approval (see jcSyncBillCatalogOnApproval,
+    // called only when status === 'approved'), so block linking them from a draft.
     if (cat && status === 'draft' && (line._newEquipment || line._newItemName)) {
       showToast(`Line ${idx+1}: new catalog items can only be linked when saving with "Save & Approve". Saved without an inventory link.`, 'warn');
       delete line.item_category;
@@ -11841,7 +12000,20 @@ async function saveBill(status) {
     }
     lines.push(line);
   });
-  if (!lines.length) { showToast('Add at least one line item.', 'warn'); return; }
+  if (!lines.length) { showToast('Add at least one line item.', 'warn'); return null; }
+  return { lines, subtotal };
+}
+
+async function saveBill(status) {
+  const vendorId = document.getElementById('bill-vendor-id').value;
+  const date     = document.getElementById('bill-date').value;
+  const currency = document.getElementById('bill-currency').value;
+  if (!vendorId){ showToast('Please select a vendor.', 'warn'); return; }
+  if (!date)    { showToast('Bill date is required.', 'warn');  return; }
+
+  const collected = collectBillFormLines(status);
+  if (!collected) return;
+  const { lines, subtotal } = collected;
 
   const taxRate = parseFloat(document.getElementById('bill-tax-rate').value)||0;
   const taxAmt  = round2(subtotal * taxRate / 100);
@@ -11893,6 +12065,84 @@ async function saveBill(status) {
     await loadAP();
   } catch(e) { showToast('Error saving bill: ' + e.message, 'error'); }
   finally { btn.disabled = false; btn.textContent = status === 'draft' ? 'Save Draft' : 'Save & Approve'; }
+}
+
+async function saveBillEdit() {
+  const billId = _billEditId;
+  if (!billId) return;
+  const bill = bills.find(b => b.id === billId);
+  if (!bill) { showToast('Bill not found — reload and try again.', 'error'); return; }
+  if (!isAdmin()) { showToast('Admin access required.', 'error'); return; }
+  if (!['draft','approved'].includes(bill.status)) { showToast('Only Draft or Approved bills can be edited.', 'warn'); return; }
+
+  const reason = document.getElementById('bill-edit-reason').value.trim();
+  if (!reason) { showToast('A reason for this edit is required.', 'warn'); return; }
+
+  const collected = collectBillFormLines(bill.status);
+  if (!collected) return;
+  const { lines, subtotal } = collected;
+
+  const taxRate = parseFloat(document.getElementById('bill-tax-rate').value) || 0;
+  const taxAmt  = round2(subtotal * taxRate / 100);
+  const total   = round2(subtotal + taxAmt);
+  const notes   = document.getElementById('bill-notes').value.trim() || null;
+
+  const btn = document.getElementById('bill-save-edit-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  try {
+    const [event] = await sbPost('bill_edit_events', {
+      bill_id: billId, edited_by: currentUser.auth_user_id, edited_at: nowISO(), reason
+    });
+
+    const oldLines = await sbGet('bill_lines', `bill_id=eq.${billId}`);
+    if (oldLines.length) {
+      await sbPost('bill_lines_archive', oldLines.map(l => ({
+        edit_event_id: event.id,
+        original_line_id: l.id,
+        description: l.description,
+        quantity: l.quantity,
+        unit_price: l.unit_price,
+        amount: l.amount,
+        line_order: l.line_order,
+        item_category: l.item_category || null,
+        item_id: l.item_id || null,
+      })));
+    }
+
+    await sbPost('bill_lines', lines.map(l => ({
+      bill_id: billId,
+      description: l.description,
+      quantity: l.quantity,
+      unit_price: l.unit_price,
+      amount: l.amount,
+      line_order: l.line_order,
+      item_category: l.item_category || null,
+      item_id: l.item_id || null,
+    })));
+    if (oldLines.length) {
+      await sbDeleteWhere('bill_lines', `id=in.(${oldLines.map(l => l.id).join(',')})`);
+    }
+
+    await sbPatch('bills', billId, {
+      subtotal, tax_rate: taxRate, tax_amount: taxAmt, total,
+      balance_due: total, notes
+    });
+
+    // Called unconditionally (unlike saveBill()'s approval-gated call) — editing an approved bill
+    // is exactly how a previously-unlinked line gets its first catalog link; collectBillFormLines()
+    // already strips new-item/new-equipment attempts when bill.status is still 'draft', so this is
+    // a harmless idempotent cost-sync in that case.
+    await jcSyncBillCatalogOnApproval(lines);
+
+    showToast('Bill updated.', 'success');
+    closeModal('modal-bill');
+    await loadAP();
+  } catch(e) {
+    showToast('Error saving edit: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save Changes';
+  }
 }
 
 // ── FINANCIAL REPORTS ─────────────────────────────────────────────
@@ -12579,6 +12829,8 @@ async function voidBill(id) {
 
 // ── AP STATE ──────────────────────────────────────────────────────
 let bills = [], _apFiltered = []; let apPage = 0;
+let _billsWithEditHistory = new Set();
+let _billEditId = null;
 let apSortCol = null, apSortDir = 'asc';
 
 // ── INVOICE STATE ─────────────────────────────────────────────────

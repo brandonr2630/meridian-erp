@@ -1,15 +1,69 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-07-03 · Session 43 (in progress)*
+*Last updated: 2026-07-06 · Session 45*
 
 ---
 
-## Session 43 — Inventory-Linked Purchasing, Phase 1 (IN PROGRESS)
+## Session 45 — Edit Bill feature — BUILT, LIVE-VERIFIED, PR NOT YET OPENED
 
-**Date:** 2026-07-03
-**Branch:** `feat/inventory-linked-purchasing` (off `master`, local only — not pushed, no PR yet)
+**Date:** 2026-07-05 to 2026-07-06
+**Branch:** `feat/edit-bill` — not yet pushed/PR'd.
+**Spec:** `docs/superpowers/specs/2026-07-05-edit-bill-design.md`
+**Plan:** `docs/superpowers/plans/2026-07-05-edit-bill.md`
+
+### What this is
+
+Continues Session 44's brainstorm (Q3 answered: **A — required "reason for edit" field**). Lets an admin edit a Draft or Approved bill's line items + notes (header fields stay locked), with a required reason, a relational archive of the prior lines (`bill_edit_events` + `bill_lines_archive`), and a new "Edits" tab on the existing bill History modal. Editing an Approved bill re-runs the Phase 1 catalog-sync logic, so a previously-unlinked line can be linked to a new or existing inventory item after the fact — the original motivating use case from Session 44.
+
+### Progress (8-task plan, all done via `superpowers:subagent-driven-development` — fresh subagent per task, two-stage review each)
+
+| Task | Status |
+|---|---|
+| 1. Schema: `bill_edit_events` + `bill_lines_archive` | ✅ done — applied via Supabase MCP, verified live |
+| 2. AP list: Edit button + edit-aware History button | ✅ done (one review fix: scoped the edit-history existence check to `currentCompany.id`) |
+| 3. Bill modal edit-mode scaffolding (`setBillModalMode`, reason field, Save Changes button) | ✅ done |
+| 4. Extract `collectBillFormLines()` out of `saveBill()` (DRY, no behavior change) | ✅ done — independently diff-verified byte-for-byte identical aside from the scoped wrapper changes |
+| 5. `openEditBill()` + inventory-link prefill (`jcPrefillBillLineLink`) | ✅ done |
+| 6. `saveBillEdit()` — archive-then-resave-then-resync | ✅ done (one review fix: reordered to insert-new-lines-before-deleting-old, so a mid-save failure leaves duplicates rather than zero lines) |
+| 7. History modal "Edits" tab | ✅ done |
+| 8. End-to-end manual verification | ✅ done — see below |
+
+### Live verification (Q2 Machines, via the local `feat/edit-bill` checkout pointed at production Supabase)
+
+Full click-through: created a Draft bill (2 lines, one linked to an existing Materials item) → edited it while still Draft (changed a quantity, confirmed empty-reason save is blocked, saved with a reason) → approved it (BILL0041) → edited the now-Approved bill, linking the previously-unlinked line to a **new** Consumable catalog item via "+ Add new item…" → verified via SQL that `bill_edit_events`/`bill_lines_archive` captured both edits correctly, `bills.status` never changed, and the new catalog row was created → verified History → Edits tab renders both events with correct editor/timestamp/reason and expandable prior-line snapshots → recorded a payment and confirmed the Edit button disappears once a bill has payments.
+
+**Incident during testing — caught and fixed:** the second edit's test line reused a real production catalog item ("BMS Bar Stock - 2-3/4\" OD") with an arbitrary test rate ($50), which — because the cost-sync logic is working correctly — overwrote its real cost. Caught by cross-referencing `material_entries` (a real job entry had used it at $400 the day before) and restored `config_materials.default_unit_cost_ttd` to 400.00. **Worth double-checking that item's cost in Job Config** — $400 is the best available reconstruction (most recent real usage) but wasn't confirmed byte-for-byte against a pre-test snapshot.
+
+All test data (bill, bill_edit_events, bill_lines_archive, payment, payment_allocations, journal entry/lines, the test Consumable catalog row) deleted after verification — confirmed zero residue via SQL.
+
+### Next steps when resuming
+
+1. Run `superpowers:finishing-a-development-branch` to decide push/PR/merge for `feat/edit-bill`.
+2. Still outstanding from Session 43: **rotate the ERP password** — it went through this chat in plaintext a *second* time (Session 45, for live testing), on top of the still-unrotated Session 43 exposure.
+
+---
+
+## Session 43 — Inventory-Linked Purchasing, Phase 1 — DONE, MERGED, DEPLOYED
+
+**Date:** 2026-07-03 to 2026-07-05
+**Branch:** `feat/inventory-linked-purchasing` — merged to `master` via [PR #118](https://github.com/brandonr2630/meridian-erp/pull/118), deployed live.
+**Hotfix:** [PR #119](https://github.com/brandonr2630/meridian-erp/pull/119) — merged, deployed.
 **Spec:** `docs/superpowers/specs/2026-07-03-inventory-linked-purchasing-design.md`
 **Plan:** `docs/superpowers/plans/2026-07-03-inventory-phase1-catalog-link.md`
+
+### Status: Phase 1 fully shipped and live-verified
+
+All 14 plan tasks complete, merged, deployed to `erp.terranresources.com`. Then did a full manual click-through on production (logged in as Brandon, Q2 Machines company) covering:
+- Job Config admin CRUD for Hardware/Tooling/Fuel catalogs — all 3 tabs verified working
+- Work Order form: Hardware row, Tooling row, Equipment row's new Fuel Type/Qty/Cost/Amount sub-fields — all auto-fill and total correctly, Costing Summary math confirmed exact
+- Save → reload → reopen round-trip — confirmed all new entry types persist correctly
+- AP → Bill Lines "Link to Inventory": existing-item cost sync (5.00→7.00 confirmed), new-item creation (new Consumable catalog row created), plain/unlinked bill regression (unaffected)
+
+**Real bug found + fixed during live testing:** `saveBill()`'s `bill_lines` bulk insert failed with `"Error saving bill: All object keys must match"` whenever one line was linked to an existing catalog item (carries `item_id`) and another line created a new item (no `item_id`) — PostgREST rejects a bulk insert where array elements don't share an identical key set. Fixed by building every line with the same explicit 8 keys, defaulting `item_category`/`item_id` to `null`. Shipped as PR #119, verified live after fix (BILL0039 saved cleanly with mixed line types).
+
+All test data (ZZTEST-prefixed bills, catalog rows, Work Order WO-007) deleted from production after verification — confirmed zero residue via SQL.
+
+**Outstanding — not yet done:** rotate the `brandon_r@terranresources.com` ERP password (it went through this chat in plaintext when the user shared it for live testing). Reminder given to user, not actioned by Claude.
 
 ### What this is
 
