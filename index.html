@@ -10070,7 +10070,7 @@ async function renderBillHistoryEdits(billId) {
             <tbody>
               ${(archByEvent[ev.id]||[]).map(l => `<tr>
                 <td>${escHTML(l.description)}</td>
-                <td class="right mono">${l.quantity}</td>
+                <td class="right mono">${fmtNum(l.quantity)}</td>
                 <td class="right mono">${fmtNum(l.unit_price)}</td>
                 <td class="right mono">${fmtNum(l.amount)}</td>
               </tr>`).join('')}
