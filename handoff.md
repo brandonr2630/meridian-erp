@@ -1,37 +1,45 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-07-05 · Session 44 (paused mid-brainstorm — see "Next steps" below)*
+*Last updated: 2026-07-06 · Session 45*
 
 ---
 
-## Session 44 — Edit Bill feature (BRAINSTORMING IN PROGRESS, not yet designed/planned/built)
+## Session 45 — Edit Bill feature — BUILT, LIVE-VERIFIED, PR NOT YET OPENED
 
-**Date:** 2026-07-05
-**Trigger:** After Phase 1 verification (Session 43), user tried to open an existing/already-approved bill in AP to retroactively link its lines to inventory. Discovered this app has **no way to open or edit an existing bill at all** — bill rows only ever had Pay/Void/History buttons (`index.html` ~line 9766-9768), confirmed via code search, not a bug in Phase 1's work. The "Link to Inventory" UI built in Phase 1 only exists in the New Bill creation modal.
+**Date:** 2026-07-05 to 2026-07-06
+**Branch:** `feat/edit-bill` — not yet pushed/PR'd.
+**Spec:** `docs/superpowers/specs/2026-07-05-edit-bill-design.md`
+**Plan:** `docs/superpowers/plans/2026-07-05-edit-bill.md`
 
-**Decision so far:** build a full Edit Bill feature (not just a narrow "link inventory retroactively" patch) — admin-only, with change tracking and archiving of prior data, per user's explicit request.
+### What this is
 
-### Brainstorming progress — using `superpowers:brainstorming` skill, PAUSED mid-questions
+Continues Session 44's brainstorm (Q3 answered: **A — required "reason for edit" field**). Lets an admin edit a Draft or Approved bill's line items + notes (header fields stay locked), with a required reason, a relational archive of the prior lines (`bill_edit_events` + `bill_lines_archive`), and a new "Edits" tab on the existing bill History modal. Editing an Approved bill re-runs the Phase 1 catalog-sync logic, so a previously-unlinked line can be linked to a new or existing inventory item after the fact — the original motivating use case from Session 44.
 
-Answered so far:
-- **Q1 (which bill statuses are editable):** **A — Draft + Approved only (no payments recorded yet).** Matches the existing safety boundary already in `voidBill()` (refuses to void a bill with payments). Partial/Paid/Void bills stay locked from editing.
-- **Q2 (how to store change history + archived data):** **B — Relational archive tables** (`bills_archive`, `bill_lines_archive` — real copied rows, not a JSONB snapshot blob). User explicitly chose the more heavyweight relational option over the simpler JSONB-log approach I recommended, for future reporting flexibility.
-- **Q3 (require a "reason for edit" text field on save?):** **ASKED, NOT YET ANSWERED.** Options were: (A) required reason field for audit justification, (B) no reason field, just who/when/before/after.
+### Progress (8-task plan, all done via `superpowers:subagent-driven-development` — fresh subagent per task, two-stage review each)
 
-### Research already done (don't re-derive — reuse these findings)
+| Task | Status |
+|---|---|
+| 1. Schema: `bill_edit_events` + `bill_lines_archive` | ✅ done — applied via Supabase MCP, verified live |
+| 2. AP list: Edit button + edit-aware History button | ✅ done (one review fix: scoped the edit-history existence check to `currentCompany.id`) |
+| 3. Bill modal edit-mode scaffolding (`setBillModalMode`, reason field, Save Changes button) | ✅ done |
+| 4. Extract `collectBillFormLines()` out of `saveBill()` (DRY, no behavior change) | ✅ done — independently diff-verified byte-for-byte identical aside from the scoped wrapper changes |
+| 5. `openEditBill()` + inventory-link prefill (`jcPrefillBillLineLink`) | ✅ done |
+| 6. `saveBillEdit()` — archive-then-resave-then-resync | ✅ done (one review fix: reordered to insert-new-lines-before-deleting-old, so a mid-save failure leaves duplicates rather than zero lines) |
+| 7. History modal "Edits" tab | ✅ done |
+| 8. End-to-end manual verification | ✅ done — see below |
 
-- **No existing generic audit/change-log table** — `job_audit_log` is the only audit table in the schema, and it's Work-Order-specific (columns: `job_id`, `job_no`, `user_id`, `username`, `action_type`, `description`). A new mechanism is needed for bills.
-- **`isAdmin()`** (`index.html` ~line 5685): `return can('admin:users') || can('admin:settings');` — the established gating pattern (e.g. `if (!isAdmin()) { showToast('Admin access required.', 'error'); return; }` at ~line 6584). Use this to gate the new Edit Bill button/save.
-- **`bills` columns:** `company_id, bill_no, contact_id, bill_date, due_date, currency, vendor_ref, subtotal, tax_rate, tax_amount, total, balance_due, status, notes, approved_at` (plus `amount_paid`, tracked via payment allocations).
-- **`bill_lines` columns:** `bill_id, description, quantity, unit_price, amount, line_order, item_category, item_id` (the last two added in Phase 1). **Currently INSERT-only** — no `sbPatch()` on `bill_lines` anywhere; the existing pattern elsewhere in this codebase for "editing" a set of child rows is delete-all-then-reinsert (see `jcSaveJobData`'s `sbDeleteWhere` + `sbPost` pattern for `material_entries` etc.) — likely the right model here too, but the *old* rows need to be captured into `bill_lines_archive` before deletion rather than just discarded.
-- **`voidBill()`** (~line 12562): flips `status` to `'void'` only — no reversals, no GL/payment adjustments. Confirms bills currently have zero post-approval mutability; this feature is genuinely new ground for the app.
-- **Re-sync on edit (not yet asked as an explicit question, but reasoned through):** plan is to re-run the same `jcSyncBillCatalogOnApproval()` logic (from Phase 1) across all currently-linked lines on every edit-save — idempotent (just re-patches current cost / creates new item if still unset), so no complex diffing needed. The edit modal's item-link picker should pre-fill each line's existing `item_category`/`item_id` so admins can add new links to previously-unlinked lines without disturbing already-linked ones.
+### Live verification (Q2 Machines, via the local `feat/edit-bill` checkout pointed at production Supabase)
+
+Full click-through: created a Draft bill (2 lines, one linked to an existing Materials item) → edited it while still Draft (changed a quantity, confirmed empty-reason save is blocked, saved with a reason) → approved it (BILL0041) → edited the now-Approved bill, linking the previously-unlinked line to a **new** Consumable catalog item via "+ Add new item…" → verified via SQL that `bill_edit_events`/`bill_lines_archive` captured both edits correctly, `bills.status` never changed, and the new catalog row was created → verified History → Edits tab renders both events with correct editor/timestamp/reason and expandable prior-line snapshots → recorded a payment and confirmed the Edit button disappears once a bill has payments.
+
+**Incident during testing — caught and fixed:** the second edit's test line reused a real production catalog item ("BMS Bar Stock - 2-3/4\" OD") with an arbitrary test rate ($50), which — because the cost-sync logic is working correctly — overwrote its real cost. Caught by cross-referencing `material_entries` (a real job entry had used it at $400 the day before) and restored `config_materials.default_unit_cost_ttd` to 400.00. **Worth double-checking that item's cost in Job Config** — $400 is the best available reconstruction (most recent real usage) but wasn't confirmed byte-for-byte against a pre-test snapshot.
+
+All test data (bill, bill_edit_events, bill_lines_archive, payment, payment_allocations, journal entry/lines, the test Consumable catalog row) deleted after verification — confirmed zero residue via SQL.
 
 ### Next steps when resuming
 
-1. Resume the brainstorming skill — ask Q3 (reason-for-edit field), then move to "propose 2-3 approaches" → "present design sections" → write spec to `docs/superpowers/specs/` → get user approval → `writing-plans` skill → implement.
-2. This is a genuinely new capability (bills have never been editable), so expect a real spec + plan cycle, not a quick patch.
-3. Still outstanding from Session 43: rotate the ERP password shared in plaintext during live testing.
+1. Run `superpowers:finishing-a-development-branch` to decide push/PR/merge for `feat/edit-bill`.
+2. Still outstanding from Session 43: **rotate the ERP password** — it went through this chat in plaintext a *second* time (Session 45, for live testing), on top of the still-unrotated Session 43 exposure.
 
 ---
 
