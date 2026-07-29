@@ -1,6 +1,25 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-07-06 · Session 46*
+*Last updated: 2026-07-29 · Session 47*
+
+---
+
+## Session 47 — Site down: GreenGeeks WAF IP block from missing favicon — RESOLVED
+
+**Date:** 2026-07-29
+**Trigger:** `erp.terranresources.com` timing out (browser network error, `ERR_CONNECTION_TIMED_OUT`) — no recent deploy.
+
+**Diagnosis:** DNS resolved fine, but TCP connect on 443 (and eventually 80) died with no response — timeout, not refused. Same dead result on `terranresources.com` and `q2m.io`, same shared IP (`108.178.43.98` / `chi203.greengeeks.net`). Traceroute reached GreenGeeks' Chicago DC cleanly; only the box itself was silent. Checked GitHub Actions history — last deploy was 2026-07-06, so ruled out the deploy pipeline. Confirmed `meridian-erp`'s deploy already uses the shared SSH/rsync reusable workflow (`brandonr2630/projects/.github/workflows/deploy.yml@master`, migrated in that repo's PR #4) with all required secrets present — no Fileman-API exposure left.
+
+**Root cause (per GreenGeeks support):** our IP got auto-blocked by their WAF for an unusually high rate of 404s. Not a code/deploy bug, not a server outage — an IP-level block, since cleared + temp-whitelisted by GreenGeeks.
+
+**Follow-up fix — the actual 404 source:** `index.html` had no `<link rel="icon">`, so every browser tab silently falls back to requesting `/favicon.ico`, which 404s (confirmed live before the fix). Over enough page loads/refreshes that's a steady background 404 stream — the likely trigger for the WAF block. Fixed in [PR #126](https://github.com/brandonr2630/meridian-erp/pull/126): added `<link rel="icon" href="assets/meridian-logo-web.svg" type="image/svg+xml">`, reusing the existing SVG logo (no new asset). Merged, deployed, verified live (`favicon.ico` link now resolves, `assets/meridian-logo-web.svg` returns 200).
+
+### Outstanding
+
+- **Temp whitelist** — GreenGeeks said the IP unblock is temporary. If the 404 rate wasn't purely favicon-driven, the block could recur; worth checking back with GreenGeeks or watching for another timeout report.
+- Carried over from Session 46: **rotate the ERP password** (plaintext in chat, Sessions 43 + 45 — still not done).
+- Carried over: double-check "BMS Bar Stock - 2-3/4" OD" cost in Job Config (see Session 46).
 
 ---
 
