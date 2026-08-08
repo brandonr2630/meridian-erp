@@ -5699,6 +5699,7 @@ const Q = {
   crmActivities: () => `company_id=eq.${currentCompany.id}&order=activity_date.desc,created_at.desc`,
   crmTasks:      () => `company_id=eq.${currentCompany.id}&order=due_date.asc,created_at.desc`,
   crmTeamMembers: () => `company_id=eq.${currentCompany.id}&is_active=eq.true&order=name`,
+  purchaseOrders: () => `company_id=eq.${currentCompany.id}&order=po_date.desc`,
 };
 
 // ── STATE ────────────────────────────────────────────────────────
@@ -10407,6 +10408,18 @@ async function loadVendors() {
   finally { vnWrap.style.opacity = ''; vnWrap.style.pointerEvents = ''; }
 }
 
+async function loadPurchaseOrders() {
+  purchaseOrders = await sbGet('purchase_orders', Q.purchaseOrders());
+  if (purchaseOrders.length) {
+    const ids = purchaseOrders.map(p => p.id).join(',');
+    const lines = await sbGet('po_lines', `po_id=in.(${ids})`);
+    const totalsByPO = {};
+    lines.forEach(l => { totalsByPO[l.po_id] = (totalsByPO[l.po_id] || 0) + parseFloat(l.amount || 0); });
+    purchaseOrders.forEach(p => { p._total = totalsByPO[p.id] || 0; });
+  }
+  renderPOTable(purchaseOrders);
+}
+
 function renderVendorsTable(list) {
   _vendorsFiltered = list;
   const total = list.length;
@@ -12892,6 +12905,12 @@ let _billsWithEditHistory = new Set();
 let _billEditId = null;
 let _apRowMenuActions = {};
 let apSortCol = null, apSortDir = 'asc';
+
+// ── PURCHASE ORDER STATE ────────────────────────────────────────────
+let purchaseOrders = [], poLines = [];
+let _poEditId = null;
+let _poRowMenuActions = {};
+let poSortCol = null, poSortDir = 'asc';
 
 // ── INVOICE STATE ─────────────────────────────────────────────────
 let invoices = [], _arFiltered = []; let arPage = 0;
@@ -16499,6 +16518,7 @@ const DELETE_CONFIG = {
   bill:          { table: 'bills',          linesTable: 'bill_lines',          linesCol: 'bill_id',     reload: () => loadAP() },
   delivery_note: { table: 'delivery_notes', linesTable: 'delivery_note_lines', linesCol: 'dn_id',       reload: () => loadDeliveryNotes() },
   credit_note:   { table: 'credit_notes',   linesTable: 'credit_note_lines',   linesCol: 'cn_id',       reload: () => loadCreditNotes() },
+  purchase_order: { table: 'purchase_orders', linesTable: 'po_lines',           linesCol: 'po_id',       reload: () => loadPurchaseOrders() },
 };
 
 async function deleteDocument(type, id, label) {
