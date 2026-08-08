@@ -10264,6 +10264,37 @@ async function openEditPO(id) {
   document.getElementById('modal-po').classList.add('show');
 }
 
+async function duplicatePO(id) {
+  const po = purchaseOrders.find(p => p.id === id);
+  if (!po) return;
+  const lines = await sbGet('po_lines', `po_id=eq.${id}&order=line_no.asc`);
+  const vendor = contacts.find(c => c.id === po.vendor_id) || {};
+
+  openNewPO();
+  document.getElementById('po-vendor-id').value = po.vendor_id;
+  document.getElementById('po-vendor-search').value = vendor.trading_name || vendor.name || '';
+  document.getElementById('po-vendor-selected').textContent = vendor.name ? '✓ ' + vendor.name : '';
+  document.getElementById('po-currency').value = po.currency;
+  document.getElementById('po-terms').value = po.payment_terms || '30';
+  document.getElementById('po-incoterms').value = po.incoterms || '';
+  document.getElementById('po-incoterms-place').value = po.incoterms_place || '';
+  document.getElementById('po-notes').value = po.notes || '';
+
+  document.getElementById('po-lines-body').innerHTML = '';
+  (lines.length ? lines : [{}]).forEach(l => {
+    addPOLine();
+    const rows = document.querySelectorAll('#po-lines-body tr');
+    const tr = rows[rows.length - 1];
+    document.getElementById(tr.id + '-desc').value = l.description || '';
+    document.getElementById(tr.id + '-unit').value = l.unit || '';
+    document.getElementById(tr.id + '-rate').value = l.unit_price ?? '';
+    document.getElementById(tr.id + '-qty').value  = l.quantity ?? '';
+  });
+  recalcPOTotals();
+  document.getElementById('modal-po-title').textContent = `New Purchase Order (from ${po.po_no || 'draft'})`;
+  document.getElementById('modal-po').classList.add('show');
+}
+
 async function sendPO(id) {
   const ok = await showConfirm('Send this purchase order? A PO number will be assigned.', 'Send Purchase Order', 'Send', false);
   if (!ok) return;
