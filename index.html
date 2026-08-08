@@ -4342,6 +4342,7 @@ body.light .global-search-results, body.light .split-btn-menu {
             <div class="contact-search-results" id="bill-vendor-results"></div>
           </div>
           <input type="hidden" id="bill-vendor-id">
+          <input type="hidden" id="bill-po-id">
           <div id="bill-vendor-selected" style="font-size:10px;color:var(--gold);margin-top:3px;"></div>
         </div>
         <div class="field"><label class="field-label">Currency</label>
@@ -4353,6 +4354,12 @@ body.light .global-search-results, body.light .split-btn-menu {
         </div>
         <div class="field"><label class="field-label">Vendor Reference</label>
           <input type="text" id="bill-vendor-ref" class="mono" placeholder="Vendor invoice no.">
+        </div>
+        <div class="field span-2" id="bill-po-picker-wrap" style="display:none;">
+          <label class="field-label">Link Purchase Order <span style="color:var(--text-3);font-weight:400;">(optional)</span></label>
+          <select id="bill-po-picker" onchange="onBillPOPicked()">
+            <option value="">— None —</option>
+          </select>
         </div>
       </div>
       <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:14px;">
@@ -12346,6 +12353,9 @@ async function openNewBill() {
   addBillLine(); addBillLine();
   recalcBillTotals();
   calcBillDueDate();
+  document.getElementById('bill-po-picker-wrap').style.display = 'none';
+  document.getElementById('bill-po-picker').innerHTML = '<option value="">— None —</option>';
+  document.getElementById('bill-po-id').value = '';
   document.getElementById('bill-next-number').textContent = 'assigned when approved';
   document.getElementById('modal-bill').classList.add('show');
 }
@@ -12373,6 +12383,9 @@ async function openEditBill(billId) {
   document.getElementById('bill-notes').value         = bill.notes || '';
   document.getElementById('bill-tax-rate').value      = bill.tax_rate;
   document.getElementById('bill-edit-reason').value   = '';
+  document.getElementById('bill-po-picker-wrap').style.display = 'none';
+  document.getElementById('bill-po-picker').innerHTML = '<option value="">— None —</option>';
+  document.getElementById('bill-po-id').value = '';
 
   setBillModalMode('edit');
 
@@ -12561,11 +12574,54 @@ const searchBillVendor = createContactSearch({
   onSelect:   c => selectBillVendor(c.id, c.trading_name || c.name, c.name),
 });
 
-function selectBillVendor(id, displayName, legalName) {
+async function selectBillVendor(id, displayName, legalName) {
   document.getElementById('bill-vendor-id').value     = id;
   document.getElementById('bill-vendor-search').value = displayName;
   document.getElementById('bill-vendor-selected').textContent = '✓ ' + legalName;
   document.getElementById('bill-vendor-results').classList.remove('open');
+  await loadOpenPOsForBillVendor(id);
+}
+
+async function loadOpenPOsForBillVendor(vendorId) {
+  const wrap = document.getElementById('bill-po-picker-wrap');
+  const sel  = document.getElementById('bill-po-picker');
+  sel.innerHTML = '<option value="">— None —</option>';
+  const openPOs = await sbGet('purchase_orders', `company_id=eq.${currentCompany.id}&vendor_id=eq.${vendorId}&status=eq.open`);
+  if (!openPOs.length) { wrap.style.display = 'none'; return; }
+  openPOs.forEach(po => {
+    const opt = document.createElement('option');
+    opt.value = po.id;
+    opt.textContent = `${po.po_no} — ${formatDateDisplay(po.po_date)}`;
+    sel.appendChild(opt);
+  });
+  wrap.style.display = '';
+}
+
+async function onBillPOPicked() {
+  const poId = document.getElementById('bill-po-picker').value;
+  if (!poId) return;
+  const withRemaining = await computePORemaining(poId);
+  const openLines = withRemaining.filter(l => l.remaining > 0);
+  if (!openLines.length) { showToast('This PO has no remaining quantity to bill.', 'warn'); return; }
+
+  document.getElementById('bill-po-id').value = poId;
+  const po = purchaseOrders.find(p => p.id === poId) || (await sbGet('purchase_orders', `id=eq.${poId}`))[0];
+  document.getElementById('bill-currency').value = po.currency;
+  document.getElementById('bill-terms').value = po.payment_terms || '30';
+
+  document.getElementById('bill-lines-body').innerHTML = '';
+  openLines.forEach(l => {
+    addBillLine();
+    const rows = document.querySelectorAll('#bill-lines-body tr[id^="billl-"]:not([id$="-link"])');
+    const tr = rows[rows.length - 1];
+    document.getElementById(tr.id + '-desc').value = l.description;
+    tr.querySelectorAll('input[type="number"]')[0].value = l.remaining;
+    document.getElementById(tr.id + '-rate').value = l.unit_price;
+    tr.dataset.poId = poId;
+    tr.dataset.poLineId = l.id;
+    document.getElementById(tr.id + '-link').dataset.poId = poId;
+  });
+  recalcBillTotals();
 }
 
 const searchPOVendor = createContactSearch({
