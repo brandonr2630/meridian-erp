@@ -10265,7 +10265,7 @@ async function openEditPO(id) {
 }
 
 async function sendPO(id) {
-  const ok = await showConfirm('Send this purchase order? A PO number will be assigned.', 'Send Purchase Order', 'Send');
+  const ok = await showConfirm('Send this purchase order? A PO number will be assigned.', 'Send Purchase Order', 'Send', false);
   if (!ok) return;
   try {
     const po = purchaseOrders.find(p => p.id === id);
