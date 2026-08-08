@@ -517,7 +517,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
-  min-width: 150px;
+  min-width: 190px;
   z-index: var(--z-dropdown);
   display: none;
   overflow: hidden;
@@ -2988,21 +2988,11 @@ body.light .global-search-results, body.light .split-btn-menu {
       <div class="page-header">
         <div><div class="page-title">Purchase Orders</div><div class="page-subtitle">Orders to vendors</div></div>
         <div class="page-actions">
-          <button class="btn btn-primary btn-sm" data-perm="finance:ap:write" onclick="openNewPO()">+ New Purchase Order</button>
+          <button class="btn btn-primary btn-sm" onclick="openNewPO()">+ New Purchase Order</button>
         </div>
       </div>
       <div class="page-body">
-        <div class="table-wrap" id="po-table-wrap">
-          <table class="data-table" id="po-table">
-            <thead>
-              <tr>
-                <th>PO No.</th><th>Vendor</th><th>Date</th><th>Expected</th>
-                <th>Currency</th><th class="right">Total</th><th>Status</th><th class="right">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="po-table-body"></tbody>
-          </table>
-        </div>
+        <div class="table-wrap" id="po-table-wrap"><div class="page-loading"><div class="loading-spinner"></div> Loading...</div></div>
       </div>
     </div>
 
@@ -9897,45 +9887,59 @@ document.addEventListener('click', e => {
 
 function renderPOTable(list) {
   const contactMap = Object.fromEntries(contacts.map(c => [c.id, c.trading_name || c.name]));
-  const tbody = document.getElementById('po-table-body');
+  const wrap = document.getElementById('po-table-wrap');
   if (!list.length) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:24px;">No purchase orders yet.</td></tr>`;
+    wrap.innerHTML = '<div class="table-empty">No purchase orders yet.</div>';
     return;
   }
-  tbody.innerHTML = list.map(po => {
-    const canSend   = po.status === 'draft'  && can('finance:ap:approve');
-    const canEdit   = po.status === 'draft'  && can('finance:ap:write');
-    const canClose  = po.status === 'open'   && can('finance:ap:approve');
-    const canCancel = ['draft','open'].includes(po.status) && can('finance:ap:approve');
+  wrap.innerHTML = `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>PO No.</th><th>Vendor</th><th>Date</th><th>Expected</th>
+          <th>Currency</th><th class="right">Total</th><th>Status</th><th class="right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>${list.map(po => {
+        const canSend   = po.status === 'draft'  && can('finance:ap:approve');
+        const canEdit   = po.status === 'draft'  && can('finance:ap:write');
+        const canClose  = po.status === 'open'   && can('finance:ap:approve');
+        const canCancel = ['draft','open'].includes(po.status) && can('finance:ap:approve');
 
-    const primaryBtn = canSend
-      ? `<button class="btn btn-outline btn-sm" onclick="sendPO('${po.id}')">Send</button>`
-      : '';
+        const primaryBtn = canSend
+          ? `<button class="btn btn-outline btn-sm" onclick="sendPO('${po.id}')">Send</button>`
+          : '';
 
-    const menuActions = [];
-    if (po.status === 'draft' && can('finance:ap:write')) menuActions.push({ label: 'Delete', onclick: `deleteDocument('purchase_order','${po.id}','${po.po_no||'this draft PO'}')` });
-    if (canEdit)   menuActions.push({ label: 'Edit',       onclick: `openEditPO('${po.id}')` });
-    menuActions.push({ label: 'Duplicate as new', onclick: `duplicatePO('${po.id}')` });
-    if (po.status !== 'draft') {
-      menuActions.push({ label: 'Print',  onclick: `openPOPDF('${po.id}')` });
-      menuActions.push({ label: 'Email',  onclick: `openEmailDocument('purchase-order','${po.id}')` });
-    }
-    if (canClose)  menuActions.push({ label: 'Close PO',  onclick: `closePO('${po.id}')` });
-    if (canCancel) menuActions.push({ label: 'Cancel PO', onclick: `cancelPO('${po.id}')` });
+        const menuActions = [];
+        if (po.status === 'draft' && can('finance:ap:write')) menuActions.push({ label: 'Delete', onclick: `deleteDocument('purchase_order','${po.id}','${po.po_no||'this draft PO'}')` });
+        if (canEdit)   menuActions.push({ label: 'Edit',       onclick: `openEditPO('${po.id}')` });
+        if (can('finance:ap:write')) menuActions.push({ label: 'Duplicate as new', onclick: `duplicatePO('${po.id}')` });
+        if (po.status !== 'draft') {
+          menuActions.push({ label: 'Print',  onclick: `openPOPDF('${po.id}')` });
+          menuActions.push({ label: 'Email',  onclick: `openEmailDocument('purchase-order','${po.id}')` });
+        }
+        if (canClose)  menuActions.push({ label: 'Close PO',  onclick: `closePO('${po.id}')` });
+        if (canCancel) menuActions.push({ label: 'Cancel PO', onclick: `cancelPO('${po.id}')` });
 
-    _poRowMenuActions[po.id] = menuActions;
+        _poRowMenuActions[po.id] = menuActions;
 
-    return `<tr>
-      <td class="mono bold">${po.po_no || '<span style="color:var(--text-3);font-style:italic;font-size:11px;">Draft</span>'}</td>
-      <td>${escHTML(contactMap[po.vendor_id] || '—')}</td>
-      <td>${formatDateDisplay(po.po_date)}</td>
-      <td>${po.expected_date ? formatDateDisplay(po.expected_date) : '—'}</td>
-      <td>${po.currency}</td>
-      <td class="right mono">${fmt(po._total ?? 0, po.currency)}</td>
-      <td><span class="badge badge-${po.status}">${po.status}</span></td>
-      <td class="right">${primaryBtn} <button class="btn btn-ghost btn-icon btn-sm" onclick="togglePORowMenu('${po.id}', this)">⋯</button></td>
-    </tr>`;
-  }).join('');
+        const menuBtn = menuActions.length
+          ? `<button class="btn btn-ghost btn-icon btn-sm" onclick="togglePORowMenu('${po.id}', this)" title="More actions">⋯</button>`
+          : '';
+
+        return `<tr>
+          <td class="mono bold">${po.po_no || '<span style="color:var(--text-3);font-style:italic;font-size:11px;">Draft</span>'}</td>
+          <td>${escHTML(contactMap[po.vendor_id] || '—')}</td>
+          <td>${formatDateDisplay(po.po_date)}</td>
+          <td>${po.expected_date ? formatDateDisplay(po.expected_date) : '—'}</td>
+          <td>${po.currency}</td>
+          <td class="right mono">${fmt(po._total ?? 0, po.currency)}</td>
+          <td><span class="badge badge-${po.status}">${po.status}</span></td>
+          <td class="right" style="white-space:nowrap;">${primaryBtn}${menuBtn}</td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>`;
 }
 
 function togglePORowMenu(poId, btnEl) {
@@ -9950,7 +9954,7 @@ function togglePORowMenu(poId, btnEl) {
   ).join('');
   menu.dataset.poId = poId;
   const rect = btnEl.getBoundingClientRect();
-  const menuW = 150;
+  const menuW = 190;
   menu.style.top = (rect.bottom + 5) + 'px';
   menu.style.left = Math.max(8, Math.min(rect.right - menuW, window.innerWidth - menuW - 8)) + 'px';
   menu.classList.add('open');
