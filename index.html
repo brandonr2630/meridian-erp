@@ -16264,6 +16264,11 @@ async function generatePDFBase64(source) {
       const c  = contacts.find(x => x.id === dn.contact_id) || {};
       return { to: c.email || '', subject: `Delivery Note ${dn.dn_no || ''} from ${escHTML(co.name)}`, filename: `${dn.dn_no || 'delivery-note'}.pdf` };
     }
+    if (type === 'purchase-order') {
+      const po = purchaseOrders.find(x => x.id === id) || {};
+      const v  = contacts.find(x => x.id === po.vendor_id) || {};
+      return { to: v.email || '', subject: `Purchase Order ${po.po_no || ''} from ${escHTML(co.name)}`, filename: `${po.po_no || 'purchase-order'}.pdf` };
+    }
     if (type === 'credit-note') {
       const cn = creditNotes.find(x => x.id === id) || {};
       const c  = contacts.find(x => x.id === cn.contact_id) || {};
@@ -16582,6 +16587,31 @@ async function generatePDFBase64(source) {
         parseFloat(quo.subtotal||0), taxRate, parseFloat(quo.tax_amount||0),
         parseFloat(quo.total||0), quo.incoterms, quo.incoterms_place,
         quo.notes, null, co.name, quo.quote_no);
+      return generatePDFBase64(staging);
+    }
+
+    if (type === 'purchase-order') {
+      const po      = purchaseOrders.find(p => p.id === id) || (await sbGet('purchase_orders', `id=eq.${id}`))[0];
+      if (!po) throw new Error('Purchase order not found');
+      const lines   = await sbGet('po_lines', `po_id=eq.${id}&order=line_no.asc`).catch(() => []);
+      const vendor  = contacts.find(c => c.id === po.vendor_id) || {};
+      const co      = currentCompany;
+      const total   = lines.reduce((s,l) => s + parseFloat(l.amount||0), 0);
+      const totalsH = calcTotalsH(po.incoterms, po.notes, null);
+      const pages   = splitLinesIntoPages(lines, calcFirstRows(totalsH), calcContRows(totalsH));
+      const metaRows = [
+        ['PO Date :', formatDateDisplay(po.po_date)],
+        ['Expected :', po.expected_date ? formatDateDisplay(po.expected_date) : '—'],
+        ['Terms :', PO_TERMS_LABELS[po.payment_terms] || (po.payment_terms + ' days')],
+        ...(po.vendor_quote_basis === 'written' && po.vendor_quote_ref ? [['Vendor Quote Ref :', escHTML(po.vendor_quote_ref)]] : []),
+        ...(po.vendor_quote_basis === 'verbal' ? [['Vendor Quote :', 'Verbal' + (po.vendor_quote_date ? ' — ' + formatDateDisplay(po.vendor_quote_date) : '')]] : []),
+        ['Prepared By :', escHTML(po.prepared_by || '—')],
+      ];
+      const headerHTML = buildPDFHeader(co, 'Purchase Order', po.po_no || 'DRAFT', 'Total Value',
+        fmt(total, po.currency), vendor, metaRows);
+      staging.innerHTML = '';
+      renderMultiPagePDF('email-pdf-staging', pages, headerHTML, true, po.currency,
+        total, 0, 0, total, po.incoterms, po.incoterms_place, po.notes, null, co.name, po.po_no);
       return generatePDFBase64(staging);
     }
 
