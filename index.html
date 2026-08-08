@@ -10334,7 +10334,7 @@ async function computePORemaining(poId) {
 }
 
 async function recomputePOStatus(poId) {
-  const po = purchaseOrders.find(p => p.id === poId) || (await sbGet('purchase_orders', `id=eq.${poId}`))[0];
+  const po = (await sbGet('purchase_orders', `id=eq.${poId}`))[0];
   if (!po || !['open','closed'].includes(po.status)) return; // don't touch draft/cancelled
   const withRemaining = await computePORemaining(poId);
   const fullyConsumed = withRemaining.every(l => l.remaining <= 0);
