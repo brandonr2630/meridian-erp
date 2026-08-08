@@ -10410,10 +10410,12 @@ async function loadVendors() {
 
 async function loadPurchaseOrders() {
   const poWrap = document.getElementById('po-table-wrap');
-  if (poWrap.querySelector('table')) {
-    poWrap.style.opacity = '0.5'; poWrap.style.pointerEvents = 'none';
-  } else {
-    poWrap.innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading...</div>';
+  if (poWrap) {
+    if (poWrap.querySelector('table')) {
+      poWrap.style.opacity = '0.5'; poWrap.style.pointerEvents = 'none';
+    } else {
+      poWrap.innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading...</div>';
+    }
   }
   try {
     purchaseOrders = await sbGet('purchase_orders', Q.purchaseOrders());
@@ -10426,7 +10428,7 @@ async function loadPurchaseOrders() {
     }
     renderPOTable(purchaseOrders);
   } catch(e) { showToast('Purchase orders load error: ' + e.message, 'error'); }
-  finally { poWrap.style.opacity = ''; poWrap.style.pointerEvents = ''; }
+  finally { if (poWrap) { poWrap.style.opacity = ''; poWrap.style.pointerEvents = ''; } }
 }
 
 function renderVendorsTable(list) {
