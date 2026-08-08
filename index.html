@@ -10267,10 +10267,10 @@ async function openEditPO(id) {
 async function duplicatePO(id) {
   const po = purchaseOrders.find(p => p.id === id);
   if (!po) return;
-  const lines = await sbGet('po_lines', `po_id=eq.${id}&order=line_no.asc`);
   const vendor = contacts.find(c => c.id === po.vendor_id) || {};
 
   openNewPO();
+  const lines = await sbGet('po_lines', `po_id=eq.${id}&order=line_no.asc`);
   document.getElementById('po-vendor-id').value = po.vendor_id;
   document.getElementById('po-vendor-search').value = vendor.trading_name || vendor.name || '';
   document.getElementById('po-vendor-selected').textContent = vendor.name ? '✓ ' + vendor.name : '';
