@@ -10105,6 +10105,162 @@ function togglePOQuoteFields() {
   document.getElementById('po-quote-date-field').style.display = basis ? '' : 'none';
 }
 
+function addPOLine() {
+  const tbody = document.getElementById('po-lines-body');
+  const n     = tbody.rows.length + 1;
+  const lid   = 'pol-' + Date.now() + '-' + Math.random().toString(36).substr(2,4);
+  const tr    = document.createElement('tr');
+  tr.id = lid;
+  tr.innerHTML = `
+    <td style="padding:6px 8px;color:var(--text-3);font-size:11px;font-family:'DM Mono',monospace;">${n}</td>
+    <td><input type="text" placeholder="Item description…" style="min-width:200px;" id="${lid}-desc"></td>
+    <td><input type="text" class="mono" placeholder="ea" id="${lid}-unit"></td>
+    <td><input type="number" class="mono" placeholder="1" value="1" min="0" step="any" oninput="recalcPOTotals()" id="${lid}-qty"></td>
+    <td><input type="number" class="mono" placeholder="0.00" min="0" step="0.01" oninput="recalcPOTotals()" id="${lid}-rate"></td>
+    <td><div class="inv-line-amount" id="${lid}-amt">0.00</div></td>
+    <td><button class="btn btn-ghost btn-icon btn-sm" onclick="document.getElementById('${lid}').remove();recalcPOTotals();" style="color:var(--text-3);">✕</button></td>`;
+  tbody.appendChild(tr);
+}
+
+function recalcPOTotals() {
+  let total = 0;
+  document.querySelectorAll('#po-lines-body tr').forEach(tr => {
+    const rate = parseFloat(document.getElementById(tr.id + '-rate')?.value) || 0;
+    const qty  = parseFloat(document.getElementById(tr.id + '-qty')?.value) || 0;
+    const amt  = round2(rate * qty);
+    document.getElementById(tr.id + '-amt').textContent = fmtNum(amt);
+    total += amt;
+  });
+  document.getElementById('po-grand-total').textContent = fmtNum(total);
+}
+
+function collectPOFormLines() {
+  const lines = [];
+  document.querySelectorAll('#po-lines-body tr').forEach((tr, idx) => {
+    const desc = document.getElementById(tr.id + '-desc')?.value.trim() || '';
+    const unit = document.getElementById(tr.id + '-unit')?.value.trim() || '';
+    const rate = parseFloat(document.getElementById(tr.id + '-rate')?.value) || 0;
+    const qty  = parseFloat(document.getElementById(tr.id + '-qty')?.value) || 0;
+    if (!desc && !rate && !qty) return;
+    if (!desc) { showToast(`Line ${idx+1}: description required.`, 'warn'); return; }
+    lines.push({ line_no: idx + 1, description: desc, unit, unit_price: rate, quantity: qty, amount: round2(rate * qty) });
+  });
+  if (!lines.length) { showToast('Add at least one line item.', 'warn'); return null; }
+  return lines;
+}
+
+function openNewPO() {
+  _poEditId = null;
+  document.getElementById('modal-po-title').textContent = 'New Purchase Order';
+  document.getElementById('po-number-label').textContent = 'assigned on send';
+  document.getElementById('po-edit-id').value = '';
+  document.getElementById('po-vendor-id').value = '';
+  document.getElementById('po-vendor-search').value = '';
+  document.getElementById('po-vendor-selected').textContent = '';
+  document.getElementById('po-currency').value = 'TTD';
+  document.getElementById('po-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('po-expected-date').value = '';
+  document.getElementById('po-terms').value = '30';
+  document.getElementById('po-incoterms').value = '';
+  document.getElementById('po-incoterms-place').value = '';
+  document.getElementById('po-quote-basis').value = '';
+  document.getElementById('po-quote-ref').value = '';
+  document.getElementById('po-quote-date').value = '';
+  document.getElementById('po-notes').value = '';
+  togglePOQuoteFields();
+  document.getElementById('po-lines-body').innerHTML = '';
+  addPOLine();
+  recalcPOTotals();
+  document.getElementById('modal-po').classList.add('show');
+}
+
+async function savePODraft() {
+  const vendorId = document.getElementById('po-vendor-id').value;
+  if (!vendorId) { showToast('Select a vendor.', 'warn'); return; }
+  const lines = collectPOFormLines();
+  if (!lines) return;
+
+  const basis = document.getElementById('po-quote-basis').value || null;
+  const payload = {
+    company_id: currentCompany.id,
+    vendor_id: vendorId,
+    po_date: document.getElementById('po-date').value,
+    expected_date: document.getElementById('po-expected-date').value || null,
+    currency: document.getElementById('po-currency').value,
+    payment_terms: document.getElementById('po-terms').value,
+    incoterms: document.getElementById('po-incoterms').value || null,
+    incoterms_place: document.getElementById('po-incoterms-place').value.trim() || null,
+    vendor_quote_basis: basis,
+    vendor_quote_ref: basis === 'written' ? (document.getElementById('po-quote-ref').value.trim() || null) : null,
+    vendor_quote_date: basis ? (document.getElementById('po-quote-date').value || null) : null,
+    notes: document.getElementById('po-notes').value.trim() || null,
+    prepared_by: currentUser.name,
+    created_by: currentUser.id,
+  };
+
+  const btn = document.getElementById('po-save-draft-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const editId = document.getElementById('po-edit-id').value;
+    let poId = editId;
+    if (editId) {
+      await sbPatch('purchase_orders', editId, payload);
+      await sbDeleteWhere('po_lines', `po_id=eq.${editId}`);
+    } else {
+      const [created] = await sbPost('purchase_orders', { ...payload, status: 'draft' });
+      poId = created.id;
+    }
+    await sbPost('po_lines', lines.map(l => ({ ...l, po_id: poId })));
+    showToast('Purchase order saved as draft.', 'success');
+    closeModal('modal-po');
+    await loadPurchaseOrders();
+  } catch(e) {
+    showToast('Error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save as Draft';
+  }
+}
+
+async function openEditPO(id) {
+  const po = purchaseOrders.find(p => p.id === id);
+  if (!po) return;
+  if (po.status !== 'draft') { showToast('Only Draft purchase orders can be edited.', 'warn'); return; }
+
+  const vendor = contacts.find(c => c.id === po.vendor_id) || {};
+  openNewPO();
+  _poEditId = id;
+  document.getElementById('modal-po-title').textContent = `Edit Purchase Order — Draft`;
+  document.getElementById('po-edit-id').value = id;
+  document.getElementById('po-vendor-id').value = po.vendor_id;
+  document.getElementById('po-vendor-search').value = vendor.trading_name || vendor.name || '';
+  document.getElementById('po-vendor-selected').textContent = vendor.name ? '✓ ' + vendor.name : '';
+  document.getElementById('po-currency').value = po.currency;
+  document.getElementById('po-date').value = po.po_date;
+  document.getElementById('po-expected-date').value = po.expected_date || '';
+  document.getElementById('po-terms').value = po.payment_terms || '30';
+  document.getElementById('po-incoterms').value = po.incoterms || '';
+  document.getElementById('po-incoterms-place').value = po.incoterms_place || '';
+  document.getElementById('po-quote-basis').value = po.vendor_quote_basis || '';
+  document.getElementById('po-quote-ref').value = po.vendor_quote_ref || '';
+  document.getElementById('po-quote-date').value = po.vendor_quote_date || '';
+  document.getElementById('po-notes').value = po.notes || '';
+  togglePOQuoteFields();
+
+  const existingLines = await sbGet('po_lines', `po_id=eq.${id}&order=line_no.asc`);
+  document.getElementById('po-lines-body').innerHTML = '';
+  (existingLines.length ? existingLines : [{}]).forEach(l => {
+    addPOLine();
+    const rows = document.querySelectorAll('#po-lines-body tr');
+    const tr = rows[rows.length - 1];
+    document.getElementById(tr.id + '-desc').value = l.description || '';
+    document.getElementById(tr.id + '-unit').value = l.unit || '';
+    document.getElementById(tr.id + '-rate').value = l.unit_price ?? '';
+    document.getElementById(tr.id + '-qty').value  = l.quantity ?? '';
+  });
+  recalcPOTotals();
+  document.getElementById('modal-po').classList.add('show');
+}
+
 function setApPage(n) { apPage = n; renderAPTable(_apFiltered); }
 function sortAP(col) {
   if (apSortCol === col) { apSortDir = apSortDir === 'asc' ? 'desc' : 'asc'; }
@@ -12256,6 +12412,22 @@ function selectBillVendor(id, displayName, legalName) {
   document.getElementById('bill-vendor-search').value = displayName;
   document.getElementById('bill-vendor-selected').textContent = '✓ ' + legalName;
   document.getElementById('bill-vendor-results').classList.remove('open');
+}
+
+const searchPOVendor = createContactSearch({
+  inputId:    'po-vendor-search',
+  resultsId:  'po-vendor-results',
+  typeFilter: c => (c.contact_type === 'supplier' || c.contact_type === 'both') && c.is_active !== false,
+  subtitleFn: c => escHTML(c.name),
+  onSelect:   c => selectPOVendor(c.id, c.trading_name || c.name, c.name, c.payment_terms),
+});
+
+function selectPOVendor(id, displayName, legalName, paymentTermsDays) {
+  document.getElementById('po-vendor-id').value     = id;
+  document.getElementById('po-vendor-search').value = displayName;
+  document.getElementById('po-vendor-selected').textContent = '✓ ' + legalName;
+  document.getElementById('po-vendor-results').classList.remove('open');
+  if (paymentTermsDays != null) document.getElementById('po-terms').value = String(paymentTermsDays);
 }
 
 async function jcSyncBillLineCatalog(line) {
