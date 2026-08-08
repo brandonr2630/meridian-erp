@@ -8,7 +8,16 @@ Meridian ERP's AP module currently starts at Bills — a vendor invoice already 
 
 ## Placement
 
-New "Purchase Orders" nav item under **Finance → Transactions**, positioned between Accounts Payable and Vendors. Gated on the existing `finance:ap:read` / `finance:ap:write` permission atoms — no new RBAC atoms, no role-JSONB migration required for existing companies/roles.
+New "Purchase Orders" nav item under **Finance → Transactions**, positioned between Accounts Payable and Vendors. Gated on the existing `finance:ap:read` / `finance:ap:write` / `finance:ap:approve` permission atoms — no new RBAC atoms, no role-JSONB migration required for existing companies/roles.
+
+### Prepare vs. approve separation
+
+This app already splits "create" from "approve" for Bills (`finance:ap:write` vs `finance:ap:approve` — see `canPost()`/`canApprove()` at `index.html:5718-5720`, and `approveBill()`'s draft→approved transition). POs reuse the identical split, no new atoms:
+
+- `finance:ap:write` — create/edit a Draft PO, Duplicate-as-template.
+- `finance:ap:approve` — **Send** (draft→open: assigns PO#, triggers PDF/email), and the manual Close/Cancel actions.
+
+A non-admin with only `finance:ap:write` can prepare a PO end-to-end but the Send/Close/Cancel buttons simply don't render for them — same pattern as a sales rep who can draft a Bill but not approve it. `prepared_by` (see below) still records who actually built it regardless of who sends it.
 
 ## Data model
 
@@ -24,7 +33,14 @@ New tables (Supabase migration via MCP, following this project's established con
 | `po_date` | |
 | `expected_date` | nullable |
 | `currency` | TTD/USD/GYD, matches vendor/company convention |
-| `notes` | |
+| `payment_terms` | Text, same select convention as Quotation's `#quo-terms` (Due on Receipt / Net 7 / Net 14 / Net 30 / Net 60) — pre-filled from `vendor.payment_terms` (days → nearest "Net N" option) same as the existing Vendor record's own `payment_terms` field |
+| `incoterms` | Nullable, same Incoterms 2020 select as Invoice/Quotation (`#quo-incoterms`) — EXW/FCA/CPT/CIP/DAP/DPU/DDP/FAS/FOB/CFR/CIF |
+| `incoterms_place` | Nullable text — named place/port, paired with `incoterms` exactly as on Invoice/Quotation |
+| `vendor_quote_basis` | Nullable, `written` \| `verbal` — how the vendor's pricing was obtained, drives which of the two fields below apply |
+| `vendor_quote_ref` | Nullable text — vendor's quotation reference number (only meaningful when `vendor_quote_basis = 'written'`) |
+| `vendor_quote_date` | Nullable date — date the vendor's quotation (written or verbal) was given |
+| `notes` | Free text — delivery instructions and any other notes go here (no separate delivery-instructions field; `notes` already serves this role on every other doc type in this app) |
+| `prepared_by` | Text snapshot of `currentUser.name`, auto-filled at creation, read-only in the modal — display value for the PO document itself (header + PDF), independent of the `created_by` audit FK so it survives a later user rename/deactivation |
 | `status` | `draft` \| `open` \| `closed` \| `cancelled` |
 | `created_by`, `created_at`, `updated_at` | standard audit columns |
 
@@ -61,9 +77,11 @@ Computed on read (PO detail view, Bill's PO-line picker), not maintained as a ru
 
 ## PO modal
 
-- **Header fields:** Vendor, PO# (shows "Draft" until Send; assigned at Send), PO Date, Expected Date, Currency, Notes.
+- **Header fields:** Vendor, PO# (shows "Draft" until Send; assigned at Send), PO Date, Expected Date, Currency, Payment Terms, Incoterms + Named Place/Port, Vendor Quote Basis (— None — / Written / Verbal) with conditional Ref field (Written only) + Date field (either), Notes, Prepared By (auto-filled from `currentUser.name`, read-only).
 - **Line items table:** Ref (auto line_no) | Description | Unit | Rate | Qty | Amount, add/remove rows, running total footer.
-- **Actions:** Save as Draft. **Send** — transitions `draft → open`, triggers the PDF/email flow (see below). **Duplicate as new** — available from any status, creates a fresh Draft PO copying vendor + all lines (qty editable, new PO# assigned), used as a template for repeat orders. Manual **Close** / **Cancel** actions per status rules above.
+- **Actions** (`finance:ap:write`): Save as Draft, Duplicate as new (see below).
+- **Actions** (`finance:ap:approve`): **Send** — transitions `draft → open`, assigns PO#, triggers the PDF/email flow (see below). Manual **Close** / **Cancel**.
+- **Duplicate as new** — available from any status, creates a fresh Draft PO copying vendor + all lines + payment terms/incoterms (qty editable, new PO# assigned at its own Send), used as a template for repeat orders.
 
 ## PDF & email
 
