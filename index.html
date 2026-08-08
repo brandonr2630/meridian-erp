@@ -6257,7 +6257,7 @@ function navigate(view) {
     if (view !== 'dashboard') {
       const subGuard = [
         [['ar','credit-notes'],              u.module_finance_ar      === false],
-        [['ap','vendors','purchase-orders'],  u.module_finance_ap      === false],
+        [['ap','vendors','purchase-orders'], u.module_finance_ap      === false],
         [['bank'],                           u.module_finance_bank    === false],
         [['coa','journal'],                  u.module_finance_ledger  === false],
         [['pl','bs','tb','cf','aged-ar','aged-ap'], u.module_finance_reports === false],
