@@ -510,6 +510,20 @@ body {
 }
 #ap-row-menu.open { display: block; }
 
+/* ── PO ROW ACTIONS OVERFLOW MENU (fixed, shared, one instance reused per row) ── */
+#po-row-menu {
+  position: fixed;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  min-width: 150px;
+  z-index: var(--z-dropdown);
+  display: none;
+  overflow: hidden;
+}
+#po-row-menu.open { display: block; }
+
 /* ── STAT CARDS ── */
 .stat-grid {
   display: grid;
@@ -692,6 +706,9 @@ body {
 .badge-converted  { background: var(--green-bg); color: var(--green); border: 1px solid rgba(76,175,125,.2); }
 .badge-sent       { background: var(--blue-bg);  color: var(--blue);  border: 1px solid rgba(91,155,213,.2); }
 .badge-converted { background: var(--green-bg); color: var(--green); border: 1px solid rgba(76,175,125,.2); }
+.badge-open       { background: var(--green-bg); color: var(--green); border: 1px solid rgba(76,175,125,.2); }
+.badge-closed     { background: var(--bg-4);     color: var(--text-3); border: 1px solid var(--border); }
+.badge-cancelled  { background: var(--red-bg);   color: var(--red);   border: 1px solid rgba(224,92,92,.2); }
 .badge-declined  { background: var(--red-bg);   color: var(--red);   border: 1px solid rgba(224,92,92,.2); }
 .badge-expired      { background: var(--bg-4);     color: var(--text-3);  border: 1px solid var(--border); }
 .badge-prospect     { background: var(--bg-4);     color: var(--text-3);  border: 1px solid var(--border); }
@@ -2966,6 +2983,29 @@ body.light .global-search-results, body.light .split-btn-menu {
       </div>
     </div>
 
+    <!-- ── PURCHASE ORDERS ── -->
+    <div class="page-view" id="view-purchase-orders">
+      <div class="page-header">
+        <div><div class="page-title">Purchase Orders</div><div class="page-subtitle">Orders to vendors</div></div>
+        <div class="page-actions">
+          <button class="btn btn-primary btn-sm" data-perm="finance:ap:write" onclick="openNewPO()">+ New Purchase Order</button>
+        </div>
+      </div>
+      <div class="page-body">
+        <div class="table-wrap" id="po-table-wrap">
+          <table class="data-table" id="po-table">
+            <thead>
+              <tr>
+                <th>PO No.</th><th>Vendor</th><th>Date</th><th>Expected</th>
+                <th>Currency</th><th class="right">Total</th><th>Status</th><th class="right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="po-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- ── ERP COMPANIES ── -->
     <div class="page-view" id="view-companies">
       <div class="page-header">
@@ -4006,6 +4046,9 @@ body.light .global-search-results, body.light .split-btn-menu {
 
 <!-- ── AP ROW ACTIONS OVERFLOW MENU (fixed, shared, content built per-row on open) ── -->
 <div id="ap-row-menu"></div>
+
+<!-- ── PO ROW ACTIONS OVERFLOW MENU (fixed, shared, content built per-row on open) ── -->
+<div id="po-row-menu"></div>
 
 <!-- ── REPORT PREVIEW MODAL ── -->
 <div class="modal-overlay" id="modal-report-preview" onclick="if(event.target===this)closeModal('modal-report-preview')">
@@ -9850,6 +9893,71 @@ function toggleApRowMenu(e, billId) {
 function closeApRowMenu() { document.getElementById('ap-row-menu')?.classList.remove('open'); }
 document.addEventListener('click', e => {
   if (!e.target.closest('#ap-row-menu') && !e.target.closest('.btn[onclick^="toggleApRowMenu"]')) closeApRowMenu();
+});
+
+function renderPOTable(list) {
+  const contactMap = Object.fromEntries(contacts.map(c => [c.id, c.trading_name || c.name]));
+  const tbody = document.getElementById('po-table-body');
+  if (!list.length) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:24px;">No purchase orders yet.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = list.map(po => {
+    const canSend   = po.status === 'draft'  && can('finance:ap:approve');
+    const canEdit   = po.status === 'draft'  && can('finance:ap:write');
+    const canClose  = po.status === 'open'   && can('finance:ap:approve');
+    const canCancel = ['draft','open'].includes(po.status) && can('finance:ap:approve');
+
+    const primaryBtn = canSend
+      ? `<button class="btn btn-outline btn-sm" onclick="sendPO('${po.id}')">Send</button>`
+      : '';
+
+    const menuActions = [];
+    if (po.status === 'draft' && can('finance:ap:write')) menuActions.push({ label: 'Delete', onclick: `deleteDocument('purchase_order','${po.id}','${po.po_no||'this draft PO'}')` });
+    if (canEdit)   menuActions.push({ label: 'Edit',       onclick: `openEditPO('${po.id}')` });
+    menuActions.push({ label: 'Duplicate as new', onclick: `duplicatePO('${po.id}')` });
+    if (po.status !== 'draft') {
+      menuActions.push({ label: 'Print',  onclick: `openPOPDF('${po.id}')` });
+      menuActions.push({ label: 'Email',  onclick: `openEmailDocument('purchase-order','${po.id}')` });
+    }
+    if (canClose)  menuActions.push({ label: 'Close PO',  onclick: `closePO('${po.id}')` });
+    if (canCancel) menuActions.push({ label: 'Cancel PO', onclick: `cancelPO('${po.id}')` });
+
+    _poRowMenuActions[po.id] = menuActions;
+
+    return `<tr>
+      <td class="mono bold">${po.po_no || '<span style="color:var(--text-3);font-style:italic;font-size:11px;">Draft</span>'}</td>
+      <td>${escHTML(contactMap[po.vendor_id] || '—')}</td>
+      <td>${formatDateDisplay(po.po_date)}</td>
+      <td>${po.expected_date ? formatDateDisplay(po.expected_date) : '—'}</td>
+      <td>${po.currency}</td>
+      <td class="right mono">${fmt(po._total ?? 0, po.currency)}</td>
+      <td><span class="badge badge-${po.status}">${po.status}</span></td>
+      <td class="right">${primaryBtn} <button class="btn btn-ghost btn-icon btn-sm" onclick="togglePORowMenu('${po.id}', this)">⋯</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function togglePORowMenu(poId, btnEl) {
+  const menu = document.getElementById('po-row-menu');
+  if (menu.dataset.poId === poId && menu.classList.contains('open')) {
+    menu.classList.remove('open');
+    return;
+  }
+  const actions = _poRowMenuActions[poId] || [];
+  menu.innerHTML = actions.map(a =>
+    `<div class="split-btn-menu-item" onclick="closePORowMenu();${a.onclick}"><div class="menu-label">${escHTML(a.label)}</div></div>`
+  ).join('');
+  menu.dataset.poId = poId;
+  const rect = btnEl.getBoundingClientRect();
+  const menuW = 150;
+  menu.style.top = (rect.bottom + 5) + 'px';
+  menu.style.left = Math.max(8, Math.min(rect.right - menuW, window.innerWidth - menuW - 8)) + 'px';
+  menu.classList.add('open');
+}
+function closePORowMenu() { document.getElementById('po-row-menu')?.classList.remove('open'); }
+document.addEventListener('click', e => {
+  if (!e.target.closest('#po-row-menu') && !e.target.closest('.btn[onclick^="togglePORowMenu"]')) closePORowMenu();
 });
 
 function setApPage(n) { apPage = n; renderAPTable(_apFiltered); }
