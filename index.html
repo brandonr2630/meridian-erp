@@ -5070,6 +5070,22 @@ body.light .global-search-results, body.light .split-btn-menu {
   </div>
 </div>
 
+<!-- ── PURCHASE ORDER PDF PREVIEW MODAL ── -->
+<div class="modal-overlay" id="modal-po-pdf" onclick="if(event.target===this)closeModal('modal-po-pdf')">
+  <div class="modal modal-xl" style="max-width:min(860px,95vw);">
+    <div class="modal-header">
+      <div class="modal-title">Purchase Order Preview</div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary btn-sm" onclick="printPDF(this)">⬇ Download PDF</button>
+        <button class="modal-close" onclick="closeModal('modal-po-pdf')">✕</button>
+      </div>
+    </div>
+    <div class="modal-body" style="padding:16px;background:#555;overflow-x:auto;overflow-y:auto;max-height:82vh;color-scheme:light;">
+      <iframe id="po-pdf-content" style="width:860px;min-height:1100px;border:none;display:block;margin:0 auto;" scrolling="yes"></iframe>
+    </div>
+  </div>
+</div>
+
 <!-- ── QUOTATION PDF PREVIEW MODAL ── -->
 <div class="modal-overlay" id="modal-quo-pdf" onclick="if(event.target===this)closeModal('modal-quo-pdf')">
   <div class="modal modal-xl" style="max-width:min(860px,95vw);">
@@ -10105,6 +10121,8 @@ function togglePOQuoteFields() {
   document.getElementById('po-quote-date-field').style.display = basis ? '' : 'none';
 }
 
+const BILL_TERMS_LABELS = { '0': 'Due on Receipt', '7': 'Net 7', '14': 'Net 14', '30': 'Net 30', '60': 'Net 60' };
+
 function addPOLine() {
   const tbody = document.getElementById('po-lines-body');
   const n     = tbody.rows.length + 1;
@@ -10363,6 +10381,37 @@ async function cancelPO(id) {
     showToast('Purchase order cancelled.', 'success');
     await loadPurchaseOrders();
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+// ── Purchase Order PDF ────────────────────────────────────────────
+async function openPOPDF(id) {
+  const po = purchaseOrders.find(p => p.id === id) || (await sbGet('purchase_orders', `id=eq.${id}`))[0];
+  if (!po) return;
+  let lines = [];
+  try { lines = await sbGet('po_lines', `po_id=eq.${id}&order=line_no.asc`); } catch(e) {}
+  const vendor = contacts.find(c => c.id === po.vendor_id) || {};
+  const co = currentCompany;
+
+  const total   = lines.reduce((s,l) => s + parseFloat(l.amount||0), 0);
+  const totalsH = calcTotalsH(po.incoterms, po.notes, null);
+  const pages   = splitLinesIntoPages(lines, calcFirstRows(totalsH), calcContRows(totalsH));
+
+  const metaRows = [
+    ['PO Date :', formatDateDisplay(po.po_date)],
+    ['Expected :', po.expected_date ? formatDateDisplay(po.expected_date) : '—'],
+    ['Terms :', BILL_TERMS_LABELS[po.payment_terms] || (po.payment_terms + ' days')],
+    ...(po.vendor_quote_basis === 'written' && po.vendor_quote_ref ? [['Vendor Quote Ref :', escHTML(po.vendor_quote_ref)]] : []),
+    ...(po.vendor_quote_basis === 'verbal' ? [['Vendor Quote :', 'Verbal' + (po.vendor_quote_date ? ' — ' + formatDateDisplay(po.vendor_quote_date) : '')]] : []),
+    ['Prepared By :', escHTML(po.prepared_by || '—')],
+  ];
+
+  const headerHTML = buildPDFHeader(co, 'Purchase Order', po.po_no || 'DRAFT', 'Total Value',
+    fmt(total, po.currency), vendor, metaRows);
+
+  renderMultiPagePDF('po-pdf-content', pages, headerHTML, true, po.currency,
+    total, 0, 0, total, po.incoterms, po.incoterms_place, po.notes, null, co.name, po.po_no);
+
+  document.getElementById('modal-po-pdf').classList.add('show');
 }
 
 function setApPage(n) { apPage = n; renderAPTable(_apFiltered); }
