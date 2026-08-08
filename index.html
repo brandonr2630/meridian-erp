@@ -12586,15 +12586,20 @@ async function loadOpenPOsForBillVendor(vendorId) {
   const wrap = document.getElementById('bill-po-picker-wrap');
   const sel  = document.getElementById('bill-po-picker');
   sel.innerHTML = '<option value="">— None —</option>';
-  const openPOs = await sbGet('purchase_orders', `company_id=eq.${currentCompany.id}&vendor_id=eq.${vendorId}&status=eq.open`);
-  if (!openPOs.length) { wrap.style.display = 'none'; return; }
-  openPOs.forEach(po => {
-    const opt = document.createElement('option');
-    opt.value = po.id;
-    opt.textContent = `${po.po_no} — ${formatDateDisplay(po.po_date)}`;
-    sel.appendChild(opt);
-  });
-  wrap.style.display = '';
+  try {
+    const openPOs = await sbGet('purchase_orders', `company_id=eq.${currentCompany.id}&vendor_id=eq.${vendorId}&status=eq.open`);
+    if (!openPOs.length) { wrap.style.display = 'none'; return; }
+    openPOs.forEach(po => {
+      const opt = document.createElement('option');
+      opt.value = po.id;
+      opt.textContent = `${po.po_no} — ${formatDateDisplay(po.po_date)}`;
+      sel.appendChild(opt);
+    });
+    wrap.style.display = '';
+  } catch(e) {
+    wrap.style.display = 'none';
+    showToast('Could not load open POs for this vendor.', 'warn');
+  }
 }
 
 async function onBillPOPicked() {
@@ -12608,6 +12613,7 @@ async function onBillPOPicked() {
   const po = purchaseOrders.find(p => p.id === poId) || (await sbGet('purchase_orders', `id=eq.${poId}`))[0];
   document.getElementById('bill-currency').value = po.currency;
   document.getElementById('bill-terms').value = po.payment_terms || '30';
+  calcBillDueDate();
 
   document.getElementById('bill-lines-body').innerHTML = '';
   openLines.forEach(l => {
