@@ -70,8 +70,10 @@ No other changes to `bill_lines` or to `saveBill()`'s core write path. A Bill li
 ```
 remaining(po_line) = po_lines.qty − SUM(bill_lines.qty
   WHERE bill_lines.po_line_id = po_line.id
-  AND bill.status != 'voided')
+  AND bill.status != 'void')
 ```
+
+(Bills use status value `'void'`, not `'voided'` — confirmed against `voidBill()`. `'voided'` is the convention for `payments`/`payment_receipts` only; corrected here to avoid a filter that silently matches nothing.)
 
 Computed on read (PO detail view, Bill's PO-line picker), not maintained as a running counter. This means Void Bill and Edit Bill need **zero** special-case logic for PO consumption — voiding or editing a bill simply changes what the aggregate sums over. A PO auto-transitions to `closed` when every line's remaining qty is 0; recomputed after each Bill save that references the PO. Manual early-close also available (escape hatch for a PO the user considers done despite qty remaining, e.g. vendor substitution).
 
@@ -91,7 +93,7 @@ Reuses the existing `generatePDFBase64()` + `send-document-email` Edge Function 
 
 1. User opens a new/draft Bill, selects a Vendor.
 2. A "Link Purchase Order" dropdown appears, listing that vendor's `open`-status POs (scoped to `currentCompany.id`).
-3. Selecting a PO auto-populates the Bill's line items from that PO's lines where remaining qty > 0 — description/unit/rate pre-filled, qty defaulted to the remaining amount. Each auto-populated row carries an **exclude** checkbox so the user can drop lines not yet supplied in this delivery (they remain available on the PO for a future Bill).
+3. Selecting a PO auto-populates the Bill's line items from that PO's lines where remaining qty > 0 — description/unit/rate pre-filled, qty defaulted to the remaining amount. Each auto-populated row uses the Bill form's existing per-line ✕ remove button to let the user drop lines not yet supplied in this delivery (they remain available on the PO for a future Bill) — no separate "exclude" control needed, this is the same button every other Bill line already has.
 4. User may still add extra manual lines with no `po_line_id` (freight, misc charges) alongside the PO-sourced ones.
 5. On save, each Bill line carries `po_id`/`po_line_id` where applicable. The AP record/detail view displays PO# and PO date for any bill that references one.
 6. After save, the linked PO(s) are recomputed for auto-close per the remaining-qty rule above.
