@@ -10264,6 +10264,29 @@ async function openEditPO(id) {
   document.getElementById('modal-po').classList.add('show');
 }
 
+async function sendPO(id) {
+  const ok = await showConfirm('Send this purchase order? A PO number will be assigned.', 'Send Purchase Order', 'Send');
+  if (!ok) return;
+  try {
+    const po = purchaseOrders.find(p => p.id === id);
+    let poNo = po?.po_no;
+    if (!poNo) {
+      let counters = await sbGet('sequence_counters', `company_id=eq.${currentCompany.id}&sequence_type=eq.purchase_order`);
+      let counter  = counters[0];
+      if (!counter) {
+        const created = await sbPost('sequence_counters', { company_id: currentCompany.id, sequence_type: 'purchase_order', prefix: 'PO-', last_number: 0, padding: 4 });
+        counter = created[0];
+      }
+      const nextNum = (counter.last_number || 0) + 1;
+      poNo = `${counter.prefix || 'PO-'}${String(nextNum).padStart(counter.padding || 4, '0')}`;
+      await sbPatch('sequence_counters', counter.id, { last_number: nextNum });
+    }
+    await sbPatch('purchase_orders', id, { status: 'open', po_no: poNo });
+    showToast(`Purchase Order ${poNo} sent.`, 'success');
+    await loadPurchaseOrders();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
 function setApPage(n) { apPage = n; renderAPTable(_apFiltered); }
 function sortAP(col) {
   if (apSortCol === col) { apSortDir = apSortDir === 'asc' ? 'desc' : 'asc'; }
