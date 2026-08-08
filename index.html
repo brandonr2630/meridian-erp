@@ -10176,7 +10176,9 @@ function openNewPO() {
 
 async function savePODraft() {
   const vendorId = document.getElementById('po-vendor-id').value;
+  const poDate   = document.getElementById('po-date').value;
   if (!vendorId) { showToast('Select a vendor.', 'warn'); return; }
+  if (!poDate)   { showToast('PO date is required.', 'warn'); return; }
   const lines = collectPOFormLines();
   if (!lines) return;
 
@@ -10184,7 +10186,7 @@ async function savePODraft() {
   const payload = {
     company_id: currentCompany.id,
     vendor_id: vendorId,
-    po_date: document.getElementById('po-date').value,
+    po_date: poDate,
     expected_date: document.getElementById('po-expected-date').value || null,
     currency: document.getElementById('po-currency').value,
     payment_terms: document.getElementById('po-terms').value,
@@ -10215,13 +10217,14 @@ async function savePODraft() {
     closeModal('modal-po');
     await loadPurchaseOrders();
   } catch(e) {
-    showToast('Error: ' + e.message, 'error');
+    showToast('Error saving purchase order: ' + e.message, 'error');
   } finally {
     btn.disabled = false; btn.textContent = 'Save as Draft';
   }
 }
 
 async function openEditPO(id) {
+  if (!can('finance:ap:write')) { showToast('Insufficient permission.', 'error'); return; }
   const po = purchaseOrders.find(p => p.id === id);
   if (!po) return;
   if (po.status !== 'draft') { showToast('Only Draft purchase orders can be edited.', 'warn'); return; }
@@ -12422,12 +12425,15 @@ const searchPOVendor = createContactSearch({
   onSelect:   c => selectPOVendor(c.id, c.trading_name || c.name, c.name, c.payment_terms),
 });
 
+const PO_VALID_TERMS = ['0', '7', '14', '30', '60'];
 function selectPOVendor(id, displayName, legalName, paymentTermsDays) {
   document.getElementById('po-vendor-id').value     = id;
   document.getElementById('po-vendor-search').value = displayName;
   document.getElementById('po-vendor-selected').textContent = '✓ ' + legalName;
   document.getElementById('po-vendor-results').classList.remove('open');
-  if (paymentTermsDays != null) document.getElementById('po-terms').value = String(paymentTermsDays);
+  if (paymentTermsDays != null && PO_VALID_TERMS.includes(String(paymentTermsDays))) {
+    document.getElementById('po-terms').value = String(paymentTermsDays);
+  }
 }
 
 async function jcSyncBillLineCatalog(line) {
