@@ -12736,12 +12736,32 @@ function collectBillFormLines(status) {
   return { lines, subtotal };
 }
 
+async function checkPOOverbill() {
+  const rows = document.querySelectorAll('#bill-lines-body tr[id^="billl-"]:not([id$="-link"])');
+  const byPOLine = {};
+  rows.forEach(tr => {
+    if (!tr.dataset.poLineId) return;
+    const qty = tr.querySelectorAll('input[type="number"]')[0]?.value;
+    byPOLine[tr.dataset.poLineId] = (byPOLine[tr.dataset.poLineId] || 0) + (parseFloat(qty) || 0);
+  });
+  const poLineIds = Object.keys(byPOLine);
+  if (!poLineIds.length) return true;
+
+  const lines = await sbGet('po_lines', `id=in.(${poLineIds.join(',')})`);
+  const overLines = lines.filter(l => byPOLine[l.id] > parseFloat(l.quantity || 0));
+  if (!overLines.length) return true;
+
+  const msg = overLines.map(l => `"${l.description}" — billing ${byPOLine[l.id]}, PO line qty is ${l.quantity}`).join('\n');
+  return await showConfirm(`This bill exceeds the ordered quantity on ${overLines.length} PO line(s):\n\n${msg}\n\nProceed anyway?`, 'Quantity Exceeds PO', 'Bill Anyway');
+}
+
 async function saveBill(status) {
   const vendorId = document.getElementById('bill-vendor-id').value;
   const date     = document.getElementById('bill-date').value;
   const currency = document.getElementById('bill-currency').value;
   if (!vendorId){ showToast('Please select a vendor.', 'warn'); return; }
   if (!date)    { showToast('Bill date is required.', 'warn');  return; }
+  if (!(await checkPOOverbill())) return;
 
   const collected = collectBillFormLines(status);
   if (!collected) return;
@@ -12809,6 +12829,7 @@ async function saveBillEdit() {
 
   const reason = document.getElementById('bill-edit-reason').value.trim();
   if (!reason) { showToast('A reason for this edit is required.', 'warn'); return; }
+  if (!(await checkPOOverbill())) return;
 
   const collected = collectBillFormLines(bill.status);
   if (!collected) return;
