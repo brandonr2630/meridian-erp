@@ -4935,6 +4935,141 @@ body.light .global-search-results, body.light .split-btn-menu {
   </div>
 </div>
 
+<!-- ── PURCHASE ORDER MODAL ── -->
+<div class="modal-overlay" id="modal-po" onclick="if(event.target===this)closeModal('modal-po')">
+  <div class="modal modal-lg" style="max-width:880px;">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modal-po-title">New Purchase Order</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:3px;">
+          PO Number: <span style="font-family:'DM Mono',monospace;color:var(--gold);" id="po-number-label">assigned on send</span>
+        </div>
+      </div>
+      <button class="modal-close" onclick="closeModal('modal-po')">✕</button>
+    </div>
+    <input type="hidden" id="po-edit-id">
+    <div class="modal-body">
+
+      <div class="form-grid grid-3">
+        <div class="field span-2">
+          <label class="field-label">Vendor</label>
+          <div class="contact-search-wrap">
+            <input type="text" id="po-vendor-search" placeholder="Search vendor…" autocomplete="off"
+                   oninput="searchPOVendor()" onfocus="searchPOVendor()">
+            <div class="contact-search-results" id="po-vendor-results"></div>
+          </div>
+          <input type="hidden" id="po-vendor-id">
+          <div style="font-size:11px;color:var(--gold);margin-top:4px;" id="po-vendor-selected"></div>
+        </div>
+        <div class="field">
+          <label class="field-label">Currency</label>
+          <select id="po-currency">
+            <option value="TTD">TTD — Trinidad Dollar</option>
+            <option value="USD">USD — US Dollar</option>
+            <option value="GYD">GYD — Guyana Dollar</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label">PO Date</label>
+          <input type="date" id="po-date" class="mono">
+        </div>
+        <div class="field">
+          <label class="field-label">Expected Date</label>
+          <input type="date" id="po-expected-date" class="mono">
+        </div>
+        <div class="field">
+          <label class="field-label">Payment Terms</label>
+          <select id="po-terms">
+            <option value="0">Due on Receipt</option>
+            <option value="7">Net 7</option>
+            <option value="14">Net 14</option>
+            <option value="30" selected>Net 30</option>
+            <option value="60">Net 60</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-grid grid-2" style="margin-top:10px;">
+        <div class="field">
+          <label class="field-label">Incoterms 2020 <span style="color:var(--text-3);font-weight:400;">(optional)</span></label>
+          <select id="po-incoterms">
+            <option value="">— None —</option>
+            <option value="EXW">EXW — Ex Works</option>
+            <option value="FCA">FCA — Free Carrier</option>
+            <option value="CPT">CPT — Carriage Paid To</option>
+            <option value="CIP">CIP — Carriage and Insurance Paid To</option>
+            <option value="DAP">DAP — Delivered at Place</option>
+            <option value="DPU">DPU — Delivered at Place Unloaded</option>
+            <option value="DDP">DDP — Delivered Duty Paid</option>
+            <option value="FAS">FAS — Free Alongside Ship</option>
+            <option value="FOB">FOB — Free On Board</option>
+            <option value="CFR">CFR — Cost and Freight</option>
+            <option value="CIF">CIF — Cost, Insurance and Freight</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label">Named Place / Port</label>
+          <input type="text" id="po-incoterms-place" placeholder="e.g. Port of Spain, Trinidad" class="mono">
+        </div>
+      </div>
+
+      <div class="form-grid grid-3" style="margin-top:10px;">
+        <div class="field">
+          <label class="field-label">Vendor Quote Basis</label>
+          <select id="po-quote-basis" onchange="togglePOQuoteFields()">
+            <option value="">— None —</option>
+            <option value="written">Written</option>
+            <option value="verbal">Verbal</option>
+          </select>
+        </div>
+        <div class="field" id="po-quote-ref-field" style="display:none;">
+          <label class="field-label">Vendor Quote Ref</label>
+          <input type="text" id="po-quote-ref" class="mono">
+        </div>
+        <div class="field" id="po-quote-date-field" style="display:none;">
+          <label class="field-label">Vendor Quote Date</label>
+          <input type="date" id="po-quote-date" class="mono">
+        </div>
+      </div>
+
+      <div class="field" style="margin-top:10px;">
+        <label class="field-label">Notes</label>
+        <textarea id="po-notes" rows="2" placeholder="Delivery instructions, special conditions, etc."></textarea>
+      </div>
+
+      <div style="font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin:16px 0 8px;">Line Items</div>
+      <div class="table-wrap" style="margin-bottom:10px;">
+        <table class="inv-lines-table">
+          <thead>
+            <tr>
+              <th style="width:40px;">Ref</th><th>Description</th><th style="width:90px;">Unit</th>
+              <th class="right" style="width:100px;">Rate</th><th class="right" style="width:90px;">Qty</th>
+              <th class="right" style="width:120px;">Amount</th><th style="width:36px;"></th>
+            </tr>
+          </thead>
+          <tbody id="po-lines-body"></tbody>
+        </table>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="addPOLine()" style="margin-bottom:16px;">+ Add Line</button>
+
+      <div style="display:flex;justify-content:flex-end;">
+        <div style="min-width:260px;">
+          <div class="inv-totals">
+            <div class="inv-totals-row total-row">
+              <span class="label">Total</span>
+              <span class="val" id="po-grand-total">0.00</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-po')">Cancel</button>
+      <button class="btn btn-primary" id="po-save-draft-btn" onclick="savePODraft()">Save as Draft</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── QUOTATION PDF PREVIEW MODAL ── -->
 <div class="modal-overlay" id="modal-quo-pdf" onclick="if(event.target===this)closeModal('modal-quo-pdf')">
   <div class="modal modal-xl" style="max-width:min(860px,95vw);">
@@ -9963,6 +10098,12 @@ function closePORowMenu() { document.getElementById('po-row-menu')?.classList.re
 document.addEventListener('click', e => {
   if (!e.target.closest('#po-row-menu') && !e.target.closest('.btn[onclick^="togglePORowMenu"]')) closePORowMenu();
 });
+
+function togglePOQuoteFields() {
+  const basis = document.getElementById('po-quote-basis').value;
+  document.getElementById('po-quote-ref-field').style.display  = basis === 'written' ? '' : 'none';
+  document.getElementById('po-quote-date-field').style.display = basis ? '' : 'none';
+}
 
 function setApPage(n) { apPage = n; renderAPTable(_apFiltered); }
 function sortAP(col) {
