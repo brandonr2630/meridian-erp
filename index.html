@@ -10318,6 +10318,53 @@ async function sendPO(id) {
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
+async function computePORemaining(poId) {
+  const lines = await sbGet('po_lines', `po_id=eq.${poId}&order=line_no.asc`);
+  const consumed = await sbGet('bill_lines', `po_id=eq.${poId}&select=po_line_id,quantity,bills(status)`);
+  const consumedByLine = {};
+  consumed.forEach(c => {
+    if (c.bills?.status === 'void') return;
+    consumedByLine[c.po_line_id] = (consumedByLine[c.po_line_id] || 0) + parseFloat(c.quantity || 0);
+  });
+  return lines.map(l => ({
+    ...l,
+    consumed: consumedByLine[l.id] || 0,
+    remaining: Math.max(0, parseFloat(l.quantity || 0) - (consumedByLine[l.id] || 0)),
+  }));
+}
+
+async function recomputePOStatus(poId) {
+  const po = purchaseOrders.find(p => p.id === poId) || (await sbGet('purchase_orders', `id=eq.${poId}`))[0];
+  if (!po || !['open','closed'].includes(po.status)) return; // don't touch draft/cancelled
+  const withRemaining = await computePORemaining(poId);
+  const fullyConsumed = withRemaining.every(l => l.remaining <= 0);
+  if (fullyConsumed && po.status !== 'closed') {
+    await sbPatch('purchase_orders', poId, { status: 'closed' });
+  } else if (!fullyConsumed && po.status === 'closed') {
+    await sbPatch('purchase_orders', poId, { status: 'open' });
+  }
+}
+
+async function closePO(id) {
+  const ok = await showConfirm('Close this purchase order early? Any remaining quantity will no longer be available to link on a Bill.', 'Close Purchase Order', 'Close PO');
+  if (!ok) return;
+  try {
+    await sbPatch('purchase_orders', id, { status: 'closed' });
+    showToast('Purchase order closed.', 'success');
+    await loadPurchaseOrders();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function cancelPO(id) {
+  const ok = await showConfirm('Cancel this purchase order? This cannot be undone.', 'Cancel Purchase Order', 'Cancel PO', true);
+  if (!ok) return;
+  try {
+    await sbPatch('purchase_orders', id, { status: 'cancelled' });
+    showToast('Purchase order cancelled.', 'success');
+    await loadPurchaseOrders();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
 function setApPage(n) { apPage = n; renderAPTable(_apFiltered); }
 function sortAP(col) {
   if (apSortCol === col) { apSortDir = apSortDir === 'asc' ? 'desc' : 'asc'; }
