@@ -1169,26 +1169,27 @@ body {
 }
 @media print {
   html, body { width: 100%; height: 100%; margin: 0; padding: 0; }
-  body > *:not(#modal-pdf-preview):not(#modal-quo-pdf):not(#modal-dn-pdf):not(#modal-cn-pdf):not(#modal-report-preview):not(#modal-receipt-pdf) { display:none !important; }
+  body > *:not(#modal-pdf-preview):not(#modal-quo-pdf):not(#modal-po-pdf):not(#modal-dn-pdf):not(#modal-cn-pdf):not(#modal-report-preview):not(#modal-receipt-pdf) { display:none !important; }
 
-  #modal-pdf-preview, #modal-quo-pdf, #modal-dn-pdf, #modal-cn-pdf, #modal-report-preview, #modal-receipt-pdf {
+  #modal-pdf-preview, #modal-quo-pdf, #modal-po-pdf, #modal-dn-pdf, #modal-cn-pdf, #modal-report-preview, #modal-receipt-pdf {
     position:static !important; background:none !important;
     padding:0 !important; margin:0 !important; overflow:visible !important;
     width:100% !important; height:auto !important;
   }
-  #modal-pdf-preview .modal, #modal-quo-pdf .modal, #modal-dn-pdf .modal, #modal-cn-pdf .modal, #modal-report-preview .modal, #modal-receipt-pdf .modal {
+  #modal-pdf-preview .modal, #modal-quo-pdf .modal, #modal-po-pdf .modal, #modal-dn-pdf .modal, #modal-cn-pdf .modal, #modal-report-preview .modal, #modal-receipt-pdf .modal {
     box-shadow:none !important; border:none !important;
     max-width:100% !important; width:100% !important;
     margin:0 !important; padding:0 !important; overflow:visible !important;
   }
   #modal-pdf-preview .modal-header, #modal-pdf-preview .modal-footer,
   #modal-quo-pdf .modal-header,     #modal-quo-pdf .modal-footer,
+  #modal-po-pdf .modal-header,      #modal-po-pdf .modal-footer,
   #modal-dn-pdf .modal-header,      #modal-dn-pdf .modal-footer,
   #modal-cn-pdf .modal-header,      #modal-cn-pdf .modal-footer,
   #modal-report-preview .modal-header, #modal-report-preview .modal-footer,
   #modal-receipt-pdf .modal-header, #modal-receipt-pdf .modal-footer { display:none !important; }
 
-  #modal-pdf-preview .modal-body, #modal-quo-pdf .modal-body,
+  #modal-pdf-preview .modal-body, #modal-quo-pdf .modal-body, #modal-po-pdf .modal-body,
   #modal-dn-pdf .modal-body,      #modal-cn-pdf .modal-body,
   #modal-report-preview .modal-body, #modal-receipt-pdf .modal-body {
     padding:0 !important; margin:0 !important; overflow:visible !important;
@@ -1196,7 +1197,7 @@ body {
   }
 
   /* Each page div fills one printed sheet */
-  #pdf-content > div, #quo-pdf-content > div, #dn-pdf-content > div, #cn-pdf-content > div {
+  #pdf-content > div, #quo-pdf-content > div, #po-pdf-content > div, #dn-pdf-content > div, #cn-pdf-content > div {
     width: 8.5in !important;
     min-height: 11in !important;
     box-sizing: border-box !important;
@@ -1206,7 +1207,7 @@ body {
     page-break-after: always;
     page-break-inside: avoid;
   }
-  #pdf-content > div:last-child, #quo-pdf-content > div:last-child,
+  #pdf-content > div:last-child, #quo-pdf-content > div:last-child, #po-pdf-content > div:last-child,
   #dn-pdf-content > div:last-child, #cn-pdf-content > div:last-child {
     page-break-after: auto;
   }
@@ -10121,7 +10122,7 @@ function togglePOQuoteFields() {
   document.getElementById('po-quote-date-field').style.display = basis ? '' : 'none';
 }
 
-const BILL_TERMS_LABELS = { '0': 'Due on Receipt', '7': 'Net 7', '14': 'Net 14', '30': 'Net 30', '60': 'Net 60' };
+const PO_TERMS_LABELS = { '0': 'Due on Receipt', '7': 'Net 7', '14': 'Net 14', '30': 'Net 30', '60': 'Net 60' };
 
 function addPOLine() {
   const tbody = document.getElementById('po-lines-body');
@@ -10399,7 +10400,7 @@ async function openPOPDF(id) {
   const metaRows = [
     ['PO Date :', formatDateDisplay(po.po_date)],
     ['Expected :', po.expected_date ? formatDateDisplay(po.expected_date) : '—'],
-    ['Terms :', BILL_TERMS_LABELS[po.payment_terms] || (po.payment_terms + ' days')],
+    ['Terms :', PO_TERMS_LABELS[po.payment_terms] || (po.payment_terms + ' days')],
     ...(po.vendor_quote_basis === 'written' && po.vendor_quote_ref ? [['Vendor Quote Ref :', escHTML(po.vendor_quote_ref)]] : []),
     ...(po.vendor_quote_basis === 'verbal' ? [['Vendor Quote :', 'Verbal' + (po.vendor_quote_date ? ' — ' + formatDateDisplay(po.vendor_quote_date) : '')]] : []),
     ['Prepared By :', escHTML(po.prepared_by || '—')],
