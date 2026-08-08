@@ -4952,7 +4952,7 @@ body.light .global-search-results, body.light .split-btn-menu {
 
       <div class="form-grid grid-3">
         <div class="field span-2">
-          <label class="field-label">Vendor</label>
+          <label class="field-label">Vendor <span style="color:var(--red);">*</span></label>
           <div class="contact-search-wrap">
             <input type="text" id="po-vendor-search" placeholder="Search vendor…" autocomplete="off"
                    oninput="searchPOVendor()" onfocus="searchPOVendor()">
@@ -4970,7 +4970,7 @@ body.light .global-search-results, body.light .split-btn-menu {
           </select>
         </div>
         <div class="field">
-          <label class="field-label">PO Date</label>
+          <label class="field-label">PO Date <span style="color:var(--red);">*</span></label>
           <input type="date" id="po-date" class="mono">
         </div>
         <div class="field">
@@ -5043,7 +5043,7 @@ body.light .global-search-results, body.light .split-btn-menu {
           <thead>
             <tr>
               <th style="width:40px;">Ref</th><th>Description</th><th style="width:90px;">Unit</th>
-              <th class="right" style="width:100px;">Rate</th><th class="right" style="width:90px;">Qty</th>
+              <th class="right" style="width:90px;">Qty</th><th class="right" style="width:100px;">Rate</th>
               <th class="right" style="width:120px;">Amount</th><th style="width:36px;"></th>
             </tr>
           </thead>
@@ -5064,7 +5064,7 @@ body.light .global-search-results, body.light .split-btn-menu {
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('modal-po')">Cancel</button>
+      <button class="btn btn-outline" onclick="closeModal('modal-po')">Cancel</button>
       <button class="btn btn-primary" id="po-save-draft-btn" onclick="savePODraft()">Save as Draft</button>
     </div>
   </div>
