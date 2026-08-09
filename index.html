@@ -12399,6 +12399,7 @@ async function openEditBill(billId) {
     tr.querySelectorAll('input[type="number"]')[0].value = l.quantity ?? '';
     document.getElementById(tr.id + '-rate').value = l.unit_price ?? '';
     if (l.item_category) jcPrefillBillLineLink(tr.id, l.item_category, l.item_id);
+    if (l.po_line_id) { tr.dataset.poId = l.po_id; tr.dataset.poLineId = l.po_line_id; }
   });
   recalcBillTotals();
   document.getElementById('modal-bill').classList.add('show');
@@ -12697,7 +12698,7 @@ function collectBillFormLines(status) {
     if (!desc && !qty && !rate) return;
     if (!desc) { showToast(`Line ${idx+1}: description required.`, 'warn'); return; }
     const amt = round2(qty * rate); subtotal += amt;
-    const line = { description: desc, quantity: qty, unit_price: rate, amount: amt, line_order: idx };
+    const line = { description: desc, quantity: qty, unit_price: rate, amount: amt, line_order: idx, po_id: tr.dataset.poId || null, po_line_id: tr.dataset.poLineId || null };
 
     const cat = document.getElementById(tr.id+'-cat')?.value;
     if (cat) {
@@ -12813,10 +12814,15 @@ async function saveBill(status) {
       line_order: l.line_order,
       item_category: l.item_category || null,
       item_id: l.item_id || null,
+      po_id: l.po_id || null,
+      po_line_id: l.po_line_id || null,
     })));
     if (status === 'approved') {
       await jcSyncBillCatalogOnApproval(lines);
     }
+
+    const poIds = [...new Set(lines.map(l => l.po_id).filter(Boolean))];
+    for (const poId of poIds) await recomputePOStatus(poId);
 
     showToast(`Bill ${billNo || '(draft)'} ${status === 'approved' ? 'approved' : 'saved as draft'}.`, 'success');
     closeModal('modal-bill');
@@ -12866,6 +12872,8 @@ async function saveBillEdit() {
         line_order: l.line_order,
         item_category: l.item_category || null,
         item_id: l.item_id || null,
+        po_id: l.po_id || null,
+        po_line_id: l.po_line_id || null,
       })));
     }
 
@@ -12878,6 +12886,8 @@ async function saveBillEdit() {
       line_order: l.line_order,
       item_category: l.item_category || null,
       item_id: l.item_id || null,
+      po_id: l.po_id || null,
+      po_line_id: l.po_line_id || null,
     })));
     if (oldLines.length) {
       await sbDeleteWhere('bill_lines', `id=in.(${oldLines.map(l => l.id).join(',')})`);
@@ -12897,6 +12907,9 @@ async function saveBillEdit() {
     showToast('Bill updated.', 'success');
     closeModal('modal-bill');
     await loadAP();
+
+    const poIds = [...new Set(lines.map(l => l.po_id).filter(Boolean))];
+    for (const poId of poIds) await recomputePOStatus(poId);
   } catch(e) {
     showToast('Error saving edit: ' + e.message, 'error');
   } finally {
@@ -13572,7 +13585,10 @@ async function voidBill(id) {
   const ok = await showConfirm('Void this bill? This cannot be undone.', 'Void Bill', 'Void Bill');
   if (!ok) return;
   try {
+    const linkedLines = await sbGet('bill_lines', `bill_id=eq.${id}&po_id=not.is.null`);
     await sbPatch('bills', id, { status: 'void' });
+    const poIds = [...new Set(linkedLines.map(l => l.po_id))];
+    for (const poId of poIds) await recomputePOStatus(poId);
     showToast('Bill voided.', 'success');
     await loadAP();
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
