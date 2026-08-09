@@ -4,10 +4,11 @@
 
 ---
 
-## Session 48 — Purchase Orders module — BUILT, PR OPEN, AWAITING LIVE VERIFICATION
+## Session 48 — Purchase Orders module — MERGED, LIVE, ONE HOTFIX SHIPPED
 
 **Date:** 2026-08-08
-**Branch:** `feat/purchase-orders` — pushed, PR opened against `master` (not yet merged).
+**Branch:** `feat/purchase-orders` — [PR #128](https://github.com/brandonr2630/meridian-erp/pull/128) merged to `master` (`83ea9dd`), deployed.
+**Hotfix:** [PR #129](https://github.com/brandonr2630/meridian-erp/pull/129) — merged (`a74a797`), deployed.
 **Spec:** `docs/superpowers/specs/2026-08-08-purchase-orders-design.md`
 **Plan:** `docs/superpowers/plans/2026-08-08-purchase-orders.md`
 
@@ -34,17 +35,27 @@ New PO module upstream of Bills — raise a PO (vendor + line items), Send it (a
 | 13. Over-billing warning | ✅ done — review caught the confirm dialog's multi-line message rendering as one run-on sentence (`white-space:pre-wrap` fix), and a network failure that would silently block Save with zero feedback |
 | 14. Persist PO linkage through Bill save/edit/void | ✅ done — **highest-risk task in the plan**, touches `saveBill`/`saveBillEdit`/`voidBill`/`collectBillFormLines`/`openEditBill`. Code review found a **Critical** bug: a `recomputePOStatus()` failure after a successful save was showing "Error saving bill" with the modal still open and the Save button re-enabled — a user retrying would create a duplicate bill with its own sequence number. Fixed: recompute now runs after the success signal, wrapped in its own try/catch with a soft warning toast, never reaching the outer error handler |
 | 15. AP table PO#/date column | ✅ done — first-draft implementation would have clobbered the shared `purchaseOrders` global with partial-select rows, silently corrupting `onBillPOPicked()`'s currency/terms lookup; fixed with a separate `_apPOLookup` variable |
-| 16. Final verification | ⬜ in progress — see below |
+| 16. Final verification | ✅ static/holistic review done; live click-through still not done by a human — see below |
 
 ### Final holistic branch review
 
 A last pass reading the entire 34-commit diff as one unit (not per-task) found no critical/important integration issues — naming, RBAC gating, schema usage, and the full create→send→bill→recompute→PDF/email→close lifecycle are consistent across all 16 tasks. Two cosmetic items noted, not blocking: a dead `_poEditId` state variable (never read — `savePODraft()` uses the DOM hidden field instead), and the design spec still says `sequence_type: 'po'` where the actual (correct, convention-matching) code uses `'purchase_order'`.
 
-### Outstanding — Task 16's live verification not yet done
+### Hotfix — `created_by` FK violation on PO save (RESOLVED)
 
-**Live click-through verification (spec's 9-step manual test plan) has NOT been performed** — it requires logging into the production app (`erp.terranresources.com`) with real credentials, which this session didn't have and didn't request. Everything above was verified by static code review, live Supabase schema/RLS queries via MCP, and `node --check` syntax checks — not by actually using the feature in a browser. **Do this before considering the module done:**
+**Trigger:** first live save attempt (the real click-through this module was still waiting on) immediately hit `insert or update on table "purchase_orders" violates foreign key constraint "purchase_orders_created_by_fkey"`.
 
-1. Create a Draft PO, Send it, confirm PDF/email work.
+**Root cause (confirmed via live `pg_constraint` query before touching code):** `purchase_orders.created_by` references `auth.users(id)` — that's how Task 1's schema was written from the start. `savePODraft()` was writing `currentUser.id`, the `erp_users` table's own primary key — a different ID space. This was a regression introduced during Task 6's own code review: a reviewer "corrected" the original (correct) `currentUser.auth_user_id` to `currentUser.id` by pattern-matching against `erp_roles.created_by`/`job_drawings.created_by`, both of which reference `erp_users(id)` — a different FK target than `purchase_orders` actually declares. Nobody in that review chain checked `purchase_orders_created_by_fkey`'s own definition before making/approving the change.
+
+**Fix:** one line, `created_by: currentUser.id` → `currentUser.auth_user_id` in `savePODraft()`. [PR #129](https://github.com/brandonr2630/meridian-erp/pull/129), merged.
+
+**Lesson for future review passes on this module:** when "fixing" a field to match a sibling table's convention, verify the CURRENT table's own constraint, not just that the sibling's constraint exists — two tables having a same-named column doesn't guarantee the same FK target.
+
+### Outstanding — live click-through still not done by a human
+
+Beyond the one bug found above, the rest of the spec's 9-step manual test plan hasn't been run:
+
+1. Send a PO, confirm PDF/email work.
 2. Create a Bill against that vendor, confirm the PO picker appears and auto-populates correctly.
 3. Partially bill it, confirm remaining-qty tracking and PO auto-close behave as designed.
 4. Void one of the bills, confirm the PO reopens.
@@ -52,6 +63,8 @@ A last pass reading the entire 34-commit diff as one unit (not per-task) found n
 6. Regression-check a plain Bill with no PO link — must behave identically to before this module existed.
 7. Test as a non-admin user with only `finance:ap:write` (not `:approve`) — confirm they can prepare but not Send/Close/Cancel a PO.
 8. Delete all test data afterward, confirm zero residue via SQL — matching this project's standing convention.
+
+Given the hotfix above, treat every other write path in this module (Send, Duplicate, Close/Cancel) as worth a `created_by`/FK sanity check too if any of them turn out to write a similar audit column — this bug class could recur wherever a reviewer "aligned" a field to the wrong sibling.
 
 ### Carried over from Session 47
 
