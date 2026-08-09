@@ -1,6 +1,67 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-07-29 · Session 47*
+*Last updated: 2026-08-08 · Session 48*
+
+---
+
+## Session 48 — Purchase Orders module — BUILT, PR OPEN, AWAITING LIVE VERIFICATION
+
+**Date:** 2026-08-08
+**Branch:** `feat/purchase-orders` — pushed, PR opened against `master` (not yet merged).
+**Spec:** `docs/superpowers/specs/2026-08-08-purchase-orders-design.md`
+**Plan:** `docs/superpowers/plans/2026-08-08-purchase-orders.md`
+
+### What this is
+
+New PO module upstream of Bills — raise a PO (vendor + line items), Send it (assigns `PO-####` via `sequence_counters`, PDF + email), link it when creating a Bill (vendor-scoped picker auto-populates Bill lines from the PO's remaining quantity), and consume the PO's line quantities as Bills are recorded against it. Placed in Finance → Transactions, between Accounts Payable and Vendors, sharing the existing `finance:ap:read`/`write`/`approve` permission atoms (write = prepare, approve = Send/Close/Cancel — no new RBAC atoms). Remaining quantity is computed on read (never a stored counter), so Void Bill and Edit Bill need no special-case PO logic.
+
+### Progress (16-task plan, all done via `superpowers:subagent-driven-development` — fresh subagent per task, two-stage review each: spec compliance then code quality, with fix/re-review loops)
+
+| Task | Status |
+|---|---|
+| 1. Schema: `purchase_orders` + `po_lines` + `bill_lines.po_id`/`po_line_id` | ✅ done — 2 migrations (`add_purchase_orders`, `fix_purchase_orders_rls_and_naming`); code review caught missing `is_super_admin()` RLS bypass, a denormalized `po_lines.company_id`, missing `UNIQUE(company_id,po_no)`, and `qty`/`rate` columns that should've been `quantity`/`unit_price` to match every sibling line table |
+| 2. State/loader plumbing | ✅ done |
+| 3. Nav/dispatch wiring | ✅ done |
+| 4. List view + `renderPOTable()` | ✅ done — review caught a dead `data-perm` on the "+ New PO" button, an ungated Duplicate action, and a loading-indicator that never actually showed on first load |
+| 5. PO modal HTML | ✅ done |
+| 6. Modal JS (vendor search, lines, save/edit draft) | ✅ done — review caught a real new bug (vendor payment-terms select silently blanking for non-standard values) and a missing date validation |
+| 7. Send action (PO numbering) | ✅ done |
+| 8. Duplicate as template | ✅ done — review caught a race window (modal should open before the async line fetch, not after) |
+| 9. Close/Cancel + remaining-qty computation | ✅ done — review caught a stale-cache read in `recomputePOStatus` that could leave a PO permanently stuck `closed` with no reopen path |
+| 10. PDF generation | ✅ done — implementer caught the plan's draft was wrong (needs an `<iframe>`, not a `<div>`, for the preview modal) |
+| 11. Email delivery (8th doc type) | ✅ done |
+| 12. Bill modal PO picker + auto-populate | ✅ done — **highest blast-radius task**, modifies the live `selectBillVendor()`/Bill modal; review caught the shared `purchaseOrders` global being empty when navigating straight to AP (fixed with a fallback fetch) |
+| 13. Over-billing warning | ✅ done — review caught the confirm dialog's multi-line message rendering as one run-on sentence (`white-space:pre-wrap` fix), and a network failure that would silently block Save with zero feedback |
+| 14. Persist PO linkage through Bill save/edit/void | ✅ done — **highest-risk task in the plan**, touches `saveBill`/`saveBillEdit`/`voidBill`/`collectBillFormLines`/`openEditBill`. Code review found a **Critical** bug: a `recomputePOStatus()` failure after a successful save was showing "Error saving bill" with the modal still open and the Save button re-enabled — a user retrying would create a duplicate bill with its own sequence number. Fixed: recompute now runs after the success signal, wrapped in its own try/catch with a soft warning toast, never reaching the outer error handler |
+| 15. AP table PO#/date column | ✅ done — first-draft implementation would have clobbered the shared `purchaseOrders` global with partial-select rows, silently corrupting `onBillPOPicked()`'s currency/terms lookup; fixed with a separate `_apPOLookup` variable |
+| 16. Final verification | ⬜ in progress — see below |
+
+### Final holistic branch review
+
+A last pass reading the entire 34-commit diff as one unit (not per-task) found no critical/important integration issues — naming, RBAC gating, schema usage, and the full create→send→bill→recompute→PDF/email→close lifecycle are consistent across all 16 tasks. Two cosmetic items noted, not blocking: a dead `_poEditId` state variable (never read — `savePODraft()` uses the DOM hidden field instead), and the design spec still says `sequence_type: 'po'` where the actual (correct, convention-matching) code uses `'purchase_order'`.
+
+### Outstanding — Task 16's live verification not yet done
+
+**Live click-through verification (spec's 9-step manual test plan) has NOT been performed** — it requires logging into the production app (`erp.terranresources.com`) with real credentials, which this session didn't have and didn't request. Everything above was verified by static code review, live Supabase schema/RLS queries via MCP, and `node --check` syntax checks — not by actually using the feature in a browser. **Do this before considering the module done:**
+
+1. Create a Draft PO, Send it, confirm PDF/email work.
+2. Create a Bill against that vendor, confirm the PO picker appears and auto-populates correctly.
+3. Partially bill it, confirm remaining-qty tracking and PO auto-close behave as designed.
+4. Void one of the bills, confirm the PO reopens.
+5. Test the over-billing warning by entering a qty above the PO line's ordered amount.
+6. Regression-check a plain Bill with no PO link — must behave identically to before this module existed.
+7. Test as a non-admin user with only `finance:ap:write` (not `:approve`) — confirm they can prepare but not Send/Close/Cancel a PO.
+8. Delete all test data afterward, confirm zero residue via SQL — matching this project's standing convention.
+
+### Carried over from Session 47
+
+- **Rotate the ERP password** — plaintext in chat, Sessions 43 + 45 — still not done.
+- Temp WAF whitelist — GreenGeeks unblock was temporary, watch for recurrence.
+- Double-check "BMS Bar Stock - 2-3/4" OD" cost in Job Config.
+
+### Deferred (flagged, not part of this module)
+
+- **PO list view has no search/filter/pagination** (every other list view in the app does) — spun off as a separate background task, not part of this PR.
 
 ---
 
