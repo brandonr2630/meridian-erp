@@ -9923,7 +9923,7 @@ async function loadAP() {
     const linkedLines = bills.length ? await sbGet('bill_lines', `bill_id=in.(${bills.map(b=>b.id).join(',')})&po_id=not.is.null&select=bill_id,po_id`) : [];
     const poIdByBill = Object.fromEntries(linkedLines.map(l => [l.bill_id, l.po_id]));
     bills.forEach(b => { b.po_id = poIdByBill[b.id] || null; });
-    purchaseOrders = await sbGet('purchase_orders', `company_id=eq.${currentCompany.id}&select=id,po_no,po_date`);
+    _apPOLookup = await sbGet('purchase_orders', `company_id=eq.${currentCompany.id}&select=id,po_no,po_date`);
     const editEvents = await sbGet('bill_edit_events', `select=bill_id,bills!inner(company_id)&bills.company_id=eq.${currentCompany.id}`);
     _billsWithEditHistory = new Set((editEvents||[]).map(e => e.bill_id));
     const outstanding = bills.filter(b => !['paid','void'].includes(b.status));
@@ -9943,7 +9943,7 @@ function renderAPTable(list) {
   _apFiltered = list;
   const total = list.length;
   const contactMap = Object.fromEntries(contacts.map(c => [c.id, c.trading_name || c.name]));
-  const poMap = Object.fromEntries(purchaseOrders.map(p => [p.id, p]));
+  const poMap = Object.fromEntries(_apPOLookup.map(p => [p.id, p]));
   if (!total) {
     document.getElementById('ap-table-wrap').innerHTML = '<div class="table-empty">No bills yet.</div>';
     return;
@@ -13629,6 +13629,7 @@ let bills = [], _apFiltered = []; let apPage = 0;
 let _billsWithEditHistory = new Set();
 let _billEditId = null;
 let _apRowMenuActions = {};
+let _apPOLookup = [];
 let apSortCol = null, apSortDir = 'asc';
 
 // ── PURCHASE ORDER STATE ──────────────────────────────────────────
