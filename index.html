@@ -4064,7 +4064,7 @@ body.light .global-search-results, body.light .split-btn-menu {
       <div class="modal-title" id="confirm-title">Confirm</div>
     </div>
     <div class="modal-body">
-      <p id="confirm-message" style="font-size:14px;color:var(--text-2);line-height:1.6;"></p>
+      <p id="confirm-message" style="font-size:14px;color:var(--text-2);line-height:1.6;white-space:pre-wrap;"></p>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="confirmResolve(false)">Cancel</button>
@@ -12747,7 +12747,13 @@ async function checkPOOverbill() {
   const poLineIds = Object.keys(byPOLine);
   if (!poLineIds.length) return true;
 
-  const lines = await sbGet('po_lines', `id=in.(${poLineIds.join(',')})`);
+  let lines;
+  try {
+    lines = await sbGet('po_lines', `id=in.(${poLineIds.join(',')})`);
+  } catch (e) {
+    showToast('Could not verify PO quantities — try again.', 'error');
+    return false;
+  }
   const overLines = lines.filter(l => byPOLine[l.id] > parseFloat(l.quantity || 0));
   if (!overLines.length) return true;
 
