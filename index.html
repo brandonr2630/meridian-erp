@@ -510,6 +510,20 @@ body {
 }
 #ap-row-menu.open { display: block; }
 
+/* ── PO ROW ACTIONS OVERFLOW MENU (fixed, shared, one instance reused per row) ── */
+#po-row-menu {
+  position: fixed;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  min-width: 190px;
+  z-index: var(--z-dropdown);
+  display: none;
+  overflow: hidden;
+}
+#po-row-menu.open { display: block; }
+
 /* ── STAT CARDS ── */
 .stat-grid {
   display: grid;
@@ -692,6 +706,9 @@ body {
 .badge-converted  { background: var(--green-bg); color: var(--green); border: 1px solid rgba(76,175,125,.2); }
 .badge-sent       { background: var(--blue-bg);  color: var(--blue);  border: 1px solid rgba(91,155,213,.2); }
 .badge-converted { background: var(--green-bg); color: var(--green); border: 1px solid rgba(76,175,125,.2); }
+.badge-open       { background: var(--green-bg); color: var(--green); border: 1px solid rgba(76,175,125,.2); }
+.badge-closed     { background: var(--bg-4);     color: var(--text-3); border: 1px solid var(--border); }
+.badge-cancelled  { background: var(--red-bg);   color: var(--red);   border: 1px solid rgba(224,92,92,.2); }
 .badge-declined  { background: var(--red-bg);   color: var(--red);   border: 1px solid rgba(224,92,92,.2); }
 .badge-expired      { background: var(--bg-4);     color: var(--text-3);  border: 1px solid var(--border); }
 .badge-prospect     { background: var(--bg-4);     color: var(--text-3);  border: 1px solid var(--border); }
@@ -1152,26 +1169,27 @@ body {
 }
 @media print {
   html, body { width: 100%; height: 100%; margin: 0; padding: 0; }
-  body > *:not(#modal-pdf-preview):not(#modal-quo-pdf):not(#modal-dn-pdf):not(#modal-cn-pdf):not(#modal-report-preview):not(#modal-receipt-pdf) { display:none !important; }
+  body > *:not(#modal-pdf-preview):not(#modal-quo-pdf):not(#modal-po-pdf):not(#modal-dn-pdf):not(#modal-cn-pdf):not(#modal-report-preview):not(#modal-receipt-pdf) { display:none !important; }
 
-  #modal-pdf-preview, #modal-quo-pdf, #modal-dn-pdf, #modal-cn-pdf, #modal-report-preview, #modal-receipt-pdf {
+  #modal-pdf-preview, #modal-quo-pdf, #modal-po-pdf, #modal-dn-pdf, #modal-cn-pdf, #modal-report-preview, #modal-receipt-pdf {
     position:static !important; background:none !important;
     padding:0 !important; margin:0 !important; overflow:visible !important;
     width:100% !important; height:auto !important;
   }
-  #modal-pdf-preview .modal, #modal-quo-pdf .modal, #modal-dn-pdf .modal, #modal-cn-pdf .modal, #modal-report-preview .modal, #modal-receipt-pdf .modal {
+  #modal-pdf-preview .modal, #modal-quo-pdf .modal, #modal-po-pdf .modal, #modal-dn-pdf .modal, #modal-cn-pdf .modal, #modal-report-preview .modal, #modal-receipt-pdf .modal {
     box-shadow:none !important; border:none !important;
     max-width:100% !important; width:100% !important;
     margin:0 !important; padding:0 !important; overflow:visible !important;
   }
   #modal-pdf-preview .modal-header, #modal-pdf-preview .modal-footer,
   #modal-quo-pdf .modal-header,     #modal-quo-pdf .modal-footer,
+  #modal-po-pdf .modal-header,      #modal-po-pdf .modal-footer,
   #modal-dn-pdf .modal-header,      #modal-dn-pdf .modal-footer,
   #modal-cn-pdf .modal-header,      #modal-cn-pdf .modal-footer,
   #modal-report-preview .modal-header, #modal-report-preview .modal-footer,
   #modal-receipt-pdf .modal-header, #modal-receipt-pdf .modal-footer { display:none !important; }
 
-  #modal-pdf-preview .modal-body, #modal-quo-pdf .modal-body,
+  #modal-pdf-preview .modal-body, #modal-quo-pdf .modal-body, #modal-po-pdf .modal-body,
   #modal-dn-pdf .modal-body,      #modal-cn-pdf .modal-body,
   #modal-report-preview .modal-body, #modal-receipt-pdf .modal-body {
     padding:0 !important; margin:0 !important; overflow:visible !important;
@@ -1179,7 +1197,7 @@ body {
   }
 
   /* Each page div fills one printed sheet */
-  #pdf-content > div, #quo-pdf-content > div, #dn-pdf-content > div, #cn-pdf-content > div {
+  #pdf-content > div, #quo-pdf-content > div, #po-pdf-content > div, #dn-pdf-content > div, #cn-pdf-content > div {
     width: 8.5in !important;
     min-height: 11in !important;
     box-sizing: border-box !important;
@@ -1189,7 +1207,7 @@ body {
     page-break-after: always;
     page-break-inside: avoid;
   }
-  #pdf-content > div:last-child, #quo-pdf-content > div:last-child,
+  #pdf-content > div:last-child, #quo-pdf-content > div:last-child, #po-pdf-content > div:last-child,
   #dn-pdf-content > div:last-child, #cn-pdf-content > div:last-child {
     page-break-after: auto;
   }
@@ -1977,6 +1995,9 @@ body.light .global-search-results, body.light .split-btn-menu {
             <div class="nav-item sub-item" data-perm="finance:ap:read" onclick="navigate('ap')" id="nav-ap">
               <span class="nav-item-icon"><img src="assets/Acc Payables Icon.svg" style="width:18px;height:18px;vertical-align:middle;"></span> Accounts Payable
               <span class="nav-badge" id="badge-ap">0</span>
+            </div>
+            <div class="nav-item sub-item" data-perm="finance:ap:read" onclick="navigate('purchase-orders')" id="nav-purchase-orders">
+              <span class="nav-item-icon">📑</span> Purchase Orders
             </div>
             <div class="nav-item sub-item" data-perm="finance:ap:read" onclick="navigate('vendors')" id="nav-vendors">
               <span class="nav-item-icon">🏭</span> Vendors
@@ -2960,6 +2981,19 @@ body.light .global-search-results, body.light .split-btn-menu {
           </div>
           <div id="vendors-table-wrap"><div class="page-loading"><div class="loading-spinner"></div> Loading...</div></div>
         </div>
+      </div>
+    </div>
+
+    <!-- ── PURCHASE ORDERS ── -->
+    <div class="page-view" id="view-purchase-orders">
+      <div class="page-header">
+        <div><div class="page-title">Purchase Orders</div><div class="page-subtitle">Orders to vendors</div></div>
+        <div class="page-actions">
+          <button class="btn btn-primary btn-sm" onclick="openNewPO()">+ New Purchase Order</button>
+        </div>
+      </div>
+      <div class="page-body">
+        <div class="table-wrap" id="po-table-wrap"><div class="page-loading"><div class="loading-spinner"></div> Loading...</div></div>
       </div>
     </div>
 
@@ -4004,6 +4038,9 @@ body.light .global-search-results, body.light .split-btn-menu {
 <!-- ── AP ROW ACTIONS OVERFLOW MENU (fixed, shared, content built per-row on open) ── -->
 <div id="ap-row-menu"></div>
 
+<!-- ── PO ROW ACTIONS OVERFLOW MENU (fixed, shared, content built per-row on open) ── -->
+<div id="po-row-menu"></div>
+
 <!-- ── REPORT PREVIEW MODAL ── -->
 <div class="modal-overlay" id="modal-report-preview" onclick="if(event.target===this)closeModal('modal-report-preview')">
   <div class="modal modal-xl" style="max-width:min(960px,95vw);">
@@ -4027,7 +4064,7 @@ body.light .global-search-results, body.light .split-btn-menu {
       <div class="modal-title" id="confirm-title">Confirm</div>
     </div>
     <div class="modal-body">
-      <p id="confirm-message" style="font-size:14px;color:var(--text-2);line-height:1.6;"></p>
+      <p id="confirm-message" style="font-size:14px;color:var(--text-2);line-height:1.6;white-space:pre-wrap;"></p>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="confirmResolve(false)">Cancel</button>
@@ -4305,6 +4342,7 @@ body.light .global-search-results, body.light .split-btn-menu {
             <div class="contact-search-results" id="bill-vendor-results"></div>
           </div>
           <input type="hidden" id="bill-vendor-id">
+          <input type="hidden" id="bill-po-id">
           <div id="bill-vendor-selected" style="font-size:10px;color:var(--gold);margin-top:3px;"></div>
         </div>
         <div class="field"><label class="field-label">Currency</label>
@@ -4316,6 +4354,12 @@ body.light .global-search-results, body.light .split-btn-menu {
         </div>
         <div class="field"><label class="field-label">Vendor Reference</label>
           <input type="text" id="bill-vendor-ref" class="mono" placeholder="Vendor invoice no.">
+        </div>
+        <div class="field span-2" id="bill-po-picker-wrap" style="display:none;">
+          <label class="field-label">Link Purchase Order <span style="color:var(--text-3);font-weight:400;">(optional)</span></label>
+          <select id="bill-po-picker" onchange="onBillPOPicked()">
+            <option value="">— None —</option>
+          </select>
         </div>
       </div>
       <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:14px;">
@@ -4895,6 +4939,157 @@ body.light .global-search-results, body.light .split-btn-menu {
       <button class="btn btn-outline" onclick="closeModal('modal-quotation')">Cancel</button>
       <button class="btn btn-outline" onclick="saveQuotation('draft')" id="quo-save-draft-btn">Save Draft</button>
       <button class="btn btn-primary" onclick="saveQuotation('sent')" id="quo-send-btn">Save & Mark Sent</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── PURCHASE ORDER MODAL ── -->
+<div class="modal-overlay" id="modal-po" onclick="if(event.target===this)closeModal('modal-po')">
+  <div class="modal modal-lg" style="max-width:880px;">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modal-po-title">New Purchase Order</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:3px;">
+          PO Number: <span style="font-family:'DM Mono',monospace;color:var(--gold);" id="po-number-label">assigned on send</span>
+        </div>
+      </div>
+      <button class="modal-close" onclick="closeModal('modal-po')">✕</button>
+    </div>
+    <input type="hidden" id="po-edit-id">
+    <div class="modal-body">
+
+      <div class="form-grid grid-3">
+        <div class="field span-2">
+          <label class="field-label">Vendor <span style="color:var(--red);">*</span></label>
+          <div class="contact-search-wrap">
+            <input type="text" id="po-vendor-search" placeholder="Search vendor…" autocomplete="off"
+                   oninput="searchPOVendor()" onfocus="searchPOVendor()">
+            <div class="contact-search-results" id="po-vendor-results"></div>
+          </div>
+          <input type="hidden" id="po-vendor-id">
+          <div style="font-size:11px;color:var(--gold);margin-top:4px;" id="po-vendor-selected"></div>
+        </div>
+        <div class="field">
+          <label class="field-label">Currency</label>
+          <select id="po-currency">
+            <option value="TTD">TTD — Trinidad Dollar</option>
+            <option value="USD">USD — US Dollar</option>
+            <option value="GYD">GYD — Guyana Dollar</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label">PO Date <span style="color:var(--red);">*</span></label>
+          <input type="date" id="po-date" class="mono">
+        </div>
+        <div class="field">
+          <label class="field-label">Expected Date</label>
+          <input type="date" id="po-expected-date" class="mono">
+        </div>
+        <div class="field">
+          <label class="field-label">Payment Terms</label>
+          <select id="po-terms">
+            <option value="0">Due on Receipt</option>
+            <option value="7">Net 7</option>
+            <option value="14">Net 14</option>
+            <option value="30" selected>Net 30</option>
+            <option value="60">Net 60</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-grid grid-2" style="margin-top:10px;">
+        <div class="field">
+          <label class="field-label">Incoterms 2020 <span style="color:var(--text-3);font-weight:400;">(optional)</span></label>
+          <select id="po-incoterms">
+            <option value="">— None —</option>
+            <option value="EXW">EXW — Ex Works</option>
+            <option value="FCA">FCA — Free Carrier</option>
+            <option value="CPT">CPT — Carriage Paid To</option>
+            <option value="CIP">CIP — Carriage and Insurance Paid To</option>
+            <option value="DAP">DAP — Delivered at Place</option>
+            <option value="DPU">DPU — Delivered at Place Unloaded</option>
+            <option value="DDP">DDP — Delivered Duty Paid</option>
+            <option value="FAS">FAS — Free Alongside Ship</option>
+            <option value="FOB">FOB — Free On Board</option>
+            <option value="CFR">CFR — Cost and Freight</option>
+            <option value="CIF">CIF — Cost, Insurance and Freight</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label">Named Place / Port</label>
+          <input type="text" id="po-incoterms-place" placeholder="e.g. Port of Spain, Trinidad" class="mono">
+        </div>
+      </div>
+
+      <div class="form-grid grid-3" style="margin-top:10px;">
+        <div class="field">
+          <label class="field-label">Vendor Quote Basis</label>
+          <select id="po-quote-basis" onchange="togglePOQuoteFields()">
+            <option value="">— None —</option>
+            <option value="written">Written</option>
+            <option value="verbal">Verbal</option>
+          </select>
+        </div>
+        <div class="field" id="po-quote-ref-field" style="display:none;">
+          <label class="field-label">Vendor Quote Ref</label>
+          <input type="text" id="po-quote-ref" class="mono">
+        </div>
+        <div class="field" id="po-quote-date-field" style="display:none;">
+          <label class="field-label">Vendor Quote Date</label>
+          <input type="date" id="po-quote-date" class="mono">
+        </div>
+      </div>
+
+      <div class="field" style="margin-top:10px;">
+        <label class="field-label">Notes</label>
+        <textarea id="po-notes" rows="2" placeholder="Delivery instructions, special conditions, etc."></textarea>
+      </div>
+
+      <div style="font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin:16px 0 8px;">Line Items</div>
+      <div class="table-wrap" style="margin-bottom:10px;">
+        <table class="inv-lines-table">
+          <thead>
+            <tr>
+              <th style="width:40px;">Ref</th><th>Description</th><th style="width:90px;">Unit</th>
+              <th class="right" style="width:90px;">Qty</th><th class="right" style="width:100px;">Rate</th>
+              <th class="right" style="width:120px;">Amount</th><th style="width:36px;"></th>
+            </tr>
+          </thead>
+          <tbody id="po-lines-body"></tbody>
+        </table>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="addPOLine()" style="margin-bottom:16px;">+ Add Line</button>
+
+      <div style="display:flex;justify-content:flex-end;">
+        <div style="min-width:260px;">
+          <div class="inv-totals">
+            <div class="inv-totals-row total-row">
+              <span class="label">Total</span>
+              <span class="val" id="po-grand-total">0.00</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-po')">Cancel</button>
+      <button class="btn btn-primary" id="po-save-draft-btn" onclick="savePODraft()">Save as Draft</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── PURCHASE ORDER PDF PREVIEW MODAL ── -->
+<div class="modal-overlay" id="modal-po-pdf" onclick="if(event.target===this)closeModal('modal-po-pdf')">
+  <div class="modal modal-xl" style="max-width:min(860px,95vw);">
+    <div class="modal-header">
+      <div class="modal-title">Purchase Order Preview</div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary btn-sm" onclick="printPDF(this)">⬇ Download PDF</button>
+        <button class="modal-close" onclick="closeModal('modal-po-pdf')">✕</button>
+      </div>
+    </div>
+    <div class="modal-body" style="padding:16px;background:#555;overflow-x:auto;overflow-y:auto;max-height:82vh;color-scheme:light;">
+      <iframe id="po-pdf-content" style="width:860px;min-height:1100px;border:none;display:block;margin:0 auto;" scrolling="yes"></iframe>
     </div>
   </div>
 </div>
@@ -5699,6 +5894,7 @@ const Q = {
   crmActivities: () => `company_id=eq.${currentCompany.id}&order=activity_date.desc,created_at.desc`,
   crmTasks:      () => `company_id=eq.${currentCompany.id}&order=due_date.asc,created_at.desc`,
   crmTeamMembers: () => `company_id=eq.${currentCompany.id}&is_active=eq.true&order=name`,
+  purchaseOrders: () => `company_id=eq.${currentCompany.id}&order=po_date.desc`,
 };
 
 // ── STATE ────────────────────────────────────────────────────────
@@ -6180,6 +6376,7 @@ const VIEW_SECTIONS = {
   coa: ['finance', 'finance-transactions'], journal: ['finance', 'finance-transactions'], ar: ['finance', 'finance-transactions'],
   'credit-notes': ['finance', 'finance-transactions'], ap: ['finance', 'finance-transactions'], bank: ['finance', 'finance-transactions'],
   vendors: ['finance', 'finance-transactions'],
+  'purchase-orders': ['finance', 'finance-transactions'],
   'aged-ar':  ['finance', 'finance-reports'],
   'aged-ap':  ['finance', 'finance-reports'],
   pl:         ['finance', 'finance-reports'],
@@ -6241,7 +6438,7 @@ function navigate(view) {
   if (!isAdmin() && currentUser) {
     const u = currentUser;
     const moduleGuard = {
-      finance:    ['coa','journal','ar','credit-notes','ap','vendors','bank','pl','bs','tb','cf','aged-ar','aged-ap'],
+      finance:    ['coa','journal','ar','credit-notes','ap','vendors','purchase-orders','bank','pl','bs','tb','cf','aged-ar','aged-ap'],
       sales:      ['sales-leads','pipeline','crm-activities','crm-tasks','quotations','clients','client-360'],
       operations: ['work-orders','job-costing','delivery-notes','job-config'],
     };
@@ -6252,7 +6449,7 @@ function navigate(view) {
     if (view !== 'dashboard') {
       const subGuard = [
         [['ar','credit-notes'],              u.module_finance_ar      === false],
-        [['ap','vendors'],                   u.module_finance_ap      === false],
+        [['ap','vendors','purchase-orders'], u.module_finance_ap      === false],
         [['bank'],                           u.module_finance_bank    === false],
         [['coa','journal'],                  u.module_finance_ledger  === false],
         [['pl','bs','tb','cf','aged-ar','aged-ap'], u.module_finance_reports === false],
@@ -6311,6 +6508,7 @@ async function loadViewData(view) {
     case 'clients':      await loadClients(); break;
     case 'client-360':  await loadClient360(); break;
     case 'vendors':   await loadVendors(); break;
+    case 'purchase-orders': await loadPurchaseOrders(); break;
     case 'erp-companies': await loadErpCompanies(); break; // alias (legacy)
     case 'companies': await loadErpCompanies(); break;
     case 'settings':  await loadSettings(); break;
@@ -9722,6 +9920,10 @@ async function loadAP() {
   }
   try {
     bills = await sbGet('bills', `company_id=eq.${currentCompany.id}&order=bill_date.desc`);
+    const linkedLines = bills.length ? await sbGet('bill_lines', `bill_id=in.(${bills.map(b=>b.id).join(',')})&po_id=not.is.null&select=bill_id,po_id`) : [];
+    const poIdByBill = Object.fromEntries(linkedLines.map(l => [l.bill_id, l.po_id]));
+    bills.forEach(b => { b._poId = poIdByBill[b.id] || null; });
+    _apPOLookup = await sbGet('purchase_orders', `company_id=eq.${currentCompany.id}&select=id,po_no,po_date`);
     const editEvents = await sbGet('bill_edit_events', `select=bill_id,bills!inner(company_id)&bills.company_id=eq.${currentCompany.id}`);
     _billsWithEditHistory = new Set((editEvents||[]).map(e => e.bill_id));
     const outstanding = bills.filter(b => !['paid','void'].includes(b.status));
@@ -9741,6 +9943,7 @@ function renderAPTable(list) {
   _apFiltered = list;
   const total = list.length;
   const contactMap = Object.fromEntries(contacts.map(c => [c.id, c.trading_name || c.name]));
+  const poMap = Object.fromEntries(_apPOLookup.map(p => [p.id, p]));
   if (!total) {
     document.getElementById('ap-table-wrap').innerHTML = '<div class="table-empty">No bills yet.</div>';
     return;
@@ -9773,7 +9976,7 @@ function renderAPTable(list) {
   document.getElementById('ap-table-wrap').innerHTML = `
     <table class="data-table data-table-compact">
       <thead><tr>
-        ${thAP('bill_no','Bill No.')}<th>Invoice No.</th>${thAP('supplier','Supplier')}${thAP('bill_date','Date')}${thAP('due_date','Due Date')}
+        ${thAP('bill_no','Bill No.')}<th>Invoice No.</th><th>PO #</th>${thAP('supplier','Supplier')}${thAP('bill_date','Date')}${thAP('due_date','Due Date')}
         <th>Currency</th><th class="right">Total</th><th class="right">Balance Due</th>
         <th>Status</th><th class="right">Actions</th>
       </tr></thead>
@@ -9808,6 +10011,7 @@ function renderAPTable(list) {
         <tr>
           <td class="mono bold">${b.bill_no || '<span style="color:var(--text-3);font-style:italic;font-size:11px;">Draft</span>'}</td>
           <td class="mono">${escHTML(b.vendor_ref) || '—'}</td>
+          <td class="mono">${b._poId && poMap[b._poId] ? `${poMap[b._poId].po_no || 'Draft'} <span style="color:var(--text-3);font-size:10px;">(${formatDateDisplay(poMap[b._poId].po_date)})</span>` : '—'}</td>
           <td>${escHTML(contactMap[b.contact_id]) || '—'}</td>
           <td class="mono">${b.bill_date}</td>
           <td class="mono">${b.due_date || '—'}</td>
@@ -9845,6 +10049,384 @@ function closeApRowMenu() { document.getElementById('ap-row-menu')?.classList.re
 document.addEventListener('click', e => {
   if (!e.target.closest('#ap-row-menu') && !e.target.closest('.btn[onclick^="toggleApRowMenu"]')) closeApRowMenu();
 });
+
+function renderPOTable(list) {
+  const contactMap = Object.fromEntries(contacts.map(c => [c.id, c.trading_name || c.name]));
+  const wrap = document.getElementById('po-table-wrap');
+  if (!list.length) {
+    wrap.innerHTML = '<div class="table-empty">No purchase orders yet.</div>';
+    return;
+  }
+  wrap.innerHTML = `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>PO No.</th><th>Vendor</th><th>Date</th><th>Expected</th>
+          <th>Currency</th><th class="right">Total</th><th>Status</th><th class="right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>${list.map(po => {
+        const canSend   = po.status === 'draft'  && can('finance:ap:approve');
+        const canEdit   = po.status === 'draft'  && can('finance:ap:write');
+        const canClose  = po.status === 'open'   && can('finance:ap:approve');
+        const canCancel = ['draft','open'].includes(po.status) && can('finance:ap:approve');
+
+        const primaryBtn = canSend
+          ? `<button class="btn btn-outline btn-sm" onclick="sendPO('${po.id}')">Send</button>`
+          : '';
+
+        const menuActions = [];
+        if (po.status === 'draft' && can('finance:ap:write')) menuActions.push({ label: 'Delete', onclick: `deleteDocument('purchase_order','${po.id}','${po.po_no||'this draft PO'}')` });
+        if (canEdit)   menuActions.push({ label: 'Edit',       onclick: `openEditPO('${po.id}')` });
+        if (can('finance:ap:write')) menuActions.push({ label: 'Duplicate as new', onclick: `duplicatePO('${po.id}')` });
+        if (po.status !== 'draft') {
+          menuActions.push({ label: 'Print',  onclick: `openPOPDF('${po.id}')` });
+          menuActions.push({ label: 'Email',  onclick: `openEmailDocument('purchase-order','${po.id}')` });
+        }
+        if (canClose)  menuActions.push({ label: 'Close PO',  onclick: `closePO('${po.id}')` });
+        if (canCancel) menuActions.push({ label: 'Cancel PO', onclick: `cancelPO('${po.id}')` });
+
+        _poRowMenuActions[po.id] = menuActions;
+
+        const menuBtn = menuActions.length
+          ? `<button class="btn btn-ghost btn-icon btn-sm" onclick="togglePORowMenu('${po.id}', this)" title="More actions">⋯</button>`
+          : '';
+
+        return `<tr>
+          <td class="mono bold">${po.po_no || '<span style="color:var(--text-3);font-style:italic;font-size:11px;">Draft</span>'}</td>
+          <td>${escHTML(contactMap[po.vendor_id] || '—')}</td>
+          <td>${formatDateDisplay(po.po_date)}</td>
+          <td>${po.expected_date ? formatDateDisplay(po.expected_date) : '—'}</td>
+          <td>${po.currency}</td>
+          <td class="right mono">${fmt(po._total ?? 0, po.currency)}</td>
+          <td><span class="badge badge-${po.status}">${po.status}</span></td>
+          <td class="right" style="white-space:nowrap;">${primaryBtn}${menuBtn}</td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>`;
+}
+
+function togglePORowMenu(poId, btnEl) {
+  const menu = document.getElementById('po-row-menu');
+  if (menu.dataset.poId === poId && menu.classList.contains('open')) {
+    menu.classList.remove('open');
+    return;
+  }
+  const actions = _poRowMenuActions[poId] || [];
+  menu.innerHTML = actions.map(a =>
+    `<div class="split-btn-menu-item" onclick="closePORowMenu();${a.onclick}"><div class="menu-label">${escHTML(a.label)}</div></div>`
+  ).join('');
+  menu.dataset.poId = poId;
+  const rect = btnEl.getBoundingClientRect();
+  const menuW = 190;
+  menu.style.top = (rect.bottom + 5) + 'px';
+  menu.style.left = Math.max(8, Math.min(rect.right - menuW, window.innerWidth - menuW - 8)) + 'px';
+  menu.classList.add('open');
+}
+function closePORowMenu() { document.getElementById('po-row-menu')?.classList.remove('open'); }
+document.addEventListener('click', e => {
+  if (!e.target.closest('#po-row-menu') && !e.target.closest('.btn[onclick^="togglePORowMenu"]')) closePORowMenu();
+});
+
+function togglePOQuoteFields() {
+  const basis = document.getElementById('po-quote-basis').value;
+  document.getElementById('po-quote-ref-field').style.display  = basis === 'written' ? '' : 'none';
+  document.getElementById('po-quote-date-field').style.display = basis ? '' : 'none';
+}
+
+const PO_TERMS_LABELS = { '0': 'Due on Receipt', '7': 'Net 7', '14': 'Net 14', '30': 'Net 30', '60': 'Net 60' };
+
+function addPOLine() {
+  const tbody = document.getElementById('po-lines-body');
+  const n     = tbody.rows.length + 1;
+  const lid   = 'pol-' + Date.now() + '-' + Math.random().toString(36).substr(2,4);
+  const tr    = document.createElement('tr');
+  tr.id = lid;
+  tr.innerHTML = `
+    <td style="padding:6px 8px;color:var(--text-3);font-size:11px;font-family:'DM Mono',monospace;">${n}</td>
+    <td><input type="text" placeholder="Item description…" style="min-width:200px;" id="${lid}-desc"></td>
+    <td><input type="text" class="mono" placeholder="ea" id="${lid}-unit"></td>
+    <td><input type="number" class="mono" placeholder="1" value="1" min="0" step="any" oninput="recalcPOTotals()" id="${lid}-qty"></td>
+    <td><input type="number" class="mono" placeholder="0.00" min="0" step="0.01" oninput="recalcPOTotals()" id="${lid}-rate"></td>
+    <td><div class="inv-line-amount" id="${lid}-amt">0.00</div></td>
+    <td><button class="btn btn-ghost btn-icon btn-sm" onclick="document.getElementById('${lid}').remove();recalcPOTotals();" style="color:var(--text-3);">✕</button></td>`;
+  tbody.appendChild(tr);
+}
+
+function recalcPOTotals() {
+  let total = 0;
+  document.querySelectorAll('#po-lines-body tr').forEach(tr => {
+    const rate = parseFloat(document.getElementById(tr.id + '-rate')?.value) || 0;
+    const qty  = parseFloat(document.getElementById(tr.id + '-qty')?.value) || 0;
+    const amt  = round2(rate * qty);
+    document.getElementById(tr.id + '-amt').textContent = fmtNum(amt);
+    total += amt;
+  });
+  document.getElementById('po-grand-total').textContent = fmtNum(total);
+}
+
+function collectPOFormLines() {
+  const lines = [];
+  document.querySelectorAll('#po-lines-body tr').forEach((tr, idx) => {
+    const desc = document.getElementById(tr.id + '-desc')?.value.trim() || '';
+    const unit = document.getElementById(tr.id + '-unit')?.value.trim() || '';
+    const rate = parseFloat(document.getElementById(tr.id + '-rate')?.value) || 0;
+    const qty  = parseFloat(document.getElementById(tr.id + '-qty')?.value) || 0;
+    if (!desc && !rate && !qty) return;
+    if (!desc) { showToast(`Line ${idx+1}: description required.`, 'warn'); return; }
+    lines.push({ line_no: idx + 1, description: desc, unit, unit_price: rate, quantity: qty, amount: round2(rate * qty) });
+  });
+  if (!lines.length) { showToast('Add at least one line item.', 'warn'); return null; }
+  return lines;
+}
+
+function openNewPO() {
+  _poEditId = null;
+  document.getElementById('modal-po-title').textContent = 'New Purchase Order';
+  document.getElementById('po-number-label').textContent = 'assigned on send';
+  document.getElementById('po-edit-id').value = '';
+  document.getElementById('po-vendor-id').value = '';
+  document.getElementById('po-vendor-search').value = '';
+  document.getElementById('po-vendor-selected').textContent = '';
+  document.getElementById('po-currency').value = 'TTD';
+  document.getElementById('po-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('po-expected-date').value = '';
+  document.getElementById('po-terms').value = '30';
+  document.getElementById('po-incoterms').value = '';
+  document.getElementById('po-incoterms-place').value = '';
+  document.getElementById('po-quote-basis').value = '';
+  document.getElementById('po-quote-ref').value = '';
+  document.getElementById('po-quote-date').value = '';
+  document.getElementById('po-notes').value = '';
+  togglePOQuoteFields();
+  document.getElementById('po-lines-body').innerHTML = '';
+  addPOLine();
+  recalcPOTotals();
+  document.getElementById('modal-po').classList.add('show');
+}
+
+async function savePODraft() {
+  const vendorId = document.getElementById('po-vendor-id').value;
+  const poDate   = document.getElementById('po-date').value;
+  if (!vendorId) { showToast('Select a vendor.', 'warn'); return; }
+  if (!poDate)   { showToast('PO date is required.', 'warn'); return; }
+  const lines = collectPOFormLines();
+  if (!lines) return;
+
+  const basis = document.getElementById('po-quote-basis').value || null;
+  const payload = {
+    company_id: currentCompany.id,
+    vendor_id: vendorId,
+    po_date: poDate,
+    expected_date: document.getElementById('po-expected-date').value || null,
+    currency: document.getElementById('po-currency').value,
+    payment_terms: document.getElementById('po-terms').value,
+    incoterms: document.getElementById('po-incoterms').value || null,
+    incoterms_place: document.getElementById('po-incoterms-place').value.trim() || null,
+    vendor_quote_basis: basis,
+    vendor_quote_ref: basis === 'written' ? (document.getElementById('po-quote-ref').value.trim() || null) : null,
+    vendor_quote_date: basis ? (document.getElementById('po-quote-date').value || null) : null,
+    notes: document.getElementById('po-notes').value.trim() || null,
+    prepared_by: currentUser.name,
+    created_by: currentUser.id,
+  };
+
+  const btn = document.getElementById('po-save-draft-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const editId = document.getElementById('po-edit-id').value;
+    let poId = editId;
+    if (editId) {
+      await sbPatch('purchase_orders', editId, payload);
+      await sbDeleteWhere('po_lines', `po_id=eq.${editId}`);
+    } else {
+      const [created] = await sbPost('purchase_orders', { ...payload, status: 'draft' });
+      poId = created.id;
+    }
+    await sbPost('po_lines', lines.map(l => ({ ...l, po_id: poId })));
+    showToast('Purchase order saved as draft.', 'success');
+    closeModal('modal-po');
+    await loadPurchaseOrders();
+  } catch(e) {
+    showToast('Error saving purchase order: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save as Draft';
+  }
+}
+
+async function openEditPO(id) {
+  if (!can('finance:ap:write')) { showToast('Insufficient permission.', 'error'); return; }
+  const po = purchaseOrders.find(p => p.id === id);
+  if (!po) return;
+  if (po.status !== 'draft') { showToast('Only Draft purchase orders can be edited.', 'warn'); return; }
+
+  const vendor = contacts.find(c => c.id === po.vendor_id) || {};
+  openNewPO();
+  _poEditId = id;
+  document.getElementById('modal-po-title').textContent = `Edit Purchase Order — Draft`;
+  document.getElementById('po-edit-id').value = id;
+  document.getElementById('po-vendor-id').value = po.vendor_id;
+  document.getElementById('po-vendor-search').value = vendor.trading_name || vendor.name || '';
+  document.getElementById('po-vendor-selected').textContent = vendor.name ? '✓ ' + vendor.name : '';
+  document.getElementById('po-currency').value = po.currency;
+  document.getElementById('po-date').value = po.po_date;
+  document.getElementById('po-expected-date').value = po.expected_date || '';
+  document.getElementById('po-terms').value = po.payment_terms || '30';
+  document.getElementById('po-incoterms').value = po.incoterms || '';
+  document.getElementById('po-incoterms-place').value = po.incoterms_place || '';
+  document.getElementById('po-quote-basis').value = po.vendor_quote_basis || '';
+  document.getElementById('po-quote-ref').value = po.vendor_quote_ref || '';
+  document.getElementById('po-quote-date').value = po.vendor_quote_date || '';
+  document.getElementById('po-notes').value = po.notes || '';
+  togglePOQuoteFields();
+
+  const existingLines = await sbGet('po_lines', `po_id=eq.${id}&order=line_no.asc`);
+  document.getElementById('po-lines-body').innerHTML = '';
+  (existingLines.length ? existingLines : [{}]).forEach(l => {
+    addPOLine();
+    const rows = document.querySelectorAll('#po-lines-body tr');
+    const tr = rows[rows.length - 1];
+    document.getElementById(tr.id + '-desc').value = l.description || '';
+    document.getElementById(tr.id + '-unit').value = l.unit || '';
+    document.getElementById(tr.id + '-rate').value = l.unit_price ?? '';
+    document.getElementById(tr.id + '-qty').value  = l.quantity ?? '';
+  });
+  recalcPOTotals();
+  document.getElementById('modal-po').classList.add('show');
+}
+
+async function duplicatePO(id) {
+  const po = purchaseOrders.find(p => p.id === id);
+  if (!po) return;
+  const vendor = contacts.find(c => c.id === po.vendor_id) || {};
+
+  openNewPO();
+  const lines = await sbGet('po_lines', `po_id=eq.${id}&order=line_no.asc`);
+  document.getElementById('po-vendor-id').value = po.vendor_id;
+  document.getElementById('po-vendor-search').value = vendor.trading_name || vendor.name || '';
+  document.getElementById('po-vendor-selected').textContent = vendor.name ? '✓ ' + vendor.name : '';
+  document.getElementById('po-currency').value = po.currency;
+  document.getElementById('po-terms').value = po.payment_terms || '30';
+  document.getElementById('po-incoterms').value = po.incoterms || '';
+  document.getElementById('po-incoterms-place').value = po.incoterms_place || '';
+  document.getElementById('po-notes').value = po.notes || '';
+
+  document.getElementById('po-lines-body').innerHTML = '';
+  (lines.length ? lines : [{}]).forEach(l => {
+    addPOLine();
+    const rows = document.querySelectorAll('#po-lines-body tr');
+    const tr = rows[rows.length - 1];
+    document.getElementById(tr.id + '-desc').value = l.description || '';
+    document.getElementById(tr.id + '-unit').value = l.unit || '';
+    document.getElementById(tr.id + '-rate').value = l.unit_price ?? '';
+    document.getElementById(tr.id + '-qty').value  = l.quantity ?? '';
+  });
+  recalcPOTotals();
+  document.getElementById('modal-po-title').textContent = `New Purchase Order (from ${po.po_no || 'draft'})`;
+  document.getElementById('modal-po').classList.add('show');
+}
+
+async function sendPO(id) {
+  const ok = await showConfirm('Send this purchase order? A PO number will be assigned.', 'Send Purchase Order', 'Send', false);
+  if (!ok) return;
+  try {
+    const po = purchaseOrders.find(p => p.id === id);
+    let poNo = po?.po_no;
+    if (!poNo) {
+      let counters = await sbGet('sequence_counters', `company_id=eq.${currentCompany.id}&sequence_type=eq.purchase_order`);
+      let counter  = counters[0];
+      if (!counter) {
+        const created = await sbPost('sequence_counters', { company_id: currentCompany.id, sequence_type: 'purchase_order', prefix: 'PO-', last_number: 0, padding: 4 });
+        counter = created[0];
+      }
+      const nextNum = (counter.last_number || 0) + 1;
+      poNo = `${counter.prefix || 'PO-'}${String(nextNum).padStart(counter.padding || 4, '0')}`;
+      await sbPatch('sequence_counters', counter.id, { last_number: nextNum });
+    }
+    await sbPatch('purchase_orders', id, { status: 'open', po_no: poNo });
+    showToast(`Purchase Order ${poNo} sent.`, 'success');
+    await loadPurchaseOrders();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function computePORemaining(poId) {
+  const lines = await sbGet('po_lines', `po_id=eq.${poId}&order=line_no.asc`);
+  const consumed = await sbGet('bill_lines', `po_id=eq.${poId}&select=po_line_id,quantity,bills(status)`);
+  const consumedByLine = {};
+  consumed.forEach(c => {
+    if (c.bills?.status === 'void') return;
+    consumedByLine[c.po_line_id] = (consumedByLine[c.po_line_id] || 0) + parseFloat(c.quantity || 0);
+  });
+  return lines.map(l => ({
+    ...l,
+    consumed: consumedByLine[l.id] || 0,
+    remaining: Math.max(0, parseFloat(l.quantity || 0) - (consumedByLine[l.id] || 0)),
+  }));
+}
+
+async function recomputePOStatus(poId) {
+  const po = (await sbGet('purchase_orders', `id=eq.${poId}`))[0];
+  if (!po || !['open','closed'].includes(po.status)) return; // don't touch draft/cancelled
+  const withRemaining = await computePORemaining(poId);
+  const fullyConsumed = withRemaining.every(l => l.remaining <= 0);
+  if (fullyConsumed && po.status !== 'closed') {
+    await sbPatch('purchase_orders', poId, { status: 'closed' });
+  } else if (!fullyConsumed && po.status === 'closed') {
+    await sbPatch('purchase_orders', poId, { status: 'open' });
+  }
+}
+
+async function closePO(id) {
+  const ok = await showConfirm('Close this purchase order early? Any remaining quantity will no longer be available to link on a Bill.', 'Close Purchase Order', 'Close PO');
+  if (!ok) return;
+  try {
+    await sbPatch('purchase_orders', id, { status: 'closed' });
+    showToast('Purchase order closed.', 'success');
+    await loadPurchaseOrders();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function cancelPO(id) {
+  const ok = await showConfirm('Cancel this purchase order? This cannot be undone.', 'Cancel Purchase Order', 'Cancel PO', true);
+  if (!ok) return;
+  try {
+    await sbPatch('purchase_orders', id, { status: 'cancelled' });
+    showToast('Purchase order cancelled.', 'success');
+    await loadPurchaseOrders();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+// ── Purchase Order PDF ────────────────────────────────────────────
+async function openPOPDF(id) {
+  const po = purchaseOrders.find(p => p.id === id) || (await sbGet('purchase_orders', `id=eq.${id}`))[0];
+  if (!po) return;
+  let lines = [];
+  try { lines = await sbGet('po_lines', `po_id=eq.${id}&order=line_no.asc`); } catch(e) {}
+  const vendor = contacts.find(c => c.id === po.vendor_id) || {};
+  const co = currentCompany;
+
+  const total   = lines.reduce((s,l) => s + parseFloat(l.amount||0), 0);
+  const totalsH = calcTotalsH(po.incoterms, po.notes, null);
+  const pages   = splitLinesIntoPages(lines, calcFirstRows(totalsH), calcContRows(totalsH));
+
+  const metaRows = [
+    ['PO Date :', formatDateDisplay(po.po_date)],
+    ['Expected :', po.expected_date ? formatDateDisplay(po.expected_date) : '—'],
+    ['Terms :', PO_TERMS_LABELS[po.payment_terms] || (po.payment_terms + ' days')],
+    ...(po.vendor_quote_basis === 'written' && po.vendor_quote_ref ? [['Vendor Quote Ref :', escHTML(po.vendor_quote_ref)]] : []),
+    ...(po.vendor_quote_basis === 'verbal' ? [['Vendor Quote :', 'Verbal' + (po.vendor_quote_date ? ' — ' + formatDateDisplay(po.vendor_quote_date) : '')]] : []),
+    ['Prepared By :', escHTML(po.prepared_by || '—')],
+  ];
+
+  const headerHTML = buildPDFHeader(co, 'Purchase Order', po.po_no || 'DRAFT', 'Total Value',
+    fmt(total, po.currency), vendor, metaRows);
+
+  renderMultiPagePDF('po-pdf-content', pages, headerHTML, true, po.currency,
+    total, 0, 0, total, po.incoterms, po.incoterms_place, po.notes, null, co.name, po.po_no);
+
+  document.getElementById('modal-po-pdf').classList.add('show');
+}
 
 function setApPage(n) { apPage = n; renderAPTable(_apFiltered); }
 function sortAP(col) {
@@ -10405,6 +10987,29 @@ async function loadVendors() {
     renderVendorsTable(vendors);
   } catch(e) { showToast('Vendors load error: ' + e.message, 'error'); }
   finally { vnWrap.style.opacity = ''; vnWrap.style.pointerEvents = ''; }
+}
+
+async function loadPurchaseOrders() {
+  const poWrap = document.getElementById('po-table-wrap');
+  if (poWrap) {
+    if (poWrap.querySelector('table')) {
+      poWrap.style.opacity = '0.5'; poWrap.style.pointerEvents = 'none';
+    } else {
+      poWrap.innerHTML = '<div class="page-loading"><div class="loading-spinner"></div> Loading...</div>';
+    }
+  }
+  try {
+    purchaseOrders = await sbGet('purchase_orders', Q.purchaseOrders());
+    if (purchaseOrders.length) {
+      const ids = purchaseOrders.map(p => p.id).join(',');
+      const lines = await sbGet('po_lines', `po_id=in.(${ids})`);
+      const totalsByPO = {};
+      lines.forEach(l => { totalsByPO[l.po_id] = (totalsByPO[l.po_id] || 0) + parseFloat(l.amount || 0); });
+      purchaseOrders.forEach(p => { p._total = totalsByPO[p.id] || 0; });
+    }
+    renderPOTable(purchaseOrders);
+  } catch(e) { showToast('Purchase orders load error: ' + e.message, 'error'); }
+  finally { if (poWrap) { poWrap.style.opacity = ''; poWrap.style.pointerEvents = ''; } }
 }
 
 function renderVendorsTable(list) {
@@ -11754,6 +12359,9 @@ async function openNewBill() {
   addBillLine(); addBillLine();
   recalcBillTotals();
   calcBillDueDate();
+  document.getElementById('bill-po-picker-wrap').style.display = 'none';
+  document.getElementById('bill-po-picker').innerHTML = '<option value="">— None —</option>';
+  document.getElementById('bill-po-id').value = '';
   document.getElementById('bill-next-number').textContent = 'assigned when approved';
   document.getElementById('modal-bill').classList.add('show');
 }
@@ -11781,6 +12389,9 @@ async function openEditBill(billId) {
   document.getElementById('bill-notes').value         = bill.notes || '';
   document.getElementById('bill-tax-rate').value      = bill.tax_rate;
   document.getElementById('bill-edit-reason').value   = '';
+  document.getElementById('bill-po-picker-wrap').style.display = 'none';
+  document.getElementById('bill-po-picker').innerHTML = '<option value="">— None —</option>';
+  document.getElementById('bill-po-id').value = '';
 
   setBillModalMode('edit');
 
@@ -11794,6 +12405,7 @@ async function openEditBill(billId) {
     tr.querySelectorAll('input[type="number"]')[0].value = l.quantity ?? '';
     document.getElementById(tr.id + '-rate').value = l.unit_price ?? '';
     if (l.item_category) jcPrefillBillLineLink(tr.id, l.item_category, l.item_id);
+    if (l.po_line_id && l.po_id) { tr.dataset.poId = l.po_id; tr.dataset.poLineId = l.po_line_id; }
   });
   recalcBillTotals();
   document.getElementById('modal-bill').classList.add('show');
@@ -11969,11 +12581,79 @@ const searchBillVendor = createContactSearch({
   onSelect:   c => selectBillVendor(c.id, c.trading_name || c.name, c.name),
 });
 
-function selectBillVendor(id, displayName, legalName) {
+async function selectBillVendor(id, displayName, legalName) {
   document.getElementById('bill-vendor-id').value     = id;
   document.getElementById('bill-vendor-search').value = displayName;
   document.getElementById('bill-vendor-selected').textContent = '✓ ' + legalName;
   document.getElementById('bill-vendor-results').classList.remove('open');
+  await loadOpenPOsForBillVendor(id);
+}
+
+async function loadOpenPOsForBillVendor(vendorId) {
+  const wrap = document.getElementById('bill-po-picker-wrap');
+  const sel  = document.getElementById('bill-po-picker');
+  sel.innerHTML = '<option value="">— None —</option>';
+  try {
+    const openPOs = await sbGet('purchase_orders', `company_id=eq.${currentCompany.id}&vendor_id=eq.${vendorId}&status=eq.open`);
+    if (!openPOs.length) { wrap.style.display = 'none'; return; }
+    openPOs.forEach(po => {
+      const opt = document.createElement('option');
+      opt.value = po.id;
+      opt.textContent = `${po.po_no} — ${formatDateDisplay(po.po_date)}`;
+      sel.appendChild(opt);
+    });
+    wrap.style.display = '';
+  } catch(e) {
+    wrap.style.display = 'none';
+    showToast('Could not load open POs for this vendor.', 'warn');
+  }
+}
+
+async function onBillPOPicked() {
+  const poId = document.getElementById('bill-po-picker').value;
+  if (!poId) return;
+  const withRemaining = await computePORemaining(poId);
+  const openLines = withRemaining.filter(l => l.remaining > 0);
+  if (!openLines.length) { showToast('This PO has no remaining quantity to bill.', 'warn'); return; }
+
+  document.getElementById('bill-po-id').value = poId;
+  const po = purchaseOrders.find(p => p.id === poId) || (await sbGet('purchase_orders', `id=eq.${poId}`))[0];
+  document.getElementById('bill-currency').value = po.currency;
+  document.getElementById('bill-terms').value = po.payment_terms || '30';
+  calcBillDueDate();
+
+  document.getElementById('bill-lines-body').innerHTML = '';
+  openLines.forEach(l => {
+    addBillLine();
+    const rows = document.querySelectorAll('#bill-lines-body tr[id^="billl-"]:not([id$="-link"])');
+    const tr = rows[rows.length - 1];
+    document.getElementById(tr.id + '-desc').value = l.description;
+    tr.querySelectorAll('input[type="number"]')[0].value = l.remaining;
+    document.getElementById(tr.id + '-rate').value = l.unit_price;
+    tr.dataset.poId = poId;
+    tr.dataset.poLineId = l.id;
+    document.getElementById(tr.id + '-link').dataset.poId = poId;
+  });
+  recalcBillTotals();
+}
+
+const searchPOVendor = createContactSearch({
+  inputId:    'po-vendor-search',
+  resultsId:  'po-vendor-results',
+  typeFilter: c => (c.contact_type === 'supplier' || c.contact_type === 'both') && c.is_active !== false,
+  subtitleFn: c => escHTML(c.name),
+  onSelect:   c => selectPOVendor(c.id, c.trading_name || c.name, c.name, c.payment_terms),
+});
+
+const PO_VALID_TERMS = ['0', '7', '14', '30', '60'];
+function selectPOVendor(id, displayName, legalName, paymentTermsDays) {
+  document.getElementById('po-vendor-id').value     = id;
+  document.getElementById('po-vendor-search').value = displayName;
+  document.getElementById('po-vendor-selected').textContent = '✓ ' + legalName;
+  document.getElementById('po-vendor-results').classList.remove('open');
+  if (paymentTermsDays != null && PO_VALID_TERMS.includes(String(paymentTermsDays))) {
+    document.getElementById('po-terms').value = String(paymentTermsDays);
+  }
 }
 
 async function jcSyncBillLineCatalog(line) {
@@ -12024,7 +12704,7 @@ function collectBillFormLines(status) {
     if (!desc && !qty && !rate) return;
     if (!desc) { showToast(`Line ${idx+1}: description required.`, 'warn'); return; }
     const amt = round2(qty * rate); subtotal += amt;
-    const line = { description: desc, quantity: qty, unit_price: rate, amount: amt, line_order: idx };
+    const line = { description: desc, quantity: qty, unit_price: rate, amount: amt, line_order: idx, po_id: tr.dataset.poId || null, po_line_id: tr.dataset.poLineId || null };
 
     const cat = document.getElementById(tr.id+'-cat')?.value;
     if (cat) {
@@ -12063,12 +12743,38 @@ function collectBillFormLines(status) {
   return { lines, subtotal };
 }
 
+async function checkPOOverbill() {
+  const rows = document.querySelectorAll('#bill-lines-body tr[id^="billl-"]:not([id$="-link"])');
+  const byPOLine = {};
+  rows.forEach(tr => {
+    if (!tr.dataset.poLineId) return;
+    const qty = tr.querySelectorAll('input[type="number"]')[0]?.value;
+    byPOLine[tr.dataset.poLineId] = (byPOLine[tr.dataset.poLineId] || 0) + (parseFloat(qty) || 0);
+  });
+  const poLineIds = Object.keys(byPOLine);
+  if (!poLineIds.length) return true;
+
+  let lines;
+  try {
+    lines = await sbGet('po_lines', `id=in.(${poLineIds.join(',')})`);
+  } catch (e) {
+    showToast('Could not verify PO quantities — try again.', 'error');
+    return false;
+  }
+  const overLines = lines.filter(l => byPOLine[l.id] > parseFloat(l.quantity || 0));
+  if (!overLines.length) return true;
+
+  const msg = overLines.map(l => `"${l.description}" — billing ${byPOLine[l.id]}, PO line qty is ${l.quantity}`).join('\n');
+  return await showConfirm(`This bill exceeds the ordered quantity on ${overLines.length} PO line(s):\n\n${msg}\n\nProceed anyway?`, 'Quantity Exceeds PO', 'Bill Anyway');
+}
+
 async function saveBill(status) {
   const vendorId = document.getElementById('bill-vendor-id').value;
   const date     = document.getElementById('bill-date').value;
   const currency = document.getElementById('bill-currency').value;
   if (!vendorId){ showToast('Please select a vendor.', 'warn'); return; }
   if (!date)    { showToast('Bill date is required.', 'warn');  return; }
+  if (!(await checkPOOverbill())) return;
 
   const collected = collectBillFormLines(status);
   if (!collected) return;
@@ -12114,6 +12820,8 @@ async function saveBill(status) {
       line_order: l.line_order,
       item_category: l.item_category || null,
       item_id: l.item_id || null,
+      po_id: l.po_id || null,
+      po_line_id: l.po_line_id || null,
     })));
     if (status === 'approved') {
       await jcSyncBillCatalogOnApproval(lines);
@@ -12122,6 +12830,14 @@ async function saveBill(status) {
     showToast(`Bill ${billNo || '(draft)'} ${status === 'approved' ? 'approved' : 'saved as draft'}.`, 'success');
     closeModal('modal-bill');
     await loadAP();
+
+    try {
+      const poIds = [...new Set(lines.map(l => l.po_id).filter(Boolean))];
+      for (const poId of poIds) await recomputePOStatus(poId);
+    } catch (e) {
+      console.error('recomputePOStatus failed:', e);
+      showToast('Bill saved, but PO status may need a manual refresh.', 'warn');
+    }
   } catch(e) { showToast('Error saving bill: ' + e.message, 'error'); }
   finally { btn.disabled = false; btn.textContent = status === 'draft' ? 'Save Draft' : 'Save & Approve'; }
 }
@@ -12136,6 +12852,7 @@ async function saveBillEdit() {
 
   const reason = document.getElementById('bill-edit-reason').value.trim();
   if (!reason) { showToast('A reason for this edit is required.', 'warn'); return; }
+  if (!(await checkPOOverbill())) return;
 
   const collected = collectBillFormLines(bill.status);
   if (!collected) return;
@@ -12166,6 +12883,8 @@ async function saveBillEdit() {
         line_order: l.line_order,
         item_category: l.item_category || null,
         item_id: l.item_id || null,
+        po_id: l.po_id || null,
+        po_line_id: l.po_line_id || null,
       })));
     }
 
@@ -12178,6 +12897,8 @@ async function saveBillEdit() {
       line_order: l.line_order,
       item_category: l.item_category || null,
       item_id: l.item_id || null,
+      po_id: l.po_id || null,
+      po_line_id: l.po_line_id || null,
     })));
     if (oldLines.length) {
       await sbDeleteWhere('bill_lines', `id=in.(${oldLines.map(l => l.id).join(',')})`);
@@ -12197,6 +12918,14 @@ async function saveBillEdit() {
     showToast('Bill updated.', 'success');
     closeModal('modal-bill');
     await loadAP();
+
+    try {
+      const poIds = [...new Set(lines.map(l => l.po_id).filter(Boolean))];
+      for (const poId of poIds) await recomputePOStatus(poId);
+    } catch (e) {
+      console.error('recomputePOStatus failed:', e);
+      showToast('Bill updated, but PO status may need a manual refresh.', 'warn');
+    }
   } catch(e) {
     showToast('Error saving edit: ' + e.message, 'error');
   } finally {
@@ -12872,9 +13601,18 @@ async function voidBill(id) {
   const ok = await showConfirm('Void this bill? This cannot be undone.', 'Void Bill', 'Void Bill');
   if (!ok) return;
   try {
+    const linkedLines = await sbGet('bill_lines', `bill_id=eq.${id}&po_id=not.is.null`);
     await sbPatch('bills', id, { status: 'void' });
     showToast('Bill voided.', 'success');
     await loadAP();
+
+    try {
+      const poIds = [...new Set(linkedLines.map(l => l.po_id))];
+      for (const poId of poIds) await recomputePOStatus(poId);
+    } catch (e) {
+      console.error('recomputePOStatus failed:', e);
+      showToast('Bill voided, but PO status may need a manual refresh.', 'warn');
+    }
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
@@ -12891,7 +13629,14 @@ let bills = [], _apFiltered = []; let apPage = 0;
 let _billsWithEditHistory = new Set();
 let _billEditId = null;
 let _apRowMenuActions = {};
+let _apPOLookup = [];
 let apSortCol = null, apSortDir = 'asc';
+
+// ── PURCHASE ORDER STATE ──────────────────────────────────────────
+let purchaseOrders = [], poLines = [];
+let _poEditId = null;
+let _poRowMenuActions = {};
+let poSortCol = null, poSortDir = 'asc';
 
 // ── INVOICE STATE ─────────────────────────────────────────────────
 let invoices = [], _arFiltered = []; let arPage = 0;
@@ -15647,6 +16392,11 @@ async function generatePDFBase64(source) {
       const c  = contacts.find(x => x.id === dn.contact_id) || {};
       return { to: c.email || '', subject: `Delivery Note ${dn.dn_no || ''} from ${escHTML(co.name)}`, filename: `${dn.dn_no || 'delivery-note'}.pdf` };
     }
+    if (type === 'purchase-order') {
+      const po = purchaseOrders.find(x => x.id === id) || {};
+      const v  = contacts.find(x => x.id === po.vendor_id) || {};
+      return { to: v.email || '', subject: `Purchase Order ${po.po_no || ''} from ${escHTML(co.name)}`, filename: `${po.po_no || 'purchase-order'}.pdf` };
+    }
     if (type === 'credit-note') {
       const cn = creditNotes.find(x => x.id === id) || {};
       const c  = contacts.find(x => x.id === cn.contact_id) || {};
@@ -15965,6 +16715,31 @@ async function generatePDFBase64(source) {
         parseFloat(quo.subtotal||0), taxRate, parseFloat(quo.tax_amount||0),
         parseFloat(quo.total||0), quo.incoterms, quo.incoterms_place,
         quo.notes, null, co.name, quo.quote_no);
+      return generatePDFBase64(staging);
+    }
+
+    if (type === 'purchase-order') {
+      const po      = purchaseOrders.find(p => p.id === id) || (await sbGet('purchase_orders', `id=eq.${id}`))[0];
+      if (!po) throw new Error('Purchase order not found');
+      const lines   = await sbGet('po_lines', `po_id=eq.${id}&order=line_no.asc`).catch(() => []);
+      const vendor  = contacts.find(c => c.id === po.vendor_id) || {};
+      const co      = currentCompany;
+      const total   = lines.reduce((s,l) => s + parseFloat(l.amount||0), 0);
+      const totalsH = calcTotalsH(po.incoterms, po.notes, null);
+      const pages   = splitLinesIntoPages(lines, calcFirstRows(totalsH), calcContRows(totalsH));
+      const metaRows = [
+        ['PO Date :', formatDateDisplay(po.po_date)],
+        ['Expected :', po.expected_date ? formatDateDisplay(po.expected_date) : '—'],
+        ['Terms :', PO_TERMS_LABELS[po.payment_terms] || (po.payment_terms + ' days')],
+        ...(po.vendor_quote_basis === 'written' && po.vendor_quote_ref ? [['Vendor Quote Ref :', escHTML(po.vendor_quote_ref)]] : []),
+        ...(po.vendor_quote_basis === 'verbal' ? [['Vendor Quote :', 'Verbal' + (po.vendor_quote_date ? ' — ' + formatDateDisplay(po.vendor_quote_date) : '')]] : []),
+        ['Prepared By :', escHTML(po.prepared_by || '—')],
+      ];
+      const headerHTML = buildPDFHeader(co, 'Purchase Order', po.po_no || 'DRAFT', 'Total Value',
+        fmt(total, po.currency), vendor, metaRows);
+      staging.innerHTML = '';
+      renderMultiPagePDF('email-pdf-staging', pages, headerHTML, true, po.currency,
+        total, 0, 0, total, po.incoterms, po.incoterms_place, po.notes, null, co.name, po.po_no);
       return generatePDFBase64(staging);
     }
 
@@ -16494,11 +17269,12 @@ async function markAllNotifsRead() {
 
 // ── DELETE DRAFT DOCUMENT ─────────────────────────────────────────
 const DELETE_CONFIG = {
-  invoice:       { table: 'invoices',       linesTable: 'invoice_lines',       linesCol: 'invoice_id',  reload: () => loadAR() },
-  quotation:     { table: 'quotations',     linesTable: 'quotation_lines',     linesCol: 'quotation_id', reload: () => loadQuotations() },
-  bill:          { table: 'bills',          linesTable: 'bill_lines',          linesCol: 'bill_id',     reload: () => loadAP() },
-  delivery_note: { table: 'delivery_notes', linesTable: 'delivery_note_lines', linesCol: 'dn_id',       reload: () => loadDeliveryNotes() },
-  credit_note:   { table: 'credit_notes',   linesTable: 'credit_note_lines',   linesCol: 'cn_id',       reload: () => loadCreditNotes() },
+  invoice:        { table: 'invoices',        linesTable: 'invoice_lines',       linesCol: 'invoice_id',   reload: () => loadAR() },
+  quotation:      { table: 'quotations',      linesTable: 'quotation_lines',     linesCol: 'quotation_id', reload: () => loadQuotations() },
+  bill:           { table: 'bills',           linesTable: 'bill_lines',          linesCol: 'bill_id',      reload: () => loadAP() },
+  delivery_note:  { table: 'delivery_notes',  linesTable: 'delivery_note_lines', linesCol: 'dn_id',        reload: () => loadDeliveryNotes() },
+  credit_note:    { table: 'credit_notes',    linesTable: 'credit_note_lines',   linesCol: 'cn_id',        reload: () => loadCreditNotes() },
+  purchase_order: { table: 'purchase_orders', linesTable: 'po_lines',            linesCol: 'po_id',        reload: () => loadPurchaseOrders() },
 };
 
 async function deleteDocument(type, id, label) {
