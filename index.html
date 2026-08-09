@@ -10229,7 +10229,7 @@ async function savePODraft() {
     vendor_quote_date: basis ? (document.getElementById('po-quote-date').value || null) : null,
     notes: document.getElementById('po-notes').value.trim() || null,
     prepared_by: currentUser.name,
-    created_by: currentUser.id,
+    created_by: currentUser.auth_user_id,
   };
 
   const btn = document.getElementById('po-save-draft-btn');
