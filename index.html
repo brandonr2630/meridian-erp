@@ -12399,7 +12399,7 @@ async function openEditBill(billId) {
     tr.querySelectorAll('input[type="number"]')[0].value = l.quantity ?? '';
     document.getElementById(tr.id + '-rate').value = l.unit_price ?? '';
     if (l.item_category) jcPrefillBillLineLink(tr.id, l.item_category, l.item_id);
-    if (l.po_line_id) { tr.dataset.poId = l.po_id; tr.dataset.poLineId = l.po_line_id; }
+    if (l.po_line_id && l.po_id) { tr.dataset.poId = l.po_id; tr.dataset.poLineId = l.po_line_id; }
   });
   recalcBillTotals();
   document.getElementById('modal-bill').classList.add('show');
@@ -12821,12 +12821,17 @@ async function saveBill(status) {
       await jcSyncBillCatalogOnApproval(lines);
     }
 
-    const poIds = [...new Set(lines.map(l => l.po_id).filter(Boolean))];
-    for (const poId of poIds) await recomputePOStatus(poId);
-
     showToast(`Bill ${billNo || '(draft)'} ${status === 'approved' ? 'approved' : 'saved as draft'}.`, 'success');
     closeModal('modal-bill');
     await loadAP();
+
+    try {
+      const poIds = [...new Set(lines.map(l => l.po_id).filter(Boolean))];
+      for (const poId of poIds) await recomputePOStatus(poId);
+    } catch (e) {
+      console.error('recomputePOStatus failed:', e);
+      showToast('Bill saved, but PO status may need a manual refresh.', 'warn');
+    }
   } catch(e) { showToast('Error saving bill: ' + e.message, 'error'); }
   finally { btn.disabled = false; btn.textContent = status === 'draft' ? 'Save Draft' : 'Save & Approve'; }
 }
@@ -12908,8 +12913,13 @@ async function saveBillEdit() {
     closeModal('modal-bill');
     await loadAP();
 
-    const poIds = [...new Set(lines.map(l => l.po_id).filter(Boolean))];
-    for (const poId of poIds) await recomputePOStatus(poId);
+    try {
+      const poIds = [...new Set(lines.map(l => l.po_id).filter(Boolean))];
+      for (const poId of poIds) await recomputePOStatus(poId);
+    } catch (e) {
+      console.error('recomputePOStatus failed:', e);
+      showToast('Bill updated, but PO status may need a manual refresh.', 'warn');
+    }
   } catch(e) {
     showToast('Error saving edit: ' + e.message, 'error');
   } finally {
@@ -13587,10 +13597,16 @@ async function voidBill(id) {
   try {
     const linkedLines = await sbGet('bill_lines', `bill_id=eq.${id}&po_id=not.is.null`);
     await sbPatch('bills', id, { status: 'void' });
-    const poIds = [...new Set(linkedLines.map(l => l.po_id))];
-    for (const poId of poIds) await recomputePOStatus(poId);
     showToast('Bill voided.', 'success');
     await loadAP();
+
+    try {
+      const poIds = [...new Set(linkedLines.map(l => l.po_id))];
+      for (const poId of poIds) await recomputePOStatus(poId);
+    } catch (e) {
+      console.error('recomputePOStatus failed:', e);
+      showToast('Bill voided, but PO status may need a manual refresh.', 'warn');
+    }
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
