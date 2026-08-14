@@ -10454,7 +10454,7 @@ async function openPOPDF(id) {
     fmt(total, po.currency), vendor, metaRows);
 
   renderMultiPagePDF('po-pdf-content', pages, headerHTML, true, po.currency,
-    total, 0, 0, total, po.incoterms, po.incoterms_place, po.notes, null, co.name, po.po_no);
+    total, 0, 0, total, po.incoterms, po.incoterms_place, po.notes, null, co.name, po.po_no, true);
 
   document.getElementById('modal-po-pdf').classList.add('show');
 }
@@ -16171,7 +16171,7 @@ function buildPDFHeader(co, docTitle, docNo, balanceLabel, balanceValue, contact
     </div>`;
 }
 
-function buildPDFLineTable(lines, showPricing, currency) {
+function buildPDFLineTable(lines, showPricing, currency, showUnit) {
   const tdBase = 'padding:4px 12px;height:28px;max-height:28px;overflow:hidden;border-bottom:1px solid #e8e8e8;border-right:1px solid #e8e8e8;';
   const tdLast = 'padding:4px 12px;height:28px;max-height:28px;overflow:hidden;border-bottom:1px solid #e8e8e8;';
   const HD  = "style='background:#1a1a1a;color:#fff;padding:9px 12px;font-size:10px;font-weight:700;border-right:1px solid rgba(255,255,255,0.15);text-align:center;'";
@@ -16179,13 +16179,14 @@ function buildPDFLineTable(lines, showPricing, currency) {
   const HDX = "style='background:#1a1a1a;color:#fff;padding:9px 12px;font-size:10px;font-weight:700;text-align:center;'";
 
   const headers = showPricing
-    ? `<tr bgcolor="#1a1a1a"><td ${HD} width="36">#</td><td ${HDL}>Item &amp; Description</td><td ${HD} width="80">Qty</td><td ${HD} width="100">Rate</td><td ${HDX} width="110">Amount</td></tr>`
+    ? `<tr bgcolor="#1a1a1a"><td ${HD} width="36">#</td><td ${HDL}>Item &amp; Description</td>${showUnit ? `<td ${HD} width="64">Unit</td>` : ''}<td ${HD} width="80">Qty</td><td ${HD} width="100">Rate</td><td ${HDX} width="110">Amount</td></tr>`
     : `<tr bgcolor="#1a1a1a"><td ${HD} width="36">#</td><td ${HDL}>Description</td><td ${HD} width="80">Qty</td><td ${HDX} width="80">Unit</td></tr>`;
 
   const rows = lines.map((l, i) => showPricing
     ? `<tr>
         <td style="${tdBase}font-size:11px;color:#999;text-align:center;">${l._globalIdx??i+1}</td>
         <td style="${tdBase}font-size:12px;color:#333;">${escHTML(l.description)||'—'}</td>
+        ${showUnit ? `<td style="${tdBase}font-size:11px;color:#555;text-align:center;">${escHTML(l.unit)||'—'}</td>` : ''}
         <td style="${tdBase}font-size:11px;color:#333;text-align:right;font-family:monospace;">${fmtNum(l.quantity)}</td>
         <td style="${tdBase}font-size:11px;color:#333;text-align:right;font-family:monospace;">${fmtNum(l.unit_price??0)}</td>
         <td style="${tdLast}font-size:11px;color:#333;text-align:right;font-family:monospace;">${fmtNum(parseFloat(l.line_total??0)||parseFloat(l.amount??0)||(parseFloat(l.unit_price??0)*parseFloat(l.quantity??1)))}</td>
@@ -16258,7 +16259,7 @@ function splitLinesIntoPages(lines, firstPageRows, contPageRows) {
   return pages;
 }
 
-function renderMultiPagePDF(containerId, pages, headerHTML, showPricing, currency, subtotal, taxRate, taxAmt, total, incoterms, incotermsPlace, notes, bankDetails, coName, docNo) {
+function renderMultiPagePDF(containerId, pages, headerHTML, showPricing, currency, subtotal, taxRate, taxAmt, total, incoterms, incotermsPlace, notes, bankDetails, coName, docNo, showUnit) {
   if (!pages || pages.length === 0) pages = [[]];   // always render at least one page
   const dims = coPageDims();
   const totalPages = pages.length;
@@ -16281,13 +16282,13 @@ function renderMultiPagePDF(containerId, pages, headerHTML, showPricing, currenc
       pageContent += `<div style="margin-bottom:8px;font-size:11px;color:#555;text-align:right;">Brought Forward: <strong style="font-family:monospace;">${fmtNum(bf)}</strong></div>`;
     }
 
-    pageContent += buildPDFLineTable(pageLines.filter(l=>!l._empty), showPricing, currency);
+    pageContent += buildPDFLineTable(pageLines.filter(l=>!l._empty), showPricing, currency, showUnit);
 
     // Inject empty rows via string manipulation
     const emptyLines = pageLines.filter(l => l._empty);
     if (emptyLines.length > 0) {
       const colBorder = 'border-right:1px solid #e8e8e8;';
-      const numCols   = showPricing ? 5 : 4;
+      const numCols   = showPricing ? (showUnit ? 6 : 5) : 4;
       let emptyRows   = '';
       emptyLines.forEach(() => {
         const cells = Array.from({ length: numCols }, (_, i) =>
@@ -16771,7 +16772,7 @@ async function generatePDFBase64(source) {
         fmt(total, po.currency), vendor, metaRows);
       staging.innerHTML = '';
       renderMultiPagePDF('email-pdf-staging', pages, headerHTML, true, po.currency,
-        total, 0, 0, total, po.incoterms, po.incoterms_place, po.notes, null, co.name, po.po_no);
+        total, 0, 0, total, po.incoterms, po.incoterms_place, po.notes, null, co.name, po.po_no, true);
       return generatePDFBase64(staging);
     }
 
