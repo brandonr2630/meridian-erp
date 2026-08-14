@@ -1,6 +1,25 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-08-14 · Session 50*
+*Last updated: 2026-08-14 · Session 51*
+
+---
+
+## Session 51 — PO module live click-through — IN PROGRESS, 3 bugs found + fixed, email delivery blocked
+
+**Date:** 2026-08-14
+**Trigger:** Resuming the Session 48 handoff's outstanding 9-step manual test plan for the Purchase Orders module.
+
+### Bugs found live and fixed (all merged to `master`, deployed)
+
+1. **[PR #134](https://github.com/brandonr2630/meridian-erp/pull/134)** — `openEmailDocument()` called `openModal('modal-send-email')`, but `openModal` is never defined anywhere in `index.html`. Broke the Email button for every document type (Invoice, Quotation, DN, CN, Receipt, PO, Work Order, AR Statement) since Session 35 introduced the feature. Fixed to use the project's real open convention, `classList.add('show')`.
+2. **[PR #135](https://github.com/brandonr2630/meridian-erp/pull/135)** — `send-document-email` Edge Function always failed with `"User has no assigned company"`. Root cause: it resolved the caller's company via `erp_users.company_id`, a legacy single-company column left dead (always null) since Session 33-34's Phase 4 RBAC rework moved company assignment to `erp_user_company_roles`. Client now sends `currentCompany.id`; edge function (deployed as v6) verifies the caller has a role in that company via `erp_user_company_roles` before trusting it.
+3. **[PR #136](https://github.com/brandonr2630/meridian-erp/pull/136)** — Purchase Order PDF (preview + emailed) was missing its Unit column — `buildPDFLineTable()`'s pricing-mode branch never had one; only the non-pricing branch (Delivery Note) did. `po_lines` is the only pricing-doc line table with a real `unit` field. Fixed with an opt-in `showUnit` flag threaded through `renderMultiPagePDF()`, scoped to PO's two render call sites only — Invoice/Quote/CN unaffected.
+
+### Outstanding — parked for a later session
+
+- **Resend email delivery still failing — `"Email failed: API key is invalid"`.** Walked through: regenerated the Resend key (`meridian-erp-prod` → new key), confirmed full token copied (not the masked `re_...` list-view prefix), confirmed correct Supabase project (`Terran Group ERP`, `fcagxvjxfqqkmuposmcb`), force-redeployed `send-document-email` (now v6) to rule out isolate/secret caching — **still fails after all of that.** Next session: run the curl-against-Resend-directly test (sent to user as a scratchpad file, `test-resend-key.txt`) to isolate whether the key itself is bad on Resend's side vs. a Supabase secret-propagation issue. Don't re-attempt the same troubleshooting steps already ruled out above.
+- **Test data still live, not yet cleaned up:** `ZZTEST Vendor` (Q2 Machines company) and PO `PO-0002` (TT$1,000, status OPEN, line "ZZTEST Line Item" × 10 @ TT$100). Delete both (and any Bills created against the PO before this session's cleanup step runs) via SQL once the full 9-step test plan is complete — matches this project's standing convention of zero test-data residue.
+- **9-step manual test plan from Session 48** — still not fully complete. Progress: step 1 (Send PO, confirm PDF/email) done aside from the email-delivery blocker above. Steps 2-9 (Bill picker/auto-populate, partial-bill remaining-qty, void/reopen, over-billing warning, plain-bill regression, non-admin RBAC, cleanup, other-write-path FK sweep) not yet run.
 
 ---
 
