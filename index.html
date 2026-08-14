@@ -16885,7 +16885,7 @@ async function generatePDFBase64(source) {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/send-document-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_accessToken}`, 'apikey': SUPABASE_KEY },
-        body: JSON.stringify({ to, subject, message, pdf_base64: pdfBase64, filename: _emailDocMeta.filename })
+        body: JSON.stringify({ to, subject, message, pdf_base64: pdfBase64, filename: _emailDocMeta.filename, company_id: currentCompany.id })
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Send failed');
       closeModal('modal-send-email');
