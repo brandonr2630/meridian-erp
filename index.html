@@ -5860,7 +5860,7 @@ body.light .global-search-results, body.light .split-btn-menu {
 </div>
 
 <!-- ── USER OVERRIDES MODAL ────────────────────────────────────── -->
-<div id="modal-user-overrides" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal('modal-user-overrides')">
+<div id="modal-user-overrides" class="modal-overlay" onclick="if(event.target===this)closeModal('modal-user-overrides')">
   <div class="modal" style="max-width:520px;width:95%;max-height:90vh;overflow-y:auto;">
     <div class="modal-header">
       <h3>Permission overrides — <span id="overrides-user-name"></span></h3>
@@ -6664,7 +6664,7 @@ function openCreateRoleModal() {
   document.getElementById('role-edit-name').value = '';
   document.getElementById('role-edit-error').textContent = '';
   renderPermMatrix({});
-  document.getElementById('modal-role-edit').classList.add('show');
+  openModal('modal-role-edit');
 }
 
 function openEditRoleModal(roleId) {
@@ -6751,7 +6751,7 @@ async function openUserOverridesModal(userId, companyId) {
   errEl.textContent = '';
   document.getElementById('overrides-user-id').value    = userId;
   document.getElementById('overrides-company-id').value = companyId;
-  document.getElementById('modal-user-overrides').style.display = 'flex';
+  openModal('modal-user-overrides');
   document.getElementById('overrides-matrix').innerHTML = 'Loading…';
 
   try {
@@ -6960,7 +6960,7 @@ async function openCreateUserModal() {
     ? roles.map(r => `<option value="${escHTML(r.id)}">${escHTML(r.name)}</option>`).join('')
     : '<option value="">No roles found</option>';
 
-  document.getElementById('modal-create-user').classList.add('show');
+  openModal('modal-create-user');
 }
 
 function openEditUserModal(authUserId) {
@@ -9682,7 +9682,7 @@ function openAddAccount() {
   document.getElementById('acc-is-bank').checked = false;
   document.getElementById('acc-normal').value = 'debit';
   populateParentSelect();
-  document.getElementById('modal-account').classList.add('show');
+  openModal('modal-account');
   setTimeout(() => document.getElementById('acc-code').focus(), 100);
 }
 
@@ -9854,7 +9854,7 @@ function openNewJournal() {
   document.getElementById('je-lines-body').innerHTML = '';
   addJELine(); addJELine();
   updateJETotals();
-  document.getElementById('modal-journal').classList.add('show');
+  openModal('modal-journal');
 }
 
 function addJELine() {
@@ -10272,7 +10272,7 @@ function openNewPO() {
   document.getElementById('po-lines-body').innerHTML = '';
   addPOLine();
   recalcPOTotals();
-  document.getElementById('modal-po').classList.add('show');
+  openModal('modal-po');
 }
 
 async function savePODraft() {
@@ -10393,7 +10393,7 @@ async function duplicatePO(id) {
   });
   recalcPOTotals();
   document.getElementById('modal-po-title').textContent = `New Purchase Order (from ${po.po_no || 'draft'})`;
-  document.getElementById('modal-po').classList.add('show');
+  openModal('modal-po');
 }
 
 async function sendPO(id) {
@@ -10494,7 +10494,7 @@ async function openPOPDF(id) {
   renderMultiPagePDF('po-pdf-content', pages, headerHTML, true, po.currency,
     total, 0, 0, total, po.incoterms, po.incoterms_place, po.notes, null, co.name, po.po_no, true);
 
-  document.getElementById('modal-po-pdf').classList.add('show');
+  openModal('modal-po-pdf');
 }
 
 function setApPage(n) { apPage = n; renderAPTable(_apFiltered); }
@@ -10572,7 +10572,7 @@ function openPayBillModal(billId) {
     sel.innerHTML += `<option value="${a.id}">${escHTML(a.account_name)} (${a.currency})</option>`;
   });
 
-  document.getElementById('modal-bill-payment').classList.add('show');
+  openModal('modal-bill-payment');
 }
 
 async function saveVendorPayment() {
@@ -10688,7 +10688,7 @@ async function openBillPaymentHistory(billId) {
   const contact = contacts.find(c => c.id === bill.contact_id) || {};
   document.getElementById('bill-history-subtitle').textContent =
     `${bill.bill_no || 'Draft'} — ${contact?.trading_name || contact?.name || '—'} · Total: ${fmt(bill.total, bill.currency)}`;
-  document.getElementById('modal-bill-pay-history').classList.add('show');
+  openModal('modal-bill-pay-history');
   await switchBillHistoryTab('payments');
 }
 
@@ -10806,7 +10806,7 @@ function voidReasonResolve(value) {
 }
 function showVoidReason() {
   document.getElementById('void-reason-input').value = '';
-  document.getElementById('modal-void-reason').classList.add('show');
+  openModal('modal-void-reason');
   setTimeout(() => document.getElementById('void-reason-input').focus(), 80);
   return new Promise(res => { _voidReasonResolve = res; });
 }
@@ -10951,7 +10951,7 @@ function openAddClient() {
   document.getElementById('client-terms').value = '30';
   document.getElementById('client-credit-limit').value = '';
   document.getElementById('client-active').checked = true;
-  document.getElementById('modal-client').classList.add('show');
+  openModal('modal-client');
 }
 
 function openEditClient(id) {
@@ -11140,7 +11140,7 @@ function openAddVendor() {
   document.getElementById('vendor-terms').value = '30';
   document.getElementById('vendor-payment-method').value = '';
   document.getElementById('vendor-active').checked = true;
-  document.getElementById('modal-vendor').classList.add('show');
+  openModal('modal-vendor');
 }
 
 function openEditVendor(id) {
@@ -11290,7 +11290,7 @@ function openAddCompany() {
   document.getElementById('erp-co-logo-preview').innerHTML = '?';
   document.getElementById('erp-co-logo-status').textContent = '';
   document.getElementById('erp-co-logo-file').value = '';
-  document.getElementById('modal-erp-company').classList.add('show');
+  openModal('modal-erp-company');
 }
 
 async function openEditErpCompany(id) {
@@ -11566,7 +11566,7 @@ async function saveInvoiceCounter() {
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
-function openAddContact() { document.getElementById('modal-contact').classList.add('show'); }
+function openAddContact() { openModal('modal-contact'); }
 // ── THEME TOGGLE ─────────────────────────────────────────────────
 function toggleTheme() {
   const isLight = document.body.classList.toggle('light');
@@ -11604,7 +11604,7 @@ function openFYModal() {
   document.getElementById('fy-name').value  = `FY ${year}`;
   document.getElementById('fy-start').value = `${year}-01-01`;
   document.getElementById('fy-end').value   = `${year}-12-31`;
-  document.getElementById('modal-fy').classList.add('show');
+  openModal('modal-fy');
 }
 
 async function saveFiscalYear() {
@@ -11698,7 +11698,7 @@ function reviewBeforePost() {
     </div>`;
 
   _pendingPostStatus = 'posted';
-  document.getElementById('modal-post-review').classList.add('show');
+  openModal('modal-post-review');
 }
 
 function confirmPostInvoice() {
@@ -11737,7 +11737,7 @@ function openReceivePayment(invoiceId) {
       (rest.length && matching.length ? `</optgroup>` : '');
   }
 
-  document.getElementById('modal-payment').classList.add('show');
+  openModal('modal-payment');
 }
 
 function updatePaymentBalance() {
@@ -11855,7 +11855,7 @@ async function savePayment() {
     document.getElementById('pconf-method').textContent       = _methodLabels[method] || method;
     document.getElementById('pconf-balance').textContent      = fmt(newBalance, inv.currency);
     document.getElementById('pconf-balance').style.color      = newBalance <= 0.005 ? 'var(--green)' : 'var(--amber)';
-    document.getElementById('modal-payment-confirmed').classList.add('show');
+    openModal('modal-payment-confirmed');
   } catch(e) {
     showToast('Error recording payment: ' + e.message, 'error');
   } finally { btn.disabled = false; btn.textContent = 'Record Payment'; }
@@ -12011,7 +12011,7 @@ async function openReceiptPDF(receiptId) {
 
     document.getElementById('receipt-pdf-subtitle').textContent =
       `${receipt.receipt_no} · ${contact.trading_name || contact.name || '—'}`;
-    document.getElementById('modal-receipt-pdf').classList.add('show');
+    openModal('modal-receipt-pdf');
   } catch(e) { showToast('Error loading receipt: ' + e.message, 'error'); }
 }
 
@@ -12024,7 +12024,7 @@ async function openInvoiceReceiptHistory(invoiceId) {
 
   const listEl = document.getElementById('inv-receipts-list');
   listEl.innerHTML = '<div style="padding:28px;text-align:center;color:var(--text-3);font-size:13px;">Loading…</div>';
-  document.getElementById('modal-invoice-receipts').classList.add('show');
+  openModal('modal-invoice-receipts');
 
   try {
     const receipts = await sbGet('payment_receipts', `invoice_id=eq.${invoiceId}&order=receipt_date.desc`);
@@ -12177,7 +12177,7 @@ function openAddBankAccount() {
   } else {
     hint.textContent = '(optional — no GL accounts set up yet)'; hint.style.color = 'var(--text-3)';
   }
-  document.getElementById('modal-bank-account').classList.add('show');
+  openModal('modal-bank-account');
 }
 
 function openEditBankAccount(id) {
@@ -12359,7 +12359,7 @@ function openAddBankTxn() {
   document.getElementById('btxn-description').value = '';
   document.getElementById('btxn-amount').value      = '';
   document.getElementById('btxn-reference').value   = '';
-  document.getElementById('modal-bank-txn').classList.add('show');
+  openModal('modal-bank-txn');
 }
 
 async function saveBankTxn() {
@@ -12433,7 +12433,7 @@ async function openNewBill() {
   document.getElementById('bill-po-picker').innerHTML = '<option value="">— None —</option>';
   document.getElementById('bill-po-id').value = '';
   document.getElementById('bill-next-number').textContent = 'assigned when approved';
-  document.getElementById('modal-bill').classList.add('show');
+  openModal('modal-bill');
 }
 
 async function openEditBill(billId) {
@@ -13122,7 +13122,7 @@ function previewReport(type, title) {
   iframe.onload = resizeIframe;
   const doc = iframe.contentDocument || iframe.contentWindow.document;
   doc.open(); doc.write(html); doc.close();
-  document.getElementById('modal-report-preview').classList.add('show');
+  openModal('modal-report-preview');
   // Fallback: re-measure after fonts and images settle
   setTimeout(resizeIframe, 600);
 }
@@ -13739,7 +13739,7 @@ function openNewInvoice() {
   addInvLine();
   calcDueDate();
   recalcInvTotals();
-  document.getElementById('modal-invoice').classList.add('show');
+  openModal('modal-invoice');
   setTimeout(() => document.getElementById('inv-contact-search').focus(), 120);
 }
 
@@ -14477,7 +14477,7 @@ async function openNewQuotation() {
   document.getElementById('quo-lines-body').innerHTML = '';
   addQuoLine(); addQuoLine(); addQuoLine();
   recalcQuoTotals();
-  document.getElementById('modal-quotation').classList.add('show');
+  openModal('modal-quotation');
 }
 
 async function openConvertToQuote(oppId) {
@@ -14528,7 +14528,7 @@ function openTemplatePicker() {
   _tplAll = [...quotations].sort((a, b) => (b.quote_date || '').localeCompare(a.quote_date || ''));
   document.getElementById('tpl-search').value = '';
   renderTemplatePicker(_tplAll, contactMap);
-  document.getElementById('modal-quo-template-picker').classList.add('show');
+  openModal('modal-quo-template-picker');
 }
 
 function filterTemplatePicker() {
@@ -14682,7 +14682,7 @@ async function openQuoFromTemplate(id) {
     addQuoLine(); addQuoLine(); addQuoLine();
   }
   recalcQuoTotals();
-  document.getElementById('modal-quotation').classList.add('show');
+  openModal('modal-quotation');
 }
 
 function addQuoLine() {
@@ -14868,7 +14868,7 @@ function openQuoStatusModal(id) {
   document.getElementById('quo-status-id').value = id;
   document.getElementById('quo-status-number').textContent = q.quote_no;
   document.getElementById('quo-status-select').value = q.status;
-  document.getElementById('modal-quo-status').classList.add('show');
+  openModal('modal-quo-status');
 }
 
 async function applyQuoStatus() {
@@ -14975,7 +14975,7 @@ async function openManageSalesLeads() {
   document.getElementById('sl-email').value = '';
   document.getElementById('sl-phone').value = '';
   await refreshSLList();
-  document.getElementById('modal-sales-leads').classList.add('show');
+  openModal('modal-sales-leads');
 }
 
 async function refreshSLList() {
@@ -15430,7 +15430,7 @@ async function openNewDeliveryNote() {
   document.getElementById('dn-lines-body').innerHTML       = '';
   addDNLine(); addDNLine(); addDNLine();
   document.getElementById('dn-next-number').textContent = 'assigned when dispatched';
-  document.getElementById('modal-delivery-note').classList.add('show');
+  openModal('modal-delivery-note');
 }
 
 function addDNLine() {
@@ -15540,7 +15540,7 @@ function openDNStatusModal(id) {
   document.getElementById('dn-status-id').value = id;
   document.getElementById('dn-status-number').textContent = dn.dn_no;
   document.getElementById('dn-status-select').value = dn.status;
-  document.getElementById('modal-dn-status').classList.add('show');
+  openModal('modal-dn-status');
 }
 
 async function applyDNStatus() {
@@ -15704,7 +15704,7 @@ async function openNewCreditNote() {
   addCNLine(); addCNLine();
   recalcCNTotals();
   document.getElementById('cn-next-number').textContent = 'assigned when posted';
-  document.getElementById('modal-credit-note').classList.add('show');
+  openModal('modal-credit-note');
 }
 
 function onCNInvoiceSelect() {
@@ -16443,7 +16443,7 @@ async function generatePDFBase64(source) {
     document.getElementById('email-doc-message').value = '';
     const btn = document.getElementById('btn-send-email');
     btn.disabled = false; btn.textContent = 'Send';
-    document.getElementById('modal-send-email').classList.add('show');
+    openModal('modal-send-email');
   }
 
   function _resolveEmailMeta(type, id) {
@@ -16965,7 +16965,7 @@ async function openInvoicePDF(id) {
     parseFloat(inv.total||0), inv.incoterms, inv.incoterms_place,
     inv.notes, co.bank_details, co.name, docNo);
 
-  document.getElementById('modal-pdf-preview').classList.add('show');
+  openModal('modal-pdf-preview');
 }
 
 // ── Quotation PDF ─────────────────────────────────────────────────
@@ -16997,7 +16997,7 @@ async function openQuoPDF(id) {
     parseFloat(quo.total||0), quo.incoterms, quo.incoterms_place,
     quo.notes, null, co.name, quo.quote_no);
 
-  document.getElementById('modal-quo-pdf').classList.add('show');
+  openModal('modal-quo-pdf');
 }
 
 // ── Delivery Note PDF ─────────────────────────────────────────────
@@ -17032,7 +17032,7 @@ async function openDNPDF(id) {
   renderMultiPagePDF('dn-pdf-content', pages, headerHTML, false, currentCompany.currency,
     0, 0, 0, 0, null, null, dn.notes, null, co.name, dn.dn_no);
 
-  document.getElementById('modal-dn-pdf').classList.add('show');
+  openModal('modal-dn-pdf');
 }
 
 // ── Credit Note PDF ───────────────────────────────────────────────
@@ -17061,7 +17061,7 @@ async function openCNPDF(id) {
     parseFloat(cn.subtotal||0), taxRate, parseFloat(cn.tax_amount||0),
     parseFloat(cn.total||0), null, null, cn.notes, null, co.name, cn.cn_no);
 
-  document.getElementById('modal-cn-pdf').classList.add('show');
+  openModal('modal-cn-pdf');
 }
 
 // ── WORKSPACE ────────────────────────────────────────────────────
@@ -17525,7 +17525,7 @@ function openNewOpportunity() {
   document.getElementById('opp-lost-reason-field').style.display = 'none';
   _populateOppSelects(null, null);
   _renderOppTeamPicker([]);
-  document.getElementById('modal-opportunity').classList.add('show');
+  openModal('modal-opportunity');
 }
 
 async function openEditOpportunity(id) {
@@ -17755,7 +17755,7 @@ function openNewActivity(oppId, contactId) {
   document.getElementById('act-subject').value = '';
   document.getElementById('act-notes').value   = '';
   _populateActSelects(oppId || null, contactId || null, null);
-  document.getElementById('modal-crm-activity').classList.add('show');
+  openModal('modal-crm-activity');
 }
 
 function openEditActivity(id) {
@@ -17937,7 +17937,7 @@ function openNewTask(oppId, contactId) {
   document.getElementById('modal-task-title').textContent = 'New Task';
   ['task-title','task-due-date','task-description'].forEach(id => document.getElementById(id).value = '');
   _populateTaskSelects(oppId || null, null, contactId || null, null);
-  document.getElementById('modal-crm-task').classList.add('show');
+  openModal('modal-crm-task');
 }
 
 function openEditTask(id) {
@@ -18088,7 +18088,7 @@ function openNewTeamMember() {
   _editTeamMemberId = null;
   document.getElementById('modal-tm-title').textContent = 'New Team Member';
   ['tm-name','tm-job-title','tm-email'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('modal-crm-team-member').classList.add('show');
+  openModal('modal-crm-team-member');
 }
 
 function openEditTeamMember(id) {
@@ -18494,7 +18494,7 @@ async function openContactPersonsModal(clientId) {
   _cpClientId = clientId;
   const client = clients.find(c => c.id === clientId);
   document.getElementById('cp-modal-title').textContent = `Contact Persons — ${client ? (client.trading_name || client.name) : ''}`;
-  document.getElementById('modal-contact-persons').classList.add('show');
+  openModal('modal-contact-persons');
   await loadContactPersons();
 }
 
@@ -18544,7 +18544,7 @@ function openNewCPForm() {
   document.getElementById('cp-form-title').textContent = 'Add Contact Person';
   ['cp-name','cp-title','cp-email','cp-phone','cp-notes'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('cp-primary').checked = !contactPersons.length;
-  document.getElementById('modal-cp-form').classList.add('show');
+  openModal('modal-cp-form');
 }
 
 function openEditCPForm(id) {
