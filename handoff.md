@@ -1,10 +1,10 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-08-14 · Session 49*
+*Last updated: 2026-08-14 · Session 50*
 
 ---
 
-## Session 49 — `bill_lines_archive` missing PO columns — RESOLVED
+## Session 50 — `bill_lines_archive` missing PO columns — RESOLVED
 
 **Date:** 2026-08-14
 **Trigger:** User editing a live bill (linking a previously-unlinked line to Inventory) hit `Error saving edit: Could not find the 'po_id' column of 'bill_lines_archive' in the schema cache`.
@@ -14,6 +14,30 @@
 **Fix:** `ALTER TABLE bill_lines_archive ADD COLUMN po_id uuid, ADD COLUMN po_line_id uuid;` — applied live via Supabase MCP migration `add_po_columns_to_bill_lines_archive`. No FK added (kept loose, matching the table's existing `item_id`/`item_category` columns, which are also FK-less by design — archive rows are audit history, not meant to be constrained to live operational tables). Verified columns exist post-migration. No bill was saved before the error hit, so no data cleanup needed.
 
 **Lesson:** when a live table gains a column that a `saveXEdit()`/archive path also starts writing, check every table that path writes to — not just the primary table's own constraints. This is the second instance of this exact bug class in two sessions; worth a deliberate sweep next time a schema change touches any table with an archive/audit sibling (`bill_lines_archive` is the only one currently in the schema, but the pattern will recur if more are added).
+
+---
+
+## Session 49 — PO list view: search/status filter + pagination — MERGED, LIVE
+
+**Date:** 2026-08-13
+**Branch:** `claude/serene-hawking-14b5b8` — [PR #131](https://github.com/brandonr2630/meridian-erp/pull/131) merged to `master` (`5c6beef`), deployed.
+
+### What this is
+
+Closes the gap Session 48 flagged and deferred: `#view-purchase-orders` had a bare `<table>` with no toolbar or pagination, unlike every other list view (AP, Clients, Vendors). Added the same `.table-toolbar` pattern — search by PO#/vendor, status filter (draft/open/closed/cancelled) — plus `PAGE_SIZE`/`renderPager` pagination, cloned directly off `renderAPTable`/`setApPage`/`filterAP`.
+
+### Changes
+
+- New state: `_poFiltered`, `poPage` (mirrors `_apFiltered`/`apPage`)
+- `renderPOTable()` now paginates (`list.slice(poPage * PAGE_SIZE, ...)`) and renders `renderPager(...)`
+- New `setPoPage(n)` / `filterPO()`, wired to new `#po-search` / `#po-status-filter` toolbar inputs
+- `loadPurchaseOrders()` resets `poPage = 0` on reload, matching `loadAP()`
+
+No RBAC changes — view already gated by `finance:ap:read` nav perm; row actions already check `finance:ap:write`/`approve`.
+
+### Not verified live
+
+No local Supabase session in this branch's worktree — verified inline-script syntax (`node --check`) and a clean console on app boot only. Search/filter/pagination against real PO data still needs a human click-through.
 
 ---
 
@@ -87,7 +111,7 @@ Given the hotfix above, treat every other write path in this module (Send, Dupli
 
 ### Deferred (flagged, not part of this module)
 
-- **PO list view has no search/filter/pagination** (every other list view in the app does) — spun off as a separate background task, not part of this PR.
+- **PO list view has no search/filter/pagination** (every other list view in the app does) — spun off as a separate background task, not part of this PR. Closed in Session 49.
 
 ---
 

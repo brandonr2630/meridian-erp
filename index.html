@@ -2993,7 +2993,20 @@ body.light .global-search-results, body.light .split-btn-menu {
         </div>
       </div>
       <div class="page-body">
-        <div class="table-wrap" id="po-table-wrap"><div class="page-loading"><div class="loading-spinner"></div> Loading...</div></div>
+        <div class="table-wrap" id="po-table-wrap-outer">
+          <div class="table-toolbar">
+            <div class="table-title">Purchase Orders</div>
+            <div class="search-box"><span class="search-icon">🔍</span><input type="text" placeholder="Search PO #, vendor..." id="po-search" oninput="filterPO()"></div>
+            <select class="filter-select" id="po-status-filter" onchange="filterPO()">
+              <option value="">All Status</option>
+              <option value="draft">Draft</option>
+              <option value="open">Open</option>
+              <option value="closed">Closed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+          <div id="po-table-wrap"><div class="page-loading"><div class="loading-spinner"></div> Loading...</div></div>
+        </div>
       </div>
     </div>
 
@@ -10051,12 +10064,15 @@ document.addEventListener('click', e => {
 });
 
 function renderPOTable(list) {
+  _poFiltered = list;
+  const total = list.length;
   const contactMap = Object.fromEntries(contacts.map(c => [c.id, c.trading_name || c.name]));
   const wrap = document.getElementById('po-table-wrap');
-  if (!list.length) {
+  if (!total) {
     wrap.innerHTML = '<div class="table-empty">No purchase orders yet.</div>';
     return;
   }
+  const page = list.slice(poPage * PAGE_SIZE, (poPage + 1) * PAGE_SIZE);
   wrap.innerHTML = `
     <table class="data-table">
       <thead>
@@ -10065,7 +10081,7 @@ function renderPOTable(list) {
           <th>Currency</th><th class="right">Total</th><th>Status</th><th class="right">Actions</th>
         </tr>
       </thead>
-      <tbody>${list.map(po => {
+      <tbody>${page.map(po => {
         const canSend   = po.status === 'draft'  && can('finance:ap:approve');
         const canEdit   = po.status === 'draft'  && can('finance:ap:write');
         const canClose  = po.status === 'open'   && can('finance:ap:approve');
@@ -10104,7 +10120,22 @@ function renderPOTable(list) {
         </tr>`;
       }).join('')}
       </tbody>
-    </table>`;
+    </table>
+    ${renderPager(total, poPage, PAGE_SIZE, 'setPoPage')}`;
+}
+
+function setPoPage(n) { poPage = n; renderPOTable(_poFiltered); }
+function filterPO() {
+  poPage = 0;
+  const q      = document.getElementById('po-search').value.toLowerCase();
+  const status = document.getElementById('po-status-filter').value;
+  const cmap   = Object.fromEntries(contacts.map(c => [c.id, (c.trading_name || c.name).toLowerCase()]));
+  const filtered = purchaseOrders.filter(po => {
+    if (status && po.status !== status) return false;
+    if (q && !(po.po_no||'').toLowerCase().includes(q) && !(cmap[po.vendor_id]||'').includes(q)) return false;
+    return true;
+  });
+  renderPOTable(filtered);
 }
 
 function togglePORowMenu(poId, btnEl) {
@@ -11007,6 +11038,7 @@ async function loadPurchaseOrders() {
       lines.forEach(l => { totalsByPO[l.po_id] = (totalsByPO[l.po_id] || 0) + parseFloat(l.amount || 0); });
       purchaseOrders.forEach(p => { p._total = totalsByPO[p.id] || 0; });
     }
+    poPage = 0;
     renderPOTable(purchaseOrders);
   } catch(e) { showToast('Purchase orders load error: ' + e.message, 'error'); }
   finally { if (poWrap) { poWrap.style.opacity = ''; poWrap.style.pointerEvents = ''; } }
@@ -13633,7 +13665,7 @@ let _apPOLookup = [];
 let apSortCol = null, apSortDir = 'asc';
 
 // ── PURCHASE ORDER STATE ──────────────────────────────────────────
-let purchaseOrders = [], poLines = [];
+let purchaseOrders = [], poLines = [], _poFiltered = []; let poPage = 0;
 let _poEditId = null;
 let _poRowMenuActions = {};
 let poSortCol = null, poSortDir = 'asc';
