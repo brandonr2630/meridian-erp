@@ -1,6 +1,19 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-08-08 · Session 48*
+*Last updated: 2026-08-14 · Session 49*
+
+---
+
+## Session 49 — `bill_lines_archive` missing PO columns — RESOLVED
+
+**Date:** 2026-08-14
+**Trigger:** User editing a live bill (linking a previously-unlinked line to Inventory) hit `Error saving edit: Could not find the 'po_id' column of 'bill_lines_archive' in the schema cache`.
+
+**Root cause:** `bill_lines_archive` was created in Session 45 (Edit Bill feature) with columns mirroring `bill_lines` at that time. Session 48's Purchase Orders module later added `po_id`/`po_line_id` to `bill_lines` (and `bill_lines`'s own archive-write path in `saveBillEdit()` was updated to include them), but nobody added the matching columns to `bill_lines_archive` itself — same bug class as Session 48's `created_by` FK hotfix: a sibling/dependent table not kept in sync when a live table's schema changed.
+
+**Fix:** `ALTER TABLE bill_lines_archive ADD COLUMN po_id uuid, ADD COLUMN po_line_id uuid;` — applied live via Supabase MCP migration `add_po_columns_to_bill_lines_archive`. No FK added (kept loose, matching the table's existing `item_id`/`item_category` columns, which are also FK-less by design — archive rows are audit history, not meant to be constrained to live operational tables). Verified columns exist post-migration. No bill was saved before the error hit, so no data cleanup needed.
+
+**Lesson:** when a live table gains a column that a `saveXEdit()`/archive path also starts writing, check every table that path writes to — not just the primary table's own constraints. This is the second instance of this exact bug class in two sessions; worth a deliberate sweep next time a schema change touches any table with an archive/audit sibling (`bill_lines_archive` is the only one currently in the schema, but the pattern will recur if more are added).
 
 ---
 
