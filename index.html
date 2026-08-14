@@ -16404,7 +16404,7 @@ async function generatePDFBase64(source) {
     document.getElementById('email-doc-message').value = '';
     const btn = document.getElementById('btn-send-email');
     btn.disabled = false; btn.textContent = 'Send';
-    openModal('modal-send-email');
+    document.getElementById('modal-send-email').classList.add('show');
   }
 
   function _resolveEmailMeta(type, id) {
