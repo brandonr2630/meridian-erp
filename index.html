@@ -6489,9 +6489,22 @@ function navigate(view, opts = {}) {
 
 window.addEventListener('popstate', (e) => {
   const state = e.state;
+  // Close any modal that's currently visible but isn't the one the state we
+  // just landed on expects to be open. This runs regardless of whether the
+  // landed-on state itself has a `.modal` field, because popstate's e.state
+  // describes the DESTINATION entry, not the modal that was open before this
+  // navigation — e.g. popping a state pushed by openModal() lands on the
+  // state that existed *before* the modal opened, which has no `.modal` key
+  // at all. Without this DOM-driven sweep, that modal's `.show` class would
+  // never be removed.
+  document.querySelectorAll('.modal-overlay.show').forEach(el => {
+    if (!state || state.modal !== el.id) _popstateCloseModal(el.id);
+  });
   if (!state) { navigate('dashboard', { push: false }); return; }
   if (state.modal) {
-    _popstateCloseModal(state.modal);
+    // The modal named by this state is already showing (its .show class was
+    // never touched by the sweep above, or was just re-added by whatever
+    // opened it) — nothing else to do.
     return;
   }
   if (state.view) { navigate(state.view, { push: false }); }
@@ -11635,11 +11648,11 @@ function showConfirm(message, title = 'Confirm', okLabel = 'Confirm', danger = t
     const okBtn = document.getElementById('confirm-ok-btn');
     okBtn.textContent  = okLabel;
     okBtn.className    = `btn ${danger ? 'btn-danger' : 'btn-primary'}`;
-    document.getElementById('modal-confirm').classList.add('show');
+    openModal('modal-confirm');
   });
 }
 function confirmResolve(result) {
-  document.getElementById('modal-confirm').classList.remove('show');
+  closeModal('modal-confirm');
   if (_confirmResolve) { _confirmResolve(result); _confirmResolve = null; }
 }
 
@@ -17354,7 +17367,28 @@ async function deleteDocument(type, id, label) {
   } catch(e) { showToast('Delete error: ' + e.message, 'error'); }
 }
 
+function openModal(id, opts = {}) {
+  document.getElementById(id).classList.add('show');
+  if (opts.recordType && opts.recordId) {
+    history.pushState(
+      { view: currentView, modal: id, recordType: opts.recordType, recordId: opts.recordId },
+      '',
+      '#/' + currentView + '/' + opts.recordType + '/' + opts.recordId
+    );
+  } else {
+    history.pushState({ view: currentView, modal: id }, '', location.href);
+  }
+}
+
 function closeModal(id) {
+  if (history.state && history.state.modal === id) {
+    history.back();
+    return;
+  }
+  document.getElementById(id).classList.remove('show');
+}
+
+function _popstateCloseModal(id) {
   document.getElementById(id).classList.remove('show');
 }
 
