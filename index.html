@@ -17380,6 +17380,7 @@ function openModal(id, opts = {}) {
   }
 }
 
+// Only place allowed to call history.back() for a tracked modal — closing must consume the pushState entry openModal() added, or forward/back gets out of sync.
 function closeModal(id) {
   if (history.state && history.state.modal === id) {
     history.back();
@@ -17388,6 +17389,7 @@ function closeModal(id) {
   document.getElementById(id).classList.remove('show');
 }
 
+// Runs as a REACTION to popstate (back already happened) — must never call closeModal()/history.back(), or it re-triggers back() and loops/desyncs the pop stack.
 function _popstateCloseModal(id) {
   document.getElementById(id).classList.remove('show');
 }
