@@ -6446,7 +6446,8 @@ function restoreNavState() {
 }
 
 // ── NAVIGATION ───────────────────────────────────────────────────
-function navigate(view) {
+function navigate(view, opts = {}) {
+  const push = opts.push !== false;
   // Module access guard — redirect to dashboard if user lacks module access
   if (!isAdmin() && currentUser) {
     const u = currentUser;
@@ -6482,7 +6483,31 @@ function navigate(view) {
   currentView = view;
   (VIEW_SECTIONS[view] || []).forEach(expandSection);
   if (window.innerWidth <= 900) closeSidebar();
+  if (push) history.pushState({ view }, '', '#/' + view);
   loadViewData(view);
+}
+
+window.addEventListener('popstate', (e) => {
+  const state = e.state;
+  if (!state) { navigate('dashboard', { push: false }); return; }
+  if (state.modal) {
+    _popstateCloseModal(state.modal);
+    return;
+  }
+  if (state.view) { navigate(state.view, { push: false }); }
+});
+
+function _restoreViewFromHash() {
+  const hash = location.hash.replace(/^#\/?/, '');
+  if (!hash) { navigate('dashboard', { push: false }); return; }
+  const parts = hash.split('/');
+  const view = parts[0];
+  if (!document.getElementById('view-' + view)) { navigate('dashboard', { push: false }); return; }
+  navigate(view, { push: false });
+  history.replaceState({ view }, '', '#/' + view);
+  if (parts.length >= 3) {
+    _restoreDeepLinkedModal(parts[0], parts[1], parts[2]);
+  }
 }
 
 function toggleSidebar() {
