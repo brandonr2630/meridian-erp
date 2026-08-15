@@ -6528,24 +6528,24 @@ async function _restoreViewFromHash() {
 }
 
 const MODAL_RECORD_ROUTES = {
-  role:           { view: 'role-management', openFn: id => openEditRoleModal(id) },
-  user:           { view: 'user-management', openFn: id => openEditUserModal(id) },
-  permissions:    { view: 'user-management', openFn: id => openEditPermissionsModal(id) },
-  account:        { view: 'coa',              openFn: id => openEditAccount(id) },
-  po:             { view: 'purchase-orders',  openFn: id => openEditPO(id) },
-  client:         { view: 'clients',          openFn: id => openEditClient(id) },
-  vendor:         { view: 'vendors',          openFn: id => openEditVendor(id) },
-  company:        { view: 'companies',        openFn: id => openEditErpCompany(id) },
-  'bank-account': { view: 'bank',             openFn: id => openEditBankAccount(id) },
-  bill:           { view: 'ap',               openFn: id => openEditBill(id) },
-  invoice:        { view: 'ar',               openFn: id => openEditInvoice(id) },
-  quote:          { view: 'quotations',       openFn: id => openEditQuotation(id) },
-  opp:            { view: 'pipeline',         openFn: id => openEditOpportunity(id) },
-  activity:       { view: 'pipeline',         openFn: id => openEditActivity(id) },
-  task:           { view: 'pipeline',         openFn: id => openEditTask(id) },
-  'team-member':  { view: 'pipeline',         openFn: id => openEditTeamMember(id) },
+  role:           { view: 'role-management', modalId: 'modal-role-edit',        openFn: id => openEditRoleModal(id) },
+  user:           { view: 'user-management', modalId: 'modal-edit-user',        openFn: id => openEditUserModal(id) },
+  permissions:    { view: 'user-management', modalId: 'modal-edit-permissions', openFn: id => openEditPermissionsModal(id) },
+  account:        { view: 'coa',              modalId: 'modal-account',        openFn: id => openEditAccount(id) },
+  po:             { view: 'purchase-orders',  modalId: 'modal-po',             openFn: id => openEditPO(id) },
+  client:         { view: 'clients',          modalId: 'modal-client',         openFn: id => openEditClient(id) },
+  vendor:         { view: 'vendors',          modalId: 'modal-vendor',         openFn: id => openEditVendor(id) },
+  company:        { view: 'companies',        modalId: 'modal-erp-company',    openFn: id => openEditErpCompany(id) },
+  'bank-account': { view: 'bank',             modalId: 'modal-bank-account',   openFn: id => openEditBankAccount(id) },
+  bill:           { view: 'ap',               modalId: 'modal-bill',           openFn: id => openEditBill(id) },
+  invoice:        { view: 'ar',               modalId: 'modal-invoice',        openFn: id => openEditInvoice(id) },
+  quote:          { view: 'quotations',       modalId: 'modal-quotation',      openFn: id => openEditQuotation(id) },
+  opp:            { view: 'pipeline',         modalId: 'modal-opportunity',    openFn: id => openEditOpportunity(id) },
+  activity:       { view: 'pipeline',         modalId: 'modal-crm-activity',   openFn: id => openEditActivity(id) },
+  task:           { view: 'pipeline',         modalId: 'modal-crm-task',       openFn: id => openEditTask(id) },
+  'team-member':  { view: 'pipeline',         modalId: 'modal-crm-team-member', openFn: id => openEditTeamMember(id) },
   // cp's recordId is composite 'clientId:contactPersonId' (see openEditCPForm) — caller must split it and pass openFn only the bare cpId
-  cp:             { view: 'client-360',       openFn: id => openEditCPForm(id) },
+  cp:             { view: 'client-360',       modalId: 'modal-cp-form',        openFn: id => openEditCPForm(id) },
 };
 
 async function _restoreDeepLinkedModal(view, recordType, rawId) {
@@ -6554,6 +6554,7 @@ async function _restoreDeepLinkedModal(view, recordType, rawId) {
     history.replaceState({ view: currentView }, '', '#/' + currentView);
     return;
   }
+  let toastAlreadyShown = false;
   try {
     if (recordType === 'cp') {
       const [clientId, cpId] = rawId.split(':');
@@ -6566,25 +6567,21 @@ async function _restoreDeepLinkedModal(view, recordType, rawId) {
     } else {
       await route.openFn(rawId);
     }
-    if (!document.getElementById(_routeModalId(recordType))?.classList.contains('show')) {
+    // Capture toast state right after openFn returns, before deciding whether to
+    // throw the "not found" fallback — an openFn that bailed on a permission check
+    // (e.g. openEditBill's isAdmin() guard) already showed its own accurate toast;
+    // we must not let the generic message below clobber it (showToast is a single
+    // shared element, so a second call overwrites the first).
+    toastAlreadyShown = document.getElementById('toast')?.classList.contains('show');
+    if (!document.getElementById(route.modalId)?.classList.contains('show')) {
       throw new Error('Record not found');
     }
   } catch (e) {
-    showToast('That record no longer exists or you don\'t have access.', 'warn');
-    history.replaceState({ view }, '', '#/' + view);
+    if (!toastAlreadyShown) {
+      showToast('That record no longer exists or you don\'t have access.', 'warn');
+    }
+    history.replaceState({ view: currentView }, '', '#/' + currentView);
   }
-}
-
-function _routeModalId(recordType) {
-  const map = {
-    role: 'modal-role-edit', user: 'modal-edit-user', permissions: 'modal-edit-permissions',
-    account: 'modal-account', po: 'modal-po', client: 'modal-client', vendor: 'modal-vendor',
-    company: 'modal-erp-company', 'bank-account': 'modal-bank-account', bill: 'modal-bill',
-    invoice: 'modal-invoice', quote: 'modal-quotation', opp: 'modal-opportunity',
-    activity: 'modal-crm-activity', task: 'modal-crm-task', 'team-member': 'modal-crm-team-member',
-    cp: 'modal-cp-form',
-  };
-  return map[recordType];
 }
 
 function toggleSidebar() {
