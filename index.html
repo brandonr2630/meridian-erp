@@ -6523,6 +6523,26 @@ function _restoreViewFromHash() {
   }
 }
 
+const MODAL_RECORD_ROUTES = {
+  role:           { view: 'role-management', openFn: id => openEditRoleModal(id) },
+  user:           { view: 'user-management', openFn: id => openEditUserModal(id) },
+  permissions:    { view: 'user-management', openFn: id => openEditPermissionsModal(id) },
+  account:        { view: 'coa',              openFn: id => openEditAccount(id) },
+  po:             { view: 'purchase-orders',  openFn: id => openEditPO(id) },
+  client:         { view: 'clients',          openFn: id => openEditClient(id) },
+  vendor:         { view: 'vendors',          openFn: id => openEditVendor(id) },
+  company:        { view: 'companies',        openFn: id => openEditErpCompany(id) },
+  'bank-account': { view: 'bank',             openFn: id => openEditBankAccount(id) },
+  bill:           { view: 'ap',               openFn: id => openEditBill(id) },
+  invoice:        { view: 'ar',               openFn: id => openEditInvoice(id) },
+  quote:          { view: 'quotations',       openFn: id => openEditQuotation(id) },
+  opp:            { view: 'pipeline',         openFn: id => openEditOpportunity(id) },
+  activity:       { view: 'pipeline',         openFn: id => openEditActivity(id) },
+  task:           { view: 'pipeline',         openFn: id => openEditTask(id) },
+  'team-member':  { view: 'pipeline',         openFn: id => openEditTeamMember(id) },
+  cp:             { view: 'client-360',       openFn: id => openEditCPForm(id) },
+};
+
 function toggleSidebar() {
   document.querySelector('.sidebar').classList.toggle('open');
   document.getElementById('sidebar-overlay').classList.toggle('show');
@@ -6675,7 +6695,7 @@ function openEditRoleModal(roleId) {
   document.getElementById('role-edit-name').value = role.name;
   document.getElementById('role-edit-error').textContent = '';
   renderPermMatrix(role.permissions || {});
-  document.getElementById('modal-role-edit').classList.add('show');
+  openModal('modal-role-edit', { recordType: 'role', recordId: roleId });
 }
 
 function renderPermMatrix(currentPerms) {
@@ -6978,7 +6998,7 @@ function openEditUserModal(authUserId) {
   ).join('');
   const saveBtn = document.getElementById('eu-save-btn');
   saveBtn.textContent = 'Save Changes'; saveBtn.disabled = false;
-  document.getElementById('modal-edit-user').classList.add('show');
+  openModal('modal-edit-user', { recordType: 'user', recordId: authUserId });
 }
 
 async function saveEditUser() {
@@ -7064,7 +7084,7 @@ async function openEditPermissionsModal(authUserId) {
   ).catch(() => []);
   if (assignments.length) roleSel.value = assignments[0].role_id;
 
-  document.getElementById('modal-edit-permissions').classList.add('show');
+  openModal('modal-edit-permissions', { recordType: 'permissions', recordId: authUserId });
 }
 
 function closeEditPermissionsModal() {
@@ -9703,7 +9723,7 @@ function openEditAccount(id) {
   updateSubtypes();
   document.getElementById('acc-subtype').value  = acc.account_subtype || '';
   populateParentSelect(acc.parent_id);
-  document.getElementById('modal-account').classList.add('show');
+  openModal('modal-account', { recordType: 'account', recordId: id });
 }
 
 function populateParentSelect(selected) {
@@ -10362,7 +10382,7 @@ async function openEditPO(id) {
     document.getElementById(tr.id + '-qty').value  = l.quantity ?? '';
   });
   recalcPOTotals();
-  document.getElementById('modal-po').classList.add('show');
+  openModal('modal-po', { recordType: 'po', recordId: id });
 }
 
 async function duplicatePO(id) {
@@ -10986,7 +11006,7 @@ function openEditClient(id) {
   document.getElementById('client-ship-postal').value     = c.ship_postal || '';
   document.getElementById('client-notes').value           = c.notes || '';
   document.getElementById('client-active').checked        = c.is_active !== false;
-  document.getElementById('modal-client').classList.add('show');
+  openModal('modal-client', { recordType: 'client', recordId: id });
 }
 
 async function saveClient() {
@@ -11176,7 +11196,7 @@ function openEditVendor(id) {
   document.getElementById('vendor-rem-postal').value       = v.rem_postal || '';
   document.getElementById('vendor-notes').value            = v.notes || '';
   document.getElementById('vendor-active').checked         = v.is_active !== false;
-  document.getElementById('modal-vendor').classList.add('show');
+  openModal('modal-vendor', { recordType: 'vendor', recordId: id });
 }
 
 async function saveVendor() {
@@ -11327,7 +11347,7 @@ async function openEditErpCompany(id) {
     } else {
       preview.innerHTML = c.code?.slice(0,2) || '?';
     }
-    document.getElementById('modal-erp-company').classList.add('show');
+    openModal('modal-erp-company', { recordType: 'company', recordId: id });
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
@@ -12203,7 +12223,7 @@ function openEditBankAccount(id) {
   } else {
     hint.textContent = '(optional — no GL accounts set up yet)'; hint.style.color = 'var(--text-3)';
   }
-  document.getElementById('modal-bank-account').classList.add('show');
+  openModal('modal-bank-account', { recordType: 'bank-account', recordId: id });
 }
 
 async function saveBankAccount() {
@@ -12478,7 +12498,7 @@ async function openEditBill(billId) {
     if (l.po_line_id && l.po_id) { tr.dataset.poId = l.po_id; tr.dataset.poLineId = l.po_line_id; }
   });
   recalcBillTotals();
-  document.getElementById('modal-bill').classList.add('show');
+  openModal('modal-bill', { recordType: 'bill', recordId: billId });
 }
 
 function calcBillDueDate() {
@@ -13808,7 +13828,7 @@ async function openEditInvoice(id) {
   if (!document.getElementById('inv-lines-body').children.length) { addInvLine(); addInvLine(); }
 
   recalcInvTotals();
-  document.getElementById('modal-invoice').classList.add('show');
+  openModal('modal-invoice', { recordType: 'invoice', recordId: id });
   setTimeout(() => document.getElementById('inv-contact-search').focus(), 120);
 }
 
@@ -14622,7 +14642,7 @@ async function openEditQuotation(id) {
     addQuoLine(); addQuoLine(); addQuoLine();
   }
   recalcQuoTotals();
-  document.getElementById('modal-quotation').classList.add('show');
+  openModal('modal-quotation', { recordType: 'quote', recordId: id });
 }
 
 async function openQuoFromTemplate(id) {
@@ -17548,7 +17568,7 @@ async function openEditOpportunity(id) {
   document.getElementById('opp-lost-reason-field').style.display = effStatus === 'lost' ? '' : 'none';
   _populateOppSelects(o.contact_id, o.owner_id);
   _renderOppTeamPicker([]);
-  document.getElementById('modal-opportunity').classList.add('show');
+  openModal('modal-opportunity', { recordType: 'opp', recordId: id });
   sbGet('opportunity_team', `opportunity_id=eq.${id}`).then(team => {
     _renderOppTeamPicker(team.map(t => t.team_member_id));
   }).catch(() => {});
@@ -17768,7 +17788,7 @@ function openEditActivity(id) {
   document.getElementById('act-subject').value = a.subject       || '';
   document.getElementById('act-notes').value   = a.notes         || '';
   _populateActSelects(a.opportunity_id, a.contact_id, a.contact_person_id);
-  document.getElementById('modal-crm-activity').classList.add('show');
+  openModal('modal-crm-activity', { recordType: 'activity', recordId: id });
 }
 
 async function saveActivity() {
@@ -17950,7 +17970,7 @@ function openEditTask(id) {
   document.getElementById('task-description').value = t.description || '';
   const taskAssigneeVal = t.team_member_assignee_id ? `t:${t.team_member_assignee_id}` : t.assignee_id ? `u:${t.assignee_id}` : '';
   _populateTaskSelects(t.opportunity_id, taskAssigneeVal, t.contact_id, t.contact_person_id);
-  document.getElementById('modal-crm-task').classList.add('show');
+  openModal('modal-crm-task', { recordType: 'task', recordId: id });
 }
 
 async function saveTask() {
@@ -18099,7 +18119,7 @@ function openEditTeamMember(id) {
   document.getElementById('tm-name').value      = m.name      || '';
   document.getElementById('tm-job-title').value = m.job_title || '';
   document.getElementById('tm-email').value     = m.email     || '';
-  document.getElementById('modal-crm-team-member').classList.add('show');
+  openModal('modal-crm-team-member', { recordType: 'team-member', recordId: id });
 }
 
 async function saveTeamMember() {
@@ -18558,7 +18578,7 @@ function openEditCPForm(id) {
   document.getElementById('cp-phone').value   = p.phone   || '';
   document.getElementById('cp-notes').value   = p.notes   || '';
   document.getElementById('cp-primary').checked = !!p.is_primary;
-  document.getElementById('modal-cp-form').classList.add('show');
+  openModal('modal-cp-form', { recordType: 'cp', recordId: currentClient360Id + ':' + id });
 }
 
 async function saveContactPerson() {
