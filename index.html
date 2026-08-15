@@ -6540,6 +6540,7 @@ const MODAL_RECORD_ROUTES = {
   activity:       { view: 'pipeline',         openFn: id => openEditActivity(id) },
   task:           { view: 'pipeline',         openFn: id => openEditTask(id) },
   'team-member':  { view: 'pipeline',         openFn: id => openEditTeamMember(id) },
+  // cp's recordId is composite 'clientId:contactPersonId' (see openEditCPForm) — caller must split it and pass openFn only the bare cpId
   cp:             { view: 'client-360',       openFn: id => openEditCPForm(id) },
 };
 
