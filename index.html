@@ -10270,7 +10270,11 @@ function collectPOFormLines() {
   return lines;
 }
 
-function openNewPO() {
+// Form-reset logic shared by openNewPO() and openEditPO(). Does NOT call
+// openModal() — callers are responsible for exactly one openModal() call each,
+// so openEditPO() can push its single deep-linked history entry instead of
+// stacking a marker-only push (from this reset) plus a deep-linked one.
+function _resetPOForm() {
   _poEditId = null;
   document.getElementById('modal-po-title').textContent = 'New Purchase Order';
   document.getElementById('po-number-label').textContent = 'assigned on send';
@@ -10292,6 +10296,10 @@ function openNewPO() {
   document.getElementById('po-lines-body').innerHTML = '';
   addPOLine();
   recalcPOTotals();
+}
+
+function openNewPO() {
+  _resetPOForm();
   openModal('modal-po');
 }
 
@@ -10351,7 +10359,7 @@ async function openEditPO(id) {
   if (po.status !== 'draft') { showToast('Only Draft purchase orders can be edited.', 'warn'); return; }
 
   const vendor = contacts.find(c => c.id === po.vendor_id) || {};
-  openNewPO();
+  _resetPOForm();
   _poEditId = id;
   document.getElementById('modal-po-title').textContent = `Edit Purchase Order — Draft`;
   document.getElementById('po-edit-id').value = id;
