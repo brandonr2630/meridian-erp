@@ -6260,7 +6260,11 @@ async function initApp() {
   restoreNavState();
   refreshNotifBadge();
 
-  navigate('workspace');
+  if (location.hash) {
+    _restoreViewFromHash();
+  } else {
+    navigate('workspace');
+  }
 }
 
 function applyRoleNav() {
@@ -6543,6 +6547,43 @@ const MODAL_RECORD_ROUTES = {
   // cp's recordId is composite 'clientId:contactPersonId' (see openEditCPForm) — caller must split it and pass openFn only the bare cpId
   cp:             { view: 'client-360',       openFn: id => openEditCPForm(id) },
 };
+
+async function _restoreDeepLinkedModal(view, recordType, rawId) {
+  const route = MODAL_RECORD_ROUTES[recordType];
+  if (!route || route.view !== view) {
+    history.replaceState({ view }, '', '#/' + view);
+    return;
+  }
+  try {
+    if (recordType === 'cp') {
+      const [clientId, cpId] = rawId.split(':');
+      if (!clientId || !cpId) throw new Error('Malformed link');
+      currentClient360Id = clientId;
+      await loadClient360();
+      await route.openFn(cpId);
+    } else {
+      await route.openFn(rawId);
+    }
+    if (!document.getElementById(_routeModalId(recordType))?.classList.contains('show')) {
+      throw new Error('Record not found');
+    }
+  } catch (e) {
+    showToast('That record no longer exists or you don\'t have access.', 'warn');
+    history.replaceState({ view }, '', '#/' + view);
+  }
+}
+
+function _routeModalId(recordType) {
+  const map = {
+    role: 'modal-role-edit', user: 'modal-edit-user', permissions: 'modal-edit-permissions',
+    account: 'modal-account', po: 'modal-po', client: 'modal-client', vendor: 'modal-vendor',
+    company: 'modal-erp-company', 'bank-account': 'modal-bank-account', bill: 'modal-bill',
+    invoice: 'modal-invoice', quote: 'modal-quotation', opp: 'modal-opportunity',
+    activity: 'modal-crm-activity', task: 'modal-crm-task', 'team-member': 'modal-crm-team-member',
+    cp: 'modal-cp-form',
+  };
+  return map[recordType];
+}
 
 function toggleSidebar() {
   document.querySelector('.sidebar').classList.toggle('open');
