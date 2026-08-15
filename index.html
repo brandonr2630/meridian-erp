@@ -6521,7 +6521,7 @@ async function _restoreViewFromHash() {
   const view = parts[0];
   if (!document.getElementById('view-' + view)) { navigate('dashboard', { push: false }); return; }
   await navigate(view, { push: false });
-  history.replaceState({ view }, '', '#/' + view);
+  history.replaceState({ view: currentView }, '', '#/' + currentView);
   if (parts.length >= 3) {
     await _restoreDeepLinkedModal(parts[0], parts[1], parts[2]);
   }
@@ -6551,7 +6551,7 @@ const MODAL_RECORD_ROUTES = {
 async function _restoreDeepLinkedModal(view, recordType, rawId) {
   const route = MODAL_RECORD_ROUTES[recordType];
   if (!route || route.view !== currentView) {
-    history.replaceState({ view }, '', '#/' + view);
+    history.replaceState({ view: currentView }, '', '#/' + currentView);
     return;
   }
   try {
