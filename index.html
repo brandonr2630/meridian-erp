@@ -10270,10 +10270,11 @@ function collectPOFormLines() {
   return lines;
 }
 
-// Form-reset logic shared by openNewPO() and openEditPO(). Does NOT call
-// openModal() — callers are responsible for exactly one openModal() call each,
-// so openEditPO() can push its single deep-linked history entry instead of
-// stacking a marker-only push (from this reset) plus a deep-linked one.
+// Form-reset logic shared by openNewPO(), openEditPO(), and duplicatePO().
+// Does NOT call openModal() — callers are responsible for exactly one
+// openModal() call each, so openEditPO() can push its single deep-linked
+// history entry instead of stacking a marker-only push (from this reset)
+// plus a deep-linked one.
 function _resetPOForm() {
   _poEditId = null;
   document.getElementById('modal-po-title').textContent = 'New Purchase Order';
@@ -10398,7 +10399,7 @@ async function duplicatePO(id) {
   if (!po) return;
   const vendor = contacts.find(c => c.id === po.vendor_id) || {};
 
-  openNewPO();
+  _resetPOForm();
   const lines = await sbGet('po_lines', `po_id=eq.${id}&order=line_no.asc`);
   document.getElementById('po-vendor-id').value = po.vendor_id;
   document.getElementById('po-vendor-search').value = vendor.trading_name || vendor.name || '';
