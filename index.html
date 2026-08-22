@@ -10871,7 +10871,7 @@ function toggleBillEditLines(eventId) {
 // ── Void reason prompt (async, returns string | null) ────────────
 let _voidReasonResolve = null;
 function voidReasonResolve(value) {
-  document.getElementById('modal-void-reason').classList.remove('show');
+  closeModal('modal-void-reason');
   if (_voidReasonResolve) { _voidReasonResolve(value); _voidReasonResolve = null; }
 }
 function showVoidReason() {
