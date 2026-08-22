@@ -5860,7 +5860,7 @@ body.light .global-search-results, body.light .split-btn-menu {
 </div>
 
 <!-- ── USER OVERRIDES MODAL ────────────────────────────────────── -->
-<div id="modal-user-overrides" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal('modal-user-overrides')">
+<div id="modal-user-overrides" class="modal-overlay" onclick="if(event.target===this)closeModal('modal-user-overrides')">
   <div class="modal" style="max-width:520px;width:95%;max-height:90vh;overflow-y:auto;">
     <div class="modal-header">
       <h3>Permission overrides — <span id="overrides-user-name"></span></h3>
@@ -6260,7 +6260,11 @@ async function initApp() {
   restoreNavState();
   refreshNotifBadge();
 
-  navigate('workspace');
+  if (location.hash) {
+    _restoreViewFromHash();
+  } else {
+    navigate('workspace');
+  }
 }
 
 function applyRoleNav() {
@@ -6446,7 +6450,8 @@ function restoreNavState() {
 }
 
 // ── NAVIGATION ───────────────────────────────────────────────────
-function navigate(view) {
+function navigate(view, opts = {}) {
+  const push = opts.push !== false;
   // Module access guard — redirect to dashboard if user lacks module access
   if (!isAdmin() && currentUser) {
     const u = currentUser;
@@ -6482,7 +6487,101 @@ function navigate(view) {
   currentView = view;
   (VIEW_SECTIONS[view] || []).forEach(expandSection);
   if (window.innerWidth <= 900) closeSidebar();
-  loadViewData(view);
+  if (push) history.pushState({ view }, '', '#/' + view);
+  return loadViewData(view);
+}
+
+window.addEventListener('popstate', (e) => {
+  const state = e.state;
+  // Close any modal that's currently visible but isn't the one the state we
+  // just landed on expects to be open. This runs regardless of whether the
+  // landed-on state itself has a `.modal` field, because popstate's e.state
+  // describes the DESTINATION entry, not the modal that was open before this
+  // navigation — e.g. popping a state pushed by openModal() lands on the
+  // state that existed *before* the modal opened, which has no `.modal` key
+  // at all. Without this DOM-driven sweep, that modal's `.show` class would
+  // never be removed.
+  document.querySelectorAll('.modal-overlay.show').forEach(el => {
+    if (!state || state.modal !== el.id) _popstateCloseModal(el.id);
+  });
+  if (!state) { navigate('dashboard', { push: false }); return; }
+  if (state.modal) {
+    // The modal named by this state is already showing (its .show class was
+    // never touched by the sweep above, or was just re-added by whatever
+    // opened it) — nothing else to do.
+    return;
+  }
+  if (state.view) { navigate(state.view, { push: false }); }
+});
+
+async function _restoreViewFromHash() {
+  const hash = location.hash.replace(/^#\/?/, '');
+  if (!hash) { navigate('dashboard', { push: false }); return; }
+  const parts = hash.split('/');
+  const view = parts[0];
+  if (!document.getElementById('view-' + view)) { navigate('dashboard', { push: false }); return; }
+  await navigate(view, { push: false });
+  history.replaceState({ view: currentView }, '', '#/' + currentView);
+  if (parts.length >= 3) {
+    await _restoreDeepLinkedModal(parts[0], parts[1], parts[2]);
+  }
+}
+
+const MODAL_RECORD_ROUTES = {
+  role:           { view: 'role-management', modalId: 'modal-role-edit',        openFn: id => openEditRoleModal(id) },
+  user:           { view: 'user-management', modalId: 'modal-edit-user',        openFn: id => openEditUserModal(id) },
+  permissions:    { view: 'user-management', modalId: 'modal-edit-permissions', openFn: id => openEditPermissionsModal(id) },
+  account:        { view: 'coa',              modalId: 'modal-account',        openFn: id => openEditAccount(id) },
+  po:             { view: 'purchase-orders',  modalId: 'modal-po',             openFn: id => openEditPO(id) },
+  client:         { view: 'clients',          modalId: 'modal-client',         openFn: id => openEditClient(id) },
+  vendor:         { view: 'vendors',          modalId: 'modal-vendor',         openFn: id => openEditVendor(id) },
+  company:        { view: 'companies',        modalId: 'modal-erp-company',    openFn: id => openEditErpCompany(id) },
+  'bank-account': { view: 'bank',             modalId: 'modal-bank-account',   openFn: id => openEditBankAccount(id) },
+  bill:           { view: 'ap',               modalId: 'modal-bill',           openFn: id => openEditBill(id) },
+  invoice:        { view: 'ar',               modalId: 'modal-invoice',        openFn: id => openEditInvoice(id) },
+  quote:          { view: 'quotations',       modalId: 'modal-quotation',      openFn: id => openEditQuotation(id) },
+  opp:            { view: 'pipeline',         modalId: 'modal-opportunity',    openFn: id => openEditOpportunity(id) },
+  activity:       { view: 'pipeline',         modalId: 'modal-crm-activity',   openFn: id => openEditActivity(id) },
+  task:           { view: 'pipeline',         modalId: 'modal-crm-task',       openFn: id => openEditTask(id) },
+  'team-member':  { view: 'pipeline',         modalId: 'modal-crm-team-member', openFn: id => openEditTeamMember(id) },
+  // cp's recordId is composite 'clientId:contactPersonId' (see openEditCPForm) — caller must split it and pass openFn only the bare cpId
+  cp:             { view: 'client-360',       modalId: 'modal-cp-form',        openFn: id => openEditCPForm(id) },
+};
+
+async function _restoreDeepLinkedModal(view, recordType, rawId) {
+  const route = MODAL_RECORD_ROUTES[recordType];
+  if (!route || route.view !== currentView) {
+    history.replaceState({ view: currentView }, '', '#/' + currentView);
+    return;
+  }
+  let toastAlreadyShown = false;
+  try {
+    if (recordType === 'cp') {
+      const [clientId, cpId] = rawId.split(':');
+      if (!clientId || !cpId) throw new Error('Malformed link');
+      currentClient360Id = clientId;
+      await loadClient360();
+      _cpClientId = clientId;
+      await loadContactPersons();
+      await route.openFn(cpId);
+    } else {
+      await route.openFn(rawId);
+    }
+    // Capture toast state right after openFn returns, before deciding whether to
+    // throw the "not found" fallback — an openFn that bailed on a permission check
+    // (e.g. openEditBill's isAdmin() guard) already showed its own accurate toast;
+    // we must not let the generic message below clobber it (showToast is a single
+    // shared element, so a second call overwrites the first).
+    toastAlreadyShown = document.getElementById('toast')?.classList.contains('show');
+    if (!document.getElementById(route.modalId)?.classList.contains('show')) {
+      throw new Error('Record not found');
+    }
+  } catch (e) {
+    if (!toastAlreadyShown) {
+      showToast('That record no longer exists or you don\'t have access.', 'warn');
+    }
+    history.replaceState({ view: currentView }, '', '#/' + currentView);
+  }
 }
 
 function toggleSidebar() {
@@ -6626,7 +6725,7 @@ function openCreateRoleModal() {
   document.getElementById('role-edit-name').value = '';
   document.getElementById('role-edit-error').textContent = '';
   renderPermMatrix({});
-  document.getElementById('modal-role-edit').classList.add('show');
+  openModal('modal-role-edit');
 }
 
 function openEditRoleModal(roleId) {
@@ -6637,7 +6736,7 @@ function openEditRoleModal(roleId) {
   document.getElementById('role-edit-name').value = role.name;
   document.getElementById('role-edit-error').textContent = '';
   renderPermMatrix(role.permissions || {});
-  document.getElementById('modal-role-edit').classList.add('show');
+  openModal('modal-role-edit', { recordType: 'role', recordId: roleId });
 }
 
 function renderPermMatrix(currentPerms) {
@@ -6713,7 +6812,7 @@ async function openUserOverridesModal(userId, companyId) {
   errEl.textContent = '';
   document.getElementById('overrides-user-id').value    = userId;
   document.getElementById('overrides-company-id').value = companyId;
-  document.getElementById('modal-user-overrides').style.display = 'flex';
+  openModal('modal-user-overrides');
   document.getElementById('overrides-matrix').innerHTML = 'Loading…';
 
   try {
@@ -6922,7 +7021,7 @@ async function openCreateUserModal() {
     ? roles.map(r => `<option value="${escHTML(r.id)}">${escHTML(r.name)}</option>`).join('')
     : '<option value="">No roles found</option>';
 
-  document.getElementById('modal-create-user').classList.add('show');
+  openModal('modal-create-user');
 }
 
 function openEditUserModal(authUserId) {
@@ -6940,7 +7039,7 @@ function openEditUserModal(authUserId) {
   ).join('');
   const saveBtn = document.getElementById('eu-save-btn');
   saveBtn.textContent = 'Save Changes'; saveBtn.disabled = false;
-  document.getElementById('modal-edit-user').classList.add('show');
+  openModal('modal-edit-user', { recordType: 'user', recordId: authUserId });
 }
 
 async function saveEditUser() {
@@ -7026,7 +7125,7 @@ async function openEditPermissionsModal(authUserId) {
   ).catch(() => []);
   if (assignments.length) roleSel.value = assignments[0].role_id;
 
-  document.getElementById('modal-edit-permissions').classList.add('show');
+  openModal('modal-edit-permissions', { recordType: 'permissions', recordId: authUserId });
 }
 
 function closeEditPermissionsModal() {
@@ -9644,7 +9743,7 @@ function openAddAccount() {
   document.getElementById('acc-is-bank').checked = false;
   document.getElementById('acc-normal').value = 'debit';
   populateParentSelect();
-  document.getElementById('modal-account').classList.add('show');
+  openModal('modal-account');
   setTimeout(() => document.getElementById('acc-code').focus(), 100);
 }
 
@@ -9665,7 +9764,7 @@ function openEditAccount(id) {
   updateSubtypes();
   document.getElementById('acc-subtype').value  = acc.account_subtype || '';
   populateParentSelect(acc.parent_id);
-  document.getElementById('modal-account').classList.add('show');
+  openModal('modal-account', { recordType: 'account', recordId: id });
 }
 
 function populateParentSelect(selected) {
@@ -9816,7 +9915,7 @@ function openNewJournal() {
   document.getElementById('je-lines-body').innerHTML = '';
   addJELine(); addJELine();
   updateJETotals();
-  document.getElementById('modal-journal').classList.add('show');
+  openModal('modal-journal');
 }
 
 function addJELine() {
@@ -10212,7 +10311,12 @@ function collectPOFormLines() {
   return lines;
 }
 
-function openNewPO() {
+// Form-reset logic shared by openNewPO(), openEditPO(), and duplicatePO().
+// Does NOT call openModal() — callers are responsible for exactly one
+// openModal() call each, so openEditPO() can push its single deep-linked
+// history entry instead of stacking a marker-only push (from this reset)
+// plus a deep-linked one.
+function _resetPOForm() {
   _poEditId = null;
   document.getElementById('modal-po-title').textContent = 'New Purchase Order';
   document.getElementById('po-number-label').textContent = 'assigned on send';
@@ -10234,7 +10338,11 @@ function openNewPO() {
   document.getElementById('po-lines-body').innerHTML = '';
   addPOLine();
   recalcPOTotals();
-  document.getElementById('modal-po').classList.add('show');
+}
+
+function openNewPO() {
+  _resetPOForm();
+  openModal('modal-po');
 }
 
 async function savePODraft() {
@@ -10293,7 +10401,7 @@ async function openEditPO(id) {
   if (po.status !== 'draft') { showToast('Only Draft purchase orders can be edited.', 'warn'); return; }
 
   const vendor = contacts.find(c => c.id === po.vendor_id) || {};
-  openNewPO();
+  _resetPOForm();
   _poEditId = id;
   document.getElementById('modal-po-title').textContent = `Edit Purchase Order — Draft`;
   document.getElementById('po-edit-id').value = id;
@@ -10324,7 +10432,7 @@ async function openEditPO(id) {
     document.getElementById(tr.id + '-qty').value  = l.quantity ?? '';
   });
   recalcPOTotals();
-  document.getElementById('modal-po').classList.add('show');
+  openModal('modal-po', { recordType: 'po', recordId: id });
 }
 
 async function duplicatePO(id) {
@@ -10332,7 +10440,7 @@ async function duplicatePO(id) {
   if (!po) return;
   const vendor = contacts.find(c => c.id === po.vendor_id) || {};
 
-  openNewPO();
+  _resetPOForm();
   const lines = await sbGet('po_lines', `po_id=eq.${id}&order=line_no.asc`);
   document.getElementById('po-vendor-id').value = po.vendor_id;
   document.getElementById('po-vendor-search').value = vendor.trading_name || vendor.name || '';
@@ -10355,7 +10463,7 @@ async function duplicatePO(id) {
   });
   recalcPOTotals();
   document.getElementById('modal-po-title').textContent = `New Purchase Order (from ${po.po_no || 'draft'})`;
-  document.getElementById('modal-po').classList.add('show');
+  openModal('modal-po');
 }
 
 async function sendPO(id) {
@@ -10456,7 +10564,7 @@ async function openPOPDF(id) {
   renderMultiPagePDF('po-pdf-content', pages, headerHTML, true, po.currency,
     total, 0, 0, total, po.incoterms, po.incoterms_place, po.notes, null, co.name, po.po_no, true);
 
-  document.getElementById('modal-po-pdf').classList.add('show');
+  openModal('modal-po-pdf');
 }
 
 function setApPage(n) { apPage = n; renderAPTable(_apFiltered); }
@@ -10534,7 +10642,7 @@ function openPayBillModal(billId) {
     sel.innerHTML += `<option value="${a.id}">${escHTML(a.account_name)} (${a.currency})</option>`;
   });
 
-  document.getElementById('modal-bill-payment').classList.add('show');
+  openModal('modal-bill-payment');
 }
 
 async function saveVendorPayment() {
@@ -10650,7 +10758,7 @@ async function openBillPaymentHistory(billId) {
   const contact = contacts.find(c => c.id === bill.contact_id) || {};
   document.getElementById('bill-history-subtitle').textContent =
     `${bill.bill_no || 'Draft'} — ${contact?.trading_name || contact?.name || '—'} · Total: ${fmt(bill.total, bill.currency)}`;
-  document.getElementById('modal-bill-pay-history').classList.add('show');
+  openModal('modal-bill-pay-history');
   await switchBillHistoryTab('payments');
 }
 
@@ -10763,12 +10871,12 @@ function toggleBillEditLines(eventId) {
 // ── Void reason prompt (async, returns string | null) ────────────
 let _voidReasonResolve = null;
 function voidReasonResolve(value) {
-  document.getElementById('modal-void-reason').classList.remove('show');
+  closeModal('modal-void-reason');
   if (_voidReasonResolve) { _voidReasonResolve(value); _voidReasonResolve = null; }
 }
 function showVoidReason() {
   document.getElementById('void-reason-input').value = '';
-  document.getElementById('modal-void-reason').classList.add('show');
+  openModal('modal-void-reason');
   setTimeout(() => document.getElementById('void-reason-input').focus(), 80);
   return new Promise(res => { _voidReasonResolve = res; });
 }
@@ -10913,7 +11021,7 @@ function openAddClient() {
   document.getElementById('client-terms').value = '30';
   document.getElementById('client-credit-limit').value = '';
   document.getElementById('client-active').checked = true;
-  document.getElementById('modal-client').classList.add('show');
+  openModal('modal-client');
 }
 
 function openEditClient(id) {
@@ -10948,7 +11056,7 @@ function openEditClient(id) {
   document.getElementById('client-ship-postal').value     = c.ship_postal || '';
   document.getElementById('client-notes').value           = c.notes || '';
   document.getElementById('client-active').checked        = c.is_active !== false;
-  document.getElementById('modal-client').classList.add('show');
+  openModal('modal-client', { recordType: 'client', recordId: id });
 }
 
 async function saveClient() {
@@ -11102,7 +11210,7 @@ function openAddVendor() {
   document.getElementById('vendor-terms').value = '30';
   document.getElementById('vendor-payment-method').value = '';
   document.getElementById('vendor-active').checked = true;
-  document.getElementById('modal-vendor').classList.add('show');
+  openModal('modal-vendor');
 }
 
 function openEditVendor(id) {
@@ -11138,7 +11246,7 @@ function openEditVendor(id) {
   document.getElementById('vendor-rem-postal').value       = v.rem_postal || '';
   document.getElementById('vendor-notes').value            = v.notes || '';
   document.getElementById('vendor-active').checked         = v.is_active !== false;
-  document.getElementById('modal-vendor').classList.add('show');
+  openModal('modal-vendor', { recordType: 'vendor', recordId: id });
 }
 
 async function saveVendor() {
@@ -11252,7 +11360,7 @@ function openAddCompany() {
   document.getElementById('erp-co-logo-preview').innerHTML = '?';
   document.getElementById('erp-co-logo-status').textContent = '';
   document.getElementById('erp-co-logo-file').value = '';
-  document.getElementById('modal-erp-company').classList.add('show');
+  openModal('modal-erp-company');
 }
 
 async function openEditErpCompany(id) {
@@ -11289,7 +11397,7 @@ async function openEditErpCompany(id) {
     } else {
       preview.innerHTML = c.code?.slice(0,2) || '?';
     }
-    document.getElementById('modal-erp-company').classList.add('show');
+    openModal('modal-erp-company', { recordType: 'company', recordId: id });
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
@@ -11528,7 +11636,7 @@ async function saveInvoiceCounter() {
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
-function openAddContact() { document.getElementById('modal-contact').classList.add('show'); }
+function openAddContact() { openModal('modal-contact'); }
 // ── THEME TOGGLE ─────────────────────────────────────────────────
 function toggleTheme() {
   const isLight = document.body.classList.toggle('light');
@@ -11566,7 +11674,7 @@ function openFYModal() {
   document.getElementById('fy-name').value  = `FY ${year}`;
   document.getElementById('fy-start').value = `${year}-01-01`;
   document.getElementById('fy-end').value   = `${year}-12-31`;
-  document.getElementById('modal-fy').classList.add('show');
+  openModal('modal-fy');
 }
 
 async function saveFiscalYear() {
@@ -11610,11 +11718,11 @@ function showConfirm(message, title = 'Confirm', okLabel = 'Confirm', danger = t
     const okBtn = document.getElementById('confirm-ok-btn');
     okBtn.textContent  = okLabel;
     okBtn.className    = `btn ${danger ? 'btn-danger' : 'btn-primary'}`;
-    document.getElementById('modal-confirm').classList.add('show');
+    openModal('modal-confirm');
   });
 }
 function confirmResolve(result) {
-  document.getElementById('modal-confirm').classList.remove('show');
+  closeModal('modal-confirm');
   if (_confirmResolve) { _confirmResolve(result); _confirmResolve = null; }
 }
 
@@ -11660,7 +11768,7 @@ function reviewBeforePost() {
     </div>`;
 
   _pendingPostStatus = 'posted';
-  document.getElementById('modal-post-review').classList.add('show');
+  openModal('modal-post-review');
 }
 
 function confirmPostInvoice() {
@@ -11699,7 +11807,7 @@ function openReceivePayment(invoiceId) {
       (rest.length && matching.length ? `</optgroup>` : '');
   }
 
-  document.getElementById('modal-payment').classList.add('show');
+  openModal('modal-payment');
 }
 
 function updatePaymentBalance() {
@@ -11817,7 +11925,7 @@ async function savePayment() {
     document.getElementById('pconf-method').textContent       = _methodLabels[method] || method;
     document.getElementById('pconf-balance').textContent      = fmt(newBalance, inv.currency);
     document.getElementById('pconf-balance').style.color      = newBalance <= 0.005 ? 'var(--green)' : 'var(--amber)';
-    document.getElementById('modal-payment-confirmed').classList.add('show');
+    openModal('modal-payment-confirmed');
   } catch(e) {
     showToast('Error recording payment: ' + e.message, 'error');
   } finally { btn.disabled = false; btn.textContent = 'Record Payment'; }
@@ -11973,7 +12081,7 @@ async function openReceiptPDF(receiptId) {
 
     document.getElementById('receipt-pdf-subtitle').textContent =
       `${receipt.receipt_no} · ${contact.trading_name || contact.name || '—'}`;
-    document.getElementById('modal-receipt-pdf').classList.add('show');
+    openModal('modal-receipt-pdf');
   } catch(e) { showToast('Error loading receipt: ' + e.message, 'error'); }
 }
 
@@ -11986,7 +12094,7 @@ async function openInvoiceReceiptHistory(invoiceId) {
 
   const listEl = document.getElementById('inv-receipts-list');
   listEl.innerHTML = '<div style="padding:28px;text-align:center;color:var(--text-3);font-size:13px;">Loading…</div>';
-  document.getElementById('modal-invoice-receipts').classList.add('show');
+  openModal('modal-invoice-receipts');
 
   try {
     const receipts = await sbGet('payment_receipts', `invoice_id=eq.${invoiceId}&order=receipt_date.desc`);
@@ -12139,7 +12247,7 @@ function openAddBankAccount() {
   } else {
     hint.textContent = '(optional — no GL accounts set up yet)'; hint.style.color = 'var(--text-3)';
   }
-  document.getElementById('modal-bank-account').classList.add('show');
+  openModal('modal-bank-account');
 }
 
 function openEditBankAccount(id) {
@@ -12165,7 +12273,7 @@ function openEditBankAccount(id) {
   } else {
     hint.textContent = '(optional — no GL accounts set up yet)'; hint.style.color = 'var(--text-3)';
   }
-  document.getElementById('modal-bank-account').classList.add('show');
+  openModal('modal-bank-account', { recordType: 'bank-account', recordId: id });
 }
 
 async function saveBankAccount() {
@@ -12321,7 +12429,7 @@ function openAddBankTxn() {
   document.getElementById('btxn-description').value = '';
   document.getElementById('btxn-amount').value      = '';
   document.getElementById('btxn-reference').value   = '';
-  document.getElementById('modal-bank-txn').classList.add('show');
+  openModal('modal-bank-txn');
 }
 
 async function saveBankTxn() {
@@ -12395,7 +12503,7 @@ async function openNewBill() {
   document.getElementById('bill-po-picker').innerHTML = '<option value="">— None —</option>';
   document.getElementById('bill-po-id').value = '';
   document.getElementById('bill-next-number').textContent = 'assigned when approved';
-  document.getElementById('modal-bill').classList.add('show');
+  openModal('modal-bill');
 }
 
 async function openEditBill(billId) {
@@ -12440,7 +12548,7 @@ async function openEditBill(billId) {
     if (l.po_line_id && l.po_id) { tr.dataset.poId = l.po_id; tr.dataset.poLineId = l.po_line_id; }
   });
   recalcBillTotals();
-  document.getElementById('modal-bill').classList.add('show');
+  openModal('modal-bill', { recordType: 'bill', recordId: billId });
 }
 
 function calcBillDueDate() {
@@ -13084,7 +13192,7 @@ function previewReport(type, title) {
   iframe.onload = resizeIframe;
   const doc = iframe.contentDocument || iframe.contentWindow.document;
   doc.open(); doc.write(html); doc.close();
-  document.getElementById('modal-report-preview').classList.add('show');
+  openModal('modal-report-preview');
   // Fallback: re-measure after fonts and images settle
   setTimeout(resizeIframe, 600);
 }
@@ -13701,7 +13809,7 @@ function openNewInvoice() {
   addInvLine();
   calcDueDate();
   recalcInvTotals();
-  document.getElementById('modal-invoice').classList.add('show');
+  openModal('modal-invoice');
   setTimeout(() => document.getElementById('inv-contact-search').focus(), 120);
 }
 
@@ -13770,7 +13878,7 @@ async function openEditInvoice(id) {
   if (!document.getElementById('inv-lines-body').children.length) { addInvLine(); addInvLine(); }
 
   recalcInvTotals();
-  document.getElementById('modal-invoice').classList.add('show');
+  openModal('modal-invoice', { recordType: 'invoice', recordId: id });
   setTimeout(() => document.getElementById('inv-contact-search').focus(), 120);
 }
 
@@ -14439,7 +14547,7 @@ async function openNewQuotation() {
   document.getElementById('quo-lines-body').innerHTML = '';
   addQuoLine(); addQuoLine(); addQuoLine();
   recalcQuoTotals();
-  document.getElementById('modal-quotation').classList.add('show');
+  openModal('modal-quotation');
 }
 
 async function openConvertToQuote(oppId) {
@@ -14490,7 +14598,7 @@ function openTemplatePicker() {
   _tplAll = [...quotations].sort((a, b) => (b.quote_date || '').localeCompare(a.quote_date || ''));
   document.getElementById('tpl-search').value = '';
   renderTemplatePicker(_tplAll, contactMap);
-  document.getElementById('modal-quo-template-picker').classList.add('show');
+  openModal('modal-quo-template-picker');
 }
 
 function filterTemplatePicker() {
@@ -14584,7 +14692,7 @@ async function openEditQuotation(id) {
     addQuoLine(); addQuoLine(); addQuoLine();
   }
   recalcQuoTotals();
-  document.getElementById('modal-quotation').classList.add('show');
+  openModal('modal-quotation', { recordType: 'quote', recordId: id });
 }
 
 async function openQuoFromTemplate(id) {
@@ -14644,7 +14752,7 @@ async function openQuoFromTemplate(id) {
     addQuoLine(); addQuoLine(); addQuoLine();
   }
   recalcQuoTotals();
-  document.getElementById('modal-quotation').classList.add('show');
+  openModal('modal-quotation');
 }
 
 function addQuoLine() {
@@ -14830,7 +14938,7 @@ function openQuoStatusModal(id) {
   document.getElementById('quo-status-id').value = id;
   document.getElementById('quo-status-number').textContent = q.quote_no;
   document.getElementById('quo-status-select').value = q.status;
-  document.getElementById('modal-quo-status').classList.add('show');
+  openModal('modal-quo-status');
 }
 
 async function applyQuoStatus() {
@@ -14937,7 +15045,7 @@ async function openManageSalesLeads() {
   document.getElementById('sl-email').value = '';
   document.getElementById('sl-phone').value = '';
   await refreshSLList();
-  document.getElementById('modal-sales-leads').classList.add('show');
+  openModal('modal-sales-leads');
 }
 
 async function refreshSLList() {
@@ -15392,7 +15500,7 @@ async function openNewDeliveryNote() {
   document.getElementById('dn-lines-body').innerHTML       = '';
   addDNLine(); addDNLine(); addDNLine();
   document.getElementById('dn-next-number').textContent = 'assigned when dispatched';
-  document.getElementById('modal-delivery-note').classList.add('show');
+  openModal('modal-delivery-note');
 }
 
 function addDNLine() {
@@ -15502,7 +15610,7 @@ function openDNStatusModal(id) {
   document.getElementById('dn-status-id').value = id;
   document.getElementById('dn-status-number').textContent = dn.dn_no;
   document.getElementById('dn-status-select').value = dn.status;
-  document.getElementById('modal-dn-status').classList.add('show');
+  openModal('modal-dn-status');
 }
 
 async function applyDNStatus() {
@@ -15666,7 +15774,7 @@ async function openNewCreditNote() {
   addCNLine(); addCNLine();
   recalcCNTotals();
   document.getElementById('cn-next-number').textContent = 'assigned when posted';
-  document.getElementById('modal-credit-note').classList.add('show');
+  openModal('modal-credit-note');
 }
 
 function onCNInvoiceSelect() {
@@ -16405,7 +16513,7 @@ async function generatePDFBase64(source) {
     document.getElementById('email-doc-message').value = '';
     const btn = document.getElementById('btn-send-email');
     btn.disabled = false; btn.textContent = 'Send';
-    document.getElementById('modal-send-email').classList.add('show');
+    openModal('modal-send-email');
   }
 
   function _resolveEmailMeta(type, id) {
@@ -16927,7 +17035,7 @@ async function openInvoicePDF(id) {
     parseFloat(inv.total||0), inv.incoterms, inv.incoterms_place,
     inv.notes, co.bank_details, co.name, docNo);
 
-  document.getElementById('modal-pdf-preview').classList.add('show');
+  openModal('modal-pdf-preview');
 }
 
 // ── Quotation PDF ─────────────────────────────────────────────────
@@ -16959,7 +17067,7 @@ async function openQuoPDF(id) {
     parseFloat(quo.total||0), quo.incoterms, quo.incoterms_place,
     quo.notes, null, co.name, quo.quote_no);
 
-  document.getElementById('modal-quo-pdf').classList.add('show');
+  openModal('modal-quo-pdf');
 }
 
 // ── Delivery Note PDF ─────────────────────────────────────────────
@@ -16994,7 +17102,7 @@ async function openDNPDF(id) {
   renderMultiPagePDF('dn-pdf-content', pages, headerHTML, false, currentCompany.currency,
     0, 0, 0, 0, null, null, dn.notes, null, co.name, dn.dn_no);
 
-  document.getElementById('modal-dn-pdf').classList.add('show');
+  openModal('modal-dn-pdf');
 }
 
 // ── Credit Note PDF ───────────────────────────────────────────────
@@ -17023,7 +17131,7 @@ async function openCNPDF(id) {
     parseFloat(cn.subtotal||0), taxRate, parseFloat(cn.tax_amount||0),
     parseFloat(cn.total||0), null, null, cn.notes, null, co.name, cn.cn_no);
 
-  document.getElementById('modal-cn-pdf').classList.add('show');
+  openModal('modal-cn-pdf');
 }
 
 // ── WORKSPACE ────────────────────────────────────────────────────
@@ -17329,7 +17437,30 @@ async function deleteDocument(type, id, label) {
   } catch(e) { showToast('Delete error: ' + e.message, 'error'); }
 }
 
+function openModal(id, opts = {}) {
+  document.getElementById(id).classList.add('show');
+  if (opts.recordType && opts.recordId) {
+    history.pushState(
+      { view: currentView, modal: id, recordType: opts.recordType, recordId: opts.recordId },
+      '',
+      '#/' + currentView + '/' + opts.recordType + '/' + opts.recordId
+    );
+  } else {
+    history.pushState({ view: currentView, modal: id }, '', location.href);
+  }
+}
+
+// Only place allowed to call history.back() for a tracked modal — closing must consume the pushState entry openModal() added, or forward/back gets out of sync.
 function closeModal(id) {
+  if (history.state && history.state.modal === id) {
+    history.back();
+    return;
+  }
+  document.getElementById(id).classList.remove('show');
+}
+
+// Runs as a REACTION to popstate (back already happened) — must never call closeModal()/history.back(), or it re-triggers back() and loops/desyncs the pop stack.
+function _popstateCloseModal(id) {
   document.getElementById(id).classList.remove('show');
 }
 
@@ -17464,7 +17595,7 @@ function openNewOpportunity() {
   document.getElementById('opp-lost-reason-field').style.display = 'none';
   _populateOppSelects(null, null);
   _renderOppTeamPicker([]);
-  document.getElementById('modal-opportunity').classList.add('show');
+  openModal('modal-opportunity');
 }
 
 async function openEditOpportunity(id) {
@@ -17487,7 +17618,7 @@ async function openEditOpportunity(id) {
   document.getElementById('opp-lost-reason-field').style.display = effStatus === 'lost' ? '' : 'none';
   _populateOppSelects(o.contact_id, o.owner_id);
   _renderOppTeamPicker([]);
-  document.getElementById('modal-opportunity').classList.add('show');
+  openModal('modal-opportunity', { recordType: 'opp', recordId: id });
   sbGet('opportunity_team', `opportunity_id=eq.${id}`).then(team => {
     _renderOppTeamPicker(team.map(t => t.team_member_id));
   }).catch(() => {});
@@ -17694,7 +17825,7 @@ function openNewActivity(oppId, contactId) {
   document.getElementById('act-subject').value = '';
   document.getElementById('act-notes').value   = '';
   _populateActSelects(oppId || null, contactId || null, null);
-  document.getElementById('modal-crm-activity').classList.add('show');
+  openModal('modal-crm-activity');
 }
 
 function openEditActivity(id) {
@@ -17707,7 +17838,7 @@ function openEditActivity(id) {
   document.getElementById('act-subject').value = a.subject       || '';
   document.getElementById('act-notes').value   = a.notes         || '';
   _populateActSelects(a.opportunity_id, a.contact_id, a.contact_person_id);
-  document.getElementById('modal-crm-activity').classList.add('show');
+  openModal('modal-crm-activity', { recordType: 'activity', recordId: id });
 }
 
 async function saveActivity() {
@@ -17876,7 +18007,7 @@ function openNewTask(oppId, contactId) {
   document.getElementById('modal-task-title').textContent = 'New Task';
   ['task-title','task-due-date','task-description'].forEach(id => document.getElementById(id).value = '');
   _populateTaskSelects(oppId || null, null, contactId || null, null);
-  document.getElementById('modal-crm-task').classList.add('show');
+  openModal('modal-crm-task');
 }
 
 function openEditTask(id) {
@@ -17889,7 +18020,7 @@ function openEditTask(id) {
   document.getElementById('task-description').value = t.description || '';
   const taskAssigneeVal = t.team_member_assignee_id ? `t:${t.team_member_assignee_id}` : t.assignee_id ? `u:${t.assignee_id}` : '';
   _populateTaskSelects(t.opportunity_id, taskAssigneeVal, t.contact_id, t.contact_person_id);
-  document.getElementById('modal-crm-task').classList.add('show');
+  openModal('modal-crm-task', { recordType: 'task', recordId: id });
 }
 
 async function saveTask() {
@@ -18027,7 +18158,7 @@ function openNewTeamMember() {
   _editTeamMemberId = null;
   document.getElementById('modal-tm-title').textContent = 'New Team Member';
   ['tm-name','tm-job-title','tm-email'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('modal-crm-team-member').classList.add('show');
+  openModal('modal-crm-team-member');
 }
 
 function openEditTeamMember(id) {
@@ -18038,7 +18169,7 @@ function openEditTeamMember(id) {
   document.getElementById('tm-name').value      = m.name      || '';
   document.getElementById('tm-job-title').value = m.job_title || '';
   document.getElementById('tm-email').value     = m.email     || '';
-  document.getElementById('modal-crm-team-member').classList.add('show');
+  openModal('modal-crm-team-member', { recordType: 'team-member', recordId: id });
 }
 
 async function saveTeamMember() {
@@ -18433,7 +18564,7 @@ async function openContactPersonsModal(clientId) {
   _cpClientId = clientId;
   const client = clients.find(c => c.id === clientId);
   document.getElementById('cp-modal-title').textContent = `Contact Persons — ${client ? (client.trading_name || client.name) : ''}`;
-  document.getElementById('modal-contact-persons').classList.add('show');
+  openModal('modal-contact-persons');
   await loadContactPersons();
 }
 
@@ -18483,7 +18614,7 @@ function openNewCPForm() {
   document.getElementById('cp-form-title').textContent = 'Add Contact Person';
   ['cp-name','cp-title','cp-email','cp-phone','cp-notes'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('cp-primary').checked = !contactPersons.length;
-  document.getElementById('modal-cp-form').classList.add('show');
+  openModal('modal-cp-form');
 }
 
 function openEditCPForm(id) {
@@ -18497,7 +18628,7 @@ function openEditCPForm(id) {
   document.getElementById('cp-phone').value   = p.phone   || '';
   document.getElementById('cp-notes').value   = p.notes   || '';
   document.getElementById('cp-primary').checked = !!p.is_primary;
-  document.getElementById('modal-cp-form').classList.add('show');
+  openModal('modal-cp-form', { recordType: 'cp', recordId: currentClient360Id + ':' + id });
 }
 
 async function saveContactPerson() {

@@ -1,6 +1,20 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-08-14 · Session 50*
+*Last updated: 2026-08-21 · Session 51*
+
+---
+
+## Session 51 — www alias/cert to-do (OPEN)
+
+**Date:** 2026-08-21
+**Trigger:** User hit `NET::ERR_CERT_COMMON_NAME_INVALID` on `www.erp.terranresources.com` — typo, cert only covers bare `erp.` subdomain.
+
+### To-do (manual cPanel/DNS, no MCP/API access for this)
+
+- [ ] Add `www.erp` as cPanel subdomain/alias, issue AutoSSL cert, redirect → `erp.terranresources.com`
+- [ ] Same for `www.terranresources.com` (main site not live yet — wire ahead of launch)
+- [ ] Check `www.q2m.io` coverage
+- [ ] coc-website: skip until real domain confirmed (`toddsroadcoctt` is a cPanel account label, not a domain)
 
 ---
 
