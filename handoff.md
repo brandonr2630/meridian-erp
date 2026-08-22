@@ -16,6 +16,8 @@
 - [ ] Check `www.q2m.io` coverage
 - [ ] coc-website: skip until real domain confirmed (`toddsroadcoctt` is a cPanel account label, not a domain)
 
+**Also this session:** `feat/browser-history-sync` — [PR #137](https://github.com/brandonr2630/meridian-erp/pull/137) merged to `master`, deployed. Hash-based view routing + `openModal()`/`closeModal()` history-aware modal lifecycle for 17+ deep-linked record modals; also fixed `voidReasonResolve()` to close via `closeModal()` instead of a raw `classList.remove` (was bypassing the new history sync). No CI configured on this repo (only a skipped Supabase Preview check) — merge went out unverified beyond manual review; the PR's own test-plan checklist (Back/Forward through modals, deep-link refresh restore, PO duplicate/edit regression) has not been run live.
+
 ---
 
 ## Session 50 — `bill_lines_archive` missing PO columns — RESOLVED
