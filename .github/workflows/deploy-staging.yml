@@ -1,0 +1,48 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches:
+      - staging
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Point index.html at the staging Supabase project
+        env:
+          STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          STAGING_SUPABASE_KEY: ${{ secrets.STAGING_SUPABASE_KEY }}
+        run: |
+          sed -i "s|^const SUPABASE_URL = '.*';|const SUPABASE_URL = '${STAGING_SUPABASE_URL}';|" index.html
+          sed -i "s|^const SUPABASE_KEY = '.*';|const SUPABASE_KEY = '${STAGING_SUPABASE_KEY}';|" index.html
+          grep -q "$STAGING_SUPABASE_URL" index.html
+
+      - name: Configure SSH
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "${SSH_PORT:-22}" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Deploy full tree to staging via rsync
+        env:
+          SSH_USER: ${{ secrets.CPANEL_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          rsync -az --delete \
+            --exclude='.github' --exclude='.git' --exclude='.cpanel.yml' \
+            --exclude='handoff.md' --exclude='CLAUDE.md' \
+            -e "ssh -p ${SSH_PORT:-22} -o StrictHostKeyChecking=no" \
+            ./ "${SSH_USER}@${SSH_HOST}:/home/terranre/public_html/staging-erp.terranresources.com/"
