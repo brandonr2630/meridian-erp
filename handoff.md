@@ -1,6 +1,34 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-08-21 · Session 51*
+*Last updated: 2026-09-04 · Session 52*
+
+---
+
+## Session 52 — Staging deploy gate — PARKED
+
+**Date:** 2026-09-04
+**Trigger:** Spec/implementation-plan review concluded meridian-erp (live financial data, multi-company, no reviewer) is worth a staging gate before prod pushes. Started building it; blocked partway through on a Supabase account limit.
+
+### Done this session
+
+- `staging` branch created, `.github/workflows/deploy-staging.yml` added — deploys full tree via rsync to a `staging-erp.terranresources.com` doc root once secrets + subdomain exist. `master` / `deploy.yml` untouched.
+- Schema + seed SQL for a staging Supabase project pre-built: 31 core ERP tables, all RLS policies, 3 `SECURITY DEFINER` helper functions (`is_super_admin`, `my_company_ids`, `user_has_perm`) reconstructed from prod via SQL introspection, plus synthetic seed data (company "Staging Test Co", one user per role, one balanced journal entry, one AR invoice, one AP bill). Saved locally for now — needs a durable home in-repo once the staging project exists (e.g. `supabase/staging/`).
+- Confirmed prod database itself is healthy: 45/45 migrations applied cleanly (checked directly against `supabase_migrations.schema_migrations`).
+
+### Parked — blocked on Supabase project cap
+
+Terran Group org is on the Supabase free plan, capped at 2 active projects — already at cap (`Terran Group ERP` prod + `terran-lab`). Creating a 3rd (staging) project needs either freeing a slot (pause `terran-lab`) or upgrading the org to Pro (~$25/mo, also unblocks Supabase Branching — see below). User is handling this manually; parking here until a slot exists.
+
+### To-do (resume when unblocked)
+
+- [ ] Free a Supabase project slot or upgrade org plan
+- [ ] Create "Terran Group ERP — Staging" project (same org, `us-east-1`)
+- [ ] Apply prebuilt schema DDL + seed SQL — create 4 real Supabase Auth users first, patch their IDs into the seed file before running it
+- [ ] Add `STAGING_SUPABASE_URL` / `STAGING_SUPABASE_KEY` as `meridian-erp` repo secrets
+- [ ] cPanel: create `staging-erp.terranresources.com` subdomain, Directory Privacy (Basic Auth) + `X-Robots-Tag: noindex` header (instructions already handed to user)
+- [ ] First dry-run promotion (`staging` → PR → `master`) once the whole chain works end to end
+
+**Unrelated finding, not blocking:** prod project's Supabase *Branching* feature has a `main` branch record stuck in `MIGRATIONS_FAILED`. This is the Branching preview-database replay failing, not the live production database (which is fine, see above). Worth checking Dashboard → Database → Branches for the actual error text at some point; not urgent.
 
 ---
 
