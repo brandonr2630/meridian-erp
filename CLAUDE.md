@@ -26,7 +26,9 @@ TTD (`TT$`), USD (`US$`), GYD (`G$`) — formatted via `fmt(amount, currency)`.
 
 ## Deployment
 
-Push to `master` auto-deploys via GitHub Actions → cPanel Fileman API (GreenGeeks). Deploy dir: `/home/terranre/public_html/erp.terranresources.com`. Manual redeploy: Actions → Deploy to cPanel → Run workflow.
+Push to `master` auto-deploys via GitHub Actions → SSH/rsync (GreenGeeks; migrated off the cPanel Fileman API after WAF blocked it). Deploy dir: `/home/terranre/public_html/erp.terranresources.com`. Manual redeploy: Actions → Deploy to cPanel → Run workflow.
+
+**Staging:** in progress, parked on a Supabase free-tier project cap — see `handoff.md` Session 52 for the to-do list before resuming. Once live: `staging` branch → `staging-erp.terranresources.com` (separate Supabase project, own keys swapped in at deploy time) → PR to `master` to promote.
 
 ## Conventions
 
