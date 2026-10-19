@@ -19,6 +19,7 @@
 
 ### Notes
 
+- **Follow-up (same session):** bar labels removed; added a **Job No. / Customer list column** left of the chart (`#jc-gantt-list`, click row → `jcOpenJob`). Row height 48 and header 85 (=45+30+10 frappe spacing) are hard-coded to match frappe's layout — change them together with `bar_height`/`padding`/header options in `jcRenderGantt()`.
 - Read-only by design (`readonly: true`). Drag-to-edit dates is deferred until RBAC (`ops:work-orders` write) and the Invoiced/Closed lock rules are decided.
 - Tested on mock jobs in a stub page (render, status classes, click handler, theme). **Not yet verified against live Supabase data in the full app.**
 - Light theme not eyeballed; only dark checked.
