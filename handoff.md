@@ -1,6 +1,27 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-09-04 · Session 52*
+*Last updated: 2026-10-19 · Session 53*
+
+---
+
+## Session 53 — Work Orders Gantt view (read-only)
+
+**Date:** 2026-10-19
+
+### Done
+
+| File | Change | Notes |
+|---|---|---|
+| `index.html` — Work Orders dashboard | New **List / Gantt** toggle (`jcSetDashView`) | Gantt shares the existing search/status/priority filters via `jcGetFiltered()`. Zoom: Day / Week / Month. |
+| `index.html` — `jcRenderGantt()`, `jcGanttTasks()`, `jcLoadGanttLib()` | frappe-gantt 1.0.3 (MIT) lazy-loaded from jsDelivr on first use | Same pattern as `loadSheetJS()`. Bar = `date_received` → `due_date` (done jobs: `date_completed`; open overdue jobs run to today). Jobs with no dates are hidden and counted in the toolbar note. Click bar → `jcOpenJob(id)`. |
+| `index.html` — `jcLoadDashboard()` select | Added `date_completed` | Only data change; no schema/migration. |
+| `index.html` — CSS | Maps frappe `--g-*` vars to ERP theme vars | Chart follows light/dark theme; status colours: Received grey, In Progress blue, On Hold amber, Completed/Invoiced/Closed green, Overdue red. |
+
+### Notes
+
+- Read-only by design (`readonly: true`). Drag-to-edit dates is deferred until RBAC (`ops:work-orders` write) and the Invoiced/Closed lock rules are decided.
+- Tested on mock jobs in a stub page (render, status classes, click handler, theme). **Not yet verified against live Supabase data in the full app.**
+- Light theme not eyeballed; only dark checked.
 
 ---
 
