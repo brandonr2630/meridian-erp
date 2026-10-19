@@ -1537,7 +1537,17 @@ body {
   --g-today-highlight:var(--gold); --g-actions-background:var(--bg-3); --g-popup-actions:var(--border); --g-bar-border:var(--bg-2); }
 #jc-gantt-chart .popup-wrapper { background:var(--bg-3); color:var(--text); border:1px solid var(--border); }
 #jc-gantt-chart .bar-progress { display:none; }
-#jc-gantt-chart .bar-label { font-size:11px; }
+.jc-gantt-main { display:flex; align-items:flex-start; }
+#jc-gantt-chart { flex:1; min-width:0; }
+.jc-gantt-list { flex:0 0 240px; background:var(--bg-2); border:1px solid var(--border); border-right:0; border-radius:var(--radius-lg) 0 0 var(--radius-lg); }
+.jc-gantt-list:empty { display:none; }
+.jc-gl-head { height:85px; box-sizing:border-box; display:flex; align-items:flex-end; gap:12px; padding:0 10px 8px; font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text-3); border-bottom:1px solid var(--border); }
+.jc-gl-head span:first-child { width:70px; }
+.jc-gl-row { height:48px; box-sizing:border-box; display:flex; align-items:center; gap:12px; padding:0 10px; font-size:12px; border-bottom:1px solid var(--border); cursor:pointer; }
+.jc-gl-row:hover { background:var(--bg-3); }
+.jc-gl-row .dash-jno { width:70px; flex:0 0 70px; }
+.jc-gl-cust { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-2); }
+#jc-gantt-chart .gantt-container { border-radius:0 var(--radius-lg) var(--radius-lg) 0; }
 #jc-gantt-chart .bar-wrapper.gc-received .bar { fill:var(--text-3); }
 #jc-gantt-chart .bar-wrapper.gc-progress .bar { fill:var(--blue); }
 #jc-gantt-chart .bar-wrapper.gc-hold .bar { fill:var(--amber); }
@@ -3192,7 +3202,10 @@ body.light .global-search-results, body.light .split-btn-menu {
               <span class="jc-gantt-legend"><i style="background:var(--red)"></i>Overdue</span>
               <span id="jc-gantt-note"></span>
             </div>
-            <div id="jc-gantt-chart"></div>
+            <div class="jc-gantt-main">
+              <div class="jc-gantt-list" id="jc-gantt-list"></div>
+              <div id="jc-gantt-chart"></div>
+            </div>
           </div>
           <div class="jc-dash-body" id="jc-dash-body">
             <div class="jc-kpis" id="jc-kpis"></div>
@@ -7993,7 +8006,7 @@ function jcGanttTasks(jobs) {
     const overdue = !isDone && j.due_date && j.due_date < today;
     tasks.push({
       id: j.id,
-      name: escHTML(`${j.job_no} · ${j.customer || '—'}`),
+      name: '',   // no label on the bar; the job list column shows job no. / customer
       start, end, progress: 0,
       custom_class: overdue ? 'gc-overdue' : (clsOf[j.status] || 'gc-received')
     });
@@ -8006,13 +8019,29 @@ async function jcRenderGantt() {
   const jobs = jcGetFiltered();
   const { tasks, skipped } = jcGanttTasks(jobs);
   if (note) note.textContent = `${tasks.length} job${tasks.length === 1 ? '' : 's'}` + (skipped ? ` · ${skipped} without dates hidden` : '');
-  if (!tasks.length) { jcGanttInstance = null; host.innerHTML = '<div class="jc-empty-state">No jobs with dates match the current filters.</div>'; return; }
+  const listEl = document.getElementById('jc-gantt-list');
+  if (!tasks.length) {
+    jcGanttInstance = null;
+    if (listEl) listEl.innerHTML = '';
+    host.innerHTML = '<div class="jc-empty-state">No jobs with dates match the current filters.</div>';
+    return;
+  }
   try { await jcLoadGanttLib(); }
   catch (e) { host.innerHTML = `<div class="jc-empty-state">${escHTML(e.message)}</div>`; return; }
   if (jcDashView !== 'gantt') return;   // user switched back while the library loaded
   const byId = Object.fromEntries(jobs.map(j => [j.id, j]));
+  // Job list column — row height (48) and header (85 = 45+30+10 frappe spacing) must match the Gantt options below so rows line up.
+  if (listEl) {
+    listEl.innerHTML = '<div class="jc-gl-head"><span>Job No.</span><span>Customer</span></div>' +
+      tasks.map(t => {
+        const j = byId[t.id] || {};
+        return `<div class="jc-gl-row" onclick="jcOpenJob('${escHTML(t.id)}')" title="${escHTML(j.description || '')}">` +
+          `<span class="dash-jno">${escHTML(j.job_no || '—')}</span><span class="jc-gl-cust">${escHTML(j.customer || '—')}</span></div>`;
+      }).join('');
+  }
   host.innerHTML = '<svg id="jc-gantt-svg"></svg>';
   jcGanttInstance = new Gantt('#jc-gantt-svg', tasks, {
+    bar_height: 30, padding: 18, upper_header_height: 45, lower_header_height: 30,
     view_mode: document.getElementById('jc-gantt-zoom')?.value || 'Week',
     readonly: true,
     popup_on: 'hover',
