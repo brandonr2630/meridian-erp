@@ -1530,12 +1530,20 @@ body {
 .jc-gantt-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12px; color:var(--text-3); }
 .jc-gantt-legend { display:inline-flex; align-items:center; gap:4px; margin-right:8px; }
 .jc-gantt-legend i { width:10px; height:10px; border-radius:2px; display:inline-block; }
-#jc-gantt-chart .gantt-container { background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-lg);
+#jc-gantt-chart .gantt-container, #jc-sched-chart .gantt-container { background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-lg);
   --g-header-background:var(--bg-2); --g-row-color:var(--bg-2); --g-border-color:var(--border); --g-row-border-color:var(--border);
   --g-tick-color:var(--border); --g-tick-color-thick:var(--border); --g-weekend-highlight-color:var(--bg-3);
   --g-text-dark:var(--text); --g-text-muted:var(--text-3); --g-weekend-label-color:var(--text-3);
   --g-today-highlight:var(--gold); --g-actions-background:var(--bg-3); --g-popup-actions:var(--border); --g-bar-border:var(--bg-2); }
-#jc-gantt-chart .popup-wrapper { background:var(--bg-3); color:var(--text); border:1px solid var(--border); }
+#jc-gantt-chart .popup-wrapper, #jc-sched-chart .popup-wrapper { background:var(--bg-3); color:var(--text); border:1px solid var(--border); }
+#jc-sched-chart .bar-wrapper .bar { fill:var(--text-3); fill-opacity:.35; }
+#jc-sched-chart .bar-wrapper .bar-progress { fill:var(--green); }
+#jc-sched-chart .bar-wrapper.gc-late .bar-progress { fill:var(--red); }
+#jc-sched-chart .bar-label { font-size:11px; }
+.jc-sched-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:10px 0 6px; font-size:12px; color:var(--text-3); }
+.jc-sched-overall { font-weight:700; color:var(--text-2); }
+.jc-sched-input { width:100%; min-width:0; }
+.jc-sched-empty { padding:16px; text-align:center; font-size:12px; color:var(--text-3); }
 #jc-gantt-chart .bar-progress { display:none; }
 .jc-gantt-main { display:flex; align-items:flex-start; }
 #jc-gantt-chart { flex:1; min-width:0; }
@@ -3368,6 +3376,31 @@ body.light .global-search-results, body.light .split-btn-menu {
                   <th style="width:100px">Source</th><th style="width:32px"></th>
                 </tr></thead><tbody id="jc-specs-body"></tbody></table></div>
                 <button class="btn-add-row" onclick="jcAddSpecRow()">+ Add Specification</button>
+              </div>
+            </div>
+
+            <!-- 1b. Schedule & Tasks (per-job Gantt) -->
+            <div class="card" id="jc-sched-card">
+              <div class="card-header"><span class="card-header-icon">📅</span><span class="card-header-title">Schedule &amp; Tasks</span></div>
+              <div class="card-body">
+                <div class="jc-sched-bar">
+                  <span class="jc-sched-overall" id="jc-sched-overall"></span>
+                  <select class="jc-dash-filter" id="jc-sched-zoom" onchange="jcRenderSchedGantt()">
+                    <option value="Day" selected>Day</option><option value="Week">Week</option><option value="Month">Month</option>
+                  </select>
+                </div>
+                <div class="dyn-table-wrap">
+                  <table class="dyn-table" id="jc-sched-table">
+                    <thead><tr>
+                      <th style="min-width:200px">Task</th><th style="width:130px">Assignee</th>
+                      <th style="width:130px">Start</th><th style="width:130px">End</th>
+                      <th style="width:80px">% Done</th><th style="width:150px">Depends on</th><th style="width:32px"></th>
+                    </tr></thead>
+                    <tbody id="jc-sched-body"></tbody>
+                  </table>
+                </div>
+                <button class="btn-add-row" id="jc-sched-add" onclick="jcAddTask()">+ Add Task</button>
+                <div id="jc-sched-chart" style="margin-top:12px;"></div>
               </div>
             </div>
 
@@ -8057,6 +8090,128 @@ async function jcRenderGantt() {
     }
   });
 }
+// ── Per-job schedule: tasks + Gantt (job_tasks table) ────────────
+let jcTasks = [];
+let jcSchedGantt = null;
+const jcCanEditTasks = () => can('ops:work-orders:write');
+async function jcLoadTasks() {
+  jcTasks = [];
+  if (jcCurrentJobId) {
+    try { jcTasks = await sbGet('job_tasks', `job_id=eq.${jcCurrentJobId}&order=sort_order.asc,created_at.asc`); }
+    catch (e) { showToast('Could not load tasks: ' + (e.message || e), 'error'); }
+  }
+  jcRenderTasks();
+}
+function jcTaskProgressAvg() {
+  return jcTasks.length ? Math.round(jcTasks.reduce((s, t) => s + (t.progress || 0), 0) / jcTasks.length) : 0;
+}
+function jcRenderTasks() {
+  const body = document.getElementById('jc-sched-body'); if (!body) return;
+  const edit = jcCanEditTasks();
+  const addBtn = document.getElementById('jc-sched-add');
+  if (addBtn) addBtn.style.display = edit ? '' : 'none';
+  const ov = document.getElementById('jc-sched-overall');
+  if (ov) ov.textContent = jcTasks.length ? `Overall progress: ${jcTaskProgressAvg()}% · ${jcTasks.length} task${jcTasks.length === 1 ? '' : 's'}` : '';
+  if (!jcTasks.length) {
+    body.innerHTML = `<tr><td colspan="7" class="jc-sched-empty">${jcCurrentJobId ? 'No tasks yet.' : 'Save the job to start planning tasks.'}</td></tr>`;
+  } else {
+    const dis = edit ? '' : ' disabled';
+    body.innerHTML = jcTasks.map(t => {
+      const id = escHTML(t.id);
+      const deps = ['<option value="">—</option>'].concat(jcTasks.filter(o => o.id !== t.id).map(o =>
+        `<option value="${escHTML(o.id)}"${o.id === t.depends_on ? ' selected' : ''}>${escHTML(o.task_name || '(unnamed)')}</option>`)).join('');
+      return `<tr>
+        <td><input class="jc-sched-input" value="${escHTML(t.task_name)}" placeholder="Task name" maxlength="120"${dis} onchange="jcTaskSet('${id}','task_name',this.value)"></td>
+        <td><input class="jc-sched-input" value="${escHTML(t.assignee || '')}" placeholder="Name" maxlength="80"${dis} onchange="jcTaskSet('${id}','assignee',this.value)"></td>
+        <td><input class="jc-sched-input" type="date" value="${escHTML(t.start_date || '')}"${dis} onchange="jcTaskSet('${id}','start_date',this.value)"></td>
+        <td><input class="jc-sched-input" type="date" value="${escHTML(t.end_date || '')}"${dis} onchange="jcTaskSet('${id}','end_date',this.value)"></td>
+        <td><input class="jc-sched-input" type="number" min="0" max="100" step="5" value="${t.progress || 0}"${dis} onchange="jcTaskSet('${id}','progress',this.value)"></td>
+        <td><select class="jc-sched-input"${dis} onchange="jcTaskSet('${id}','depends_on',this.value)">${deps}</select></td>
+        <td>${edit ? `<button class="btn-del" title="Delete task" onclick="jcDeleteTask('${id}')">✕</button>` : ''}</td>
+      </tr>`;
+    }).join('');
+  }
+  jcRenderSchedGantt();
+}
+async function jcAddTask() {
+  if (!jcCurrentJobId) { showToast('Save the job before adding tasks.', 'warn'); return; }
+  if (!jcCanEditTasks()) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const last  = jcTasks[jcTasks.length - 1];
+  try {
+    const rows = await sbPost('job_tasks', {
+      job_id: jcCurrentJobId, company_id: currentCompany.id,
+      sort_order: last ? (last.sort_order || 0) + 1 : 0,
+      task_name: '', start_date: last?.end_date || today, end_date: last?.end_date || today, progress: 0
+    });
+    if (!rows || !rows[0]) throw new Error('No row returned');
+    jcTasks.push(rows[0]);
+    jcRenderTasks();
+  } catch (e) { showToast('Failed to add task: ' + (e.message || e), 'error'); }
+}
+async function jcTaskSet(id, field, raw) {
+  const t = jcTasks.find(x => x.id === id); if (!t || !jcCanEditTasks()) return;
+  let val = raw;
+  if (field === 'progress') val = Math.max(0, Math.min(100, Math.round(Number(raw) || 0)));
+  else if (field === 'start_date' || field === 'end_date' || field === 'depends_on' || field === 'assignee') val = raw || null;
+  else if (field === 'task_name') val = String(raw).trim();
+  const patch = { [field]: val };
+  if (field === 'start_date' && val && t.end_date && t.end_date < val) patch.end_date = val;   // moving start past end drags the end along
+  if (field === 'end_date' && val && t.start_date && val < t.start_date) {
+    showToast('End date cannot be before start date.', 'warn');
+    jcRenderTasks(); return;
+  }
+  if (field === 'depends_on' && val) {   // refuse dependency loops
+    let cur = val, hops = 0;
+    while (cur && hops++ < 100) { if (cur === id) { showToast('That would create a circular dependency.', 'warn'); jcRenderTasks(); return; } cur = jcTasks.find(x => x.id === cur)?.depends_on; }
+  }
+  try {
+    await sbPatch('job_tasks', id, patch);
+    Object.assign(t, patch);
+    if (field === 'task_name' || field === 'progress' || patch.end_date !== undefined && field === 'start_date') jcRenderTasks(); else jcRenderSchedGantt();
+  } catch (e) { showToast('Failed to save task: ' + (e.message || e), 'error'); jcLoadTasks(); }
+}
+async function jcDeleteTask(id) {
+  if (!jcCanEditTasks()) return;
+  const ok = await showConfirm('Delete this task?', 'Delete Task', 'Delete');
+  if (!ok) return;
+  try {
+    await sbDelete('job_tasks', id);
+    jcTasks = jcTasks.filter(t => t.id !== id).map(t => t.depends_on === id ? { ...t, depends_on: null } : t);
+    jcRenderTasks();
+  } catch (e) { showToast('Failed to delete task: ' + (e.message || e), 'error'); }
+}
+async function jcRenderSchedGantt() {
+  const host = document.getElementById('jc-sched-chart'); if (!host) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const dated = jcTasks.filter(t => t.start_date && t.end_date);
+  if (!dated.length) { jcSchedGantt = null; host.innerHTML = ''; return; }
+  try { await jcLoadGanttLib(); }
+  catch (e) { host.innerHTML = `<div class="jc-sched-empty">${escHTML(e.message)}</div>`; return; }
+  const addDay = d => new Date(new Date(d + 'T00:00:00').getTime() + 864e5).toISOString().slice(0, 10);
+  const items = dated.map(t => ({
+    id: t.id,
+    name: escHTML(t.task_name || '(unnamed)'),   // frappe renders names via innerHTML
+    start: t.start_date,
+    end: t.end_date > t.start_date ? t.end_date : addDay(t.start_date),
+    progress: t.progress || 0,
+    dependencies: t.depends_on && dated.some(d => d.id === t.depends_on) ? t.depends_on : '',
+    custom_class: (t.end_date < today && (t.progress || 0) < 100) ? 'gc-late' : ''
+  }));
+  const byId = Object.fromEntries(dated.map(t => [t.id, t]));
+  host.innerHTML = '<svg id="jc-sched-svg"></svg>';
+  jcSchedGantt = new Gantt('#jc-sched-svg', items, {
+    view_mode: document.getElementById('jc-sched-zoom')?.value || 'Day',
+    readonly: true, popup_on: 'hover', today_button: true, scroll_to: 'today',
+    popup: ctx => {
+      const t = byId[ctx.task.id] || {};
+      ctx.set_title(escHTML(t.task_name || '(unnamed)'));
+      ctx.set_subtitle(escHTML(t.assignee || ''));
+      ctx.set_details(`<div class="jc-gantt-popup">${escHTML(t.start_date)} → ${escHTML(t.end_date)}<br>${t.progress || 0}% complete</div>`);
+    }
+  });
+}
+
 function jcGetFiltered() {
   const search  = (document.getElementById('jc-dash-search')?.value || '').toLowerCase();
   const statusF = document.getElementById('jc-dash-status')?.value  || '';
@@ -8204,6 +8359,7 @@ function jcResetForm() {
   document.querySelectorAll('.jc-cat-btn').forEach(b => b.classList.remove('active'));
   const custBtn = document.getElementById('jc-cat-customer'); if (custBtn) custBtn.classList.add('active');
   jcCurrentJobId = null; jcIsLocked = false; jcAdminCostUnlocked = false;
+  jcTasks = []; jcRenderTasks();
   const archSec = document.getElementById('jc-archived-drawings');
   if (archSec) archSec.style.display = 'none';
   const archBody = document.getElementById('jc-archived-drawings-body');
@@ -8231,6 +8387,7 @@ async function jcSaveJob() {
     showToast('Saving…', 'info');
     const data = jcCollectFormData();
     jcCurrentJobId = await jcSaveJobData(data, jcCurrentJobId);
+    jcRenderTasks();   // unlock "Add Task" for a job that was just created
     const lastSaved = document.getElementById('jc-last-saved');
     if (lastSaved) lastSaved.textContent = 'Saved ' + new Date().toLocaleString('en-TT');
     const delBtn = document.getElementById('jc-delete-btn');
@@ -8414,6 +8571,7 @@ async function jcOpenJob(jobId) {
     activeDrawings.forEach(d => jcAddDrawingRow(d));
     jcRenderArchivedDrawings(archivedDrawings);
     jcOpenForm();
+    jcLoadTasks();
   } catch(err) {
     showToast('✗ Failed to load job: ' + (err.message || err), 'error');
   }

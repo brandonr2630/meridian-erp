@@ -1,6 +1,27 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-19 · Session 53*
+*Last updated: 2026-10-19 · Session 54*
+
+---
+
+## Session 54 — Per-job schedule (second-tier Gantt)
+
+**Date:** 2026-10-19
+
+The Work Orders Gantt (Session 53) is the portfolio view; this adds the per-job tier: planned tasks with progress, drawn as a Gantt inside the job form.
+
+| File | Change | Notes |
+|---|---|---|
+| `supabase/migrations/20261019_job_tasks.sql` | New `job_tasks` table + RLS | `job_id` FK cascade, `company_id`, `task_name`, `start_date`/`end_date` (end >= start CHECK), `progress` 0-100, `assignee`, `depends_on` (self-FK, SET NULL), indexes on job_id / (company_id, job_id) / depends_on. SELECT = company members; INSERT/UPDATE/DELETE = members + `user_has_perm('ops:work-orders:write')`. **No `created_by` column on purpose** (avoids the auth.users-vs-erp_users FK trap). |
+| `index.html` — "Schedule & Tasks" card | New card after Customer & Job Info | Task table (name, assignee, start, end, % done, depends-on, delete) + read-only frappe-gantt below it, with progress fill and dependency arrows. Overall progress = simple average of task %. |
+| `index.html` — `jcLoadTasks/jcRenderTasks/jcAddTask/jcTaskSet/jcDeleteTask/jcRenderSchedGantt` | Inline CRUD (same pattern as `job_drawings`) | Rows save immediately; needs a saved job. Moving a start past the end drags the end; end-before-start is rejected; circular dependencies refused; progress clamped. Task names go through `escHTML` (frappe uses innerHTML). Late = end date passed and < 100% (red progress). |
+| `index.html` — `jcOpenJob` / `jcResetForm` / save | Hooks | `jcLoadTasks()` after open; tasks cleared on reset; card re-rendered after first save. Locked (Invoiced/Closed) jobs inherit `.jc-readonly`; users without `ops:work-orders:write` see inputs disabled. |
+
+### Notes
+
+- **Migration must be applied to prod before the UI works** (`jcLoadTasks` toasts an error until the table exists).
+- Tested on a mock harness only (CRUD, validation, dependency arrow, XSS text). Not tested against live Supabase/RLS.
+- Not done: drag-to-edit bars, task templates from `config_tasks`, job-level progress shown on the portfolio Gantt.
 
 ---
 
