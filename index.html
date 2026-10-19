@@ -7993,7 +7993,7 @@ function jcGanttTasks(jobs) {
     const overdue = !isDone && j.due_date && j.due_date < today;
     tasks.push({
       id: j.id,
-      name: `${j.job_no} · ${j.customer || '—'}`,
+      name: escHTML(`${j.job_no} · ${j.customer || '—'}`),
       start, end, progress: 0,
       custom_class: overdue ? 'gc-overdue' : (clsOf[j.status] || 'gc-received')
     });
@@ -8021,10 +8021,10 @@ async function jcRenderGantt() {
     on_click: t => jcOpenJob(t.id),
     popup: ctx => {
       const j = byId[ctx.task.id] || {};
-      ctx.set_title(escHTML(j.job_no || ctx.task.name));
+      ctx.set_title(escHTML(j.job_no || ''));
       ctx.set_subtitle(escHTML(j.customer || ''));
-      ctx.set_details(`<div class="jc-gantt-popup">${escHTML(j.status || '')} · ${escHTML(j.priority || '')}<br>Received: ${j.date_received || '—'}<br>Due: ${j.due_date || '—'}` +
-        (j.date_completed ? `<br>Completed: ${j.date_completed}` : '') + `<br>${escHTML((j.description || '').substring(0,80))}</div>`);
+      ctx.set_details(`<div class="jc-gantt-popup">${escHTML(j.status || '')} · ${escHTML(j.priority || '')}<br>Received: ${escHTML(j.date_received || '—')}<br>Due: ${escHTML(j.due_date || '—')}` +
+        (j.date_completed ? `<br>Completed: ${escHTML(j.date_completed)}` : '') + `<br>${escHTML((j.description || '').substring(0,80))}</div>`);
     }
   });
 }
