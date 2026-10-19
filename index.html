@@ -1522,6 +1522,28 @@ body {
 .jc-dash-search:focus { border-color:var(--gold); }
 .jc-dash-filter { background:var(--bg-3); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); padding:5px 8px; font-size:12px; cursor:pointer; }
 .jc-dash-body { padding:16px; display:flex; flex-direction:column; gap:16px; overflow-y:auto; }
+.jc-view-toggle { display:inline-flex; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+.jc-view-toggle button { background:var(--bg-3); border:0; color:var(--text-2); padding:5px 12px; font-size:12px; font-weight:600; cursor:pointer; }
+.jc-view-toggle button.active { background:var(--gold); color:#000; }
+.jc-gantt-wrap { display:none; padding:16px; flex-direction:column; gap:10px; overflow:auto; }
+.jc-gantt-wrap.active { display:flex; }
+.jc-gantt-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12px; color:var(--text-3); }
+.jc-gantt-legend { display:inline-flex; align-items:center; gap:4px; margin-right:8px; }
+.jc-gantt-legend i { width:10px; height:10px; border-radius:2px; display:inline-block; }
+#jc-gantt-chart .gantt-container { background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-lg);
+  --g-header-background:var(--bg-2); --g-row-color:var(--bg-2); --g-border-color:var(--border); --g-row-border-color:var(--border);
+  --g-tick-color:var(--border); --g-tick-color-thick:var(--border); --g-weekend-highlight-color:var(--bg-3);
+  --g-text-dark:var(--text); --g-text-muted:var(--text-3); --g-weekend-label-color:var(--text-3);
+  --g-today-highlight:var(--gold); --g-actions-background:var(--bg-3); --g-popup-actions:var(--border); --g-bar-border:var(--bg-2); }
+#jc-gantt-chart .popup-wrapper { background:var(--bg-3); color:var(--text); border:1px solid var(--border); }
+#jc-gantt-chart .bar-progress { display:none; }
+#jc-gantt-chart .bar-label { font-size:11px; }
+#jc-gantt-chart .bar-wrapper.gc-received .bar { fill:var(--text-3); }
+#jc-gantt-chart .bar-wrapper.gc-progress .bar { fill:var(--blue); }
+#jc-gantt-chart .bar-wrapper.gc-hold .bar { fill:var(--amber); }
+#jc-gantt-chart .bar-wrapper.gc-done .bar { fill:var(--green); }
+#jc-gantt-chart .bar-wrapper.gc-overdue .bar { fill:var(--red); }
+.jc-gantt-popup { padding:8px 10px; font-size:12px; line-height:1.5; }
 .jc-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
 .jc-kpi { background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-lg); padding:14px 16px; cursor:pointer; transition:border-color .15s; }
 .jc-kpi:hover { border-color:var(--gold); }
@@ -3152,7 +3174,25 @@ body.light .global-search-results, body.light .split-btn-menu {
               <option value="">All Priorities</option>
               <option>Urgent</option><option>Rush</option><option>Normal</option><option>Scheduled</option>
             </select>
+            <div class="jc-view-toggle">
+              <button id="jc-vt-list" class="active" onclick="jcSetDashView('list')">List</button>
+              <button id="jc-vt-gantt" onclick="jcSetDashView('gantt')">Gantt</button>
+            </div>
             <button class="btn btn-ghost btn-sm" onclick="jcLoadDashboard()">↺ Refresh</button>
+          </div>
+          <div class="jc-gantt-wrap" id="jc-gantt-wrap">
+            <div class="jc-gantt-bar">
+              <select class="jc-dash-filter" id="jc-gantt-zoom" onchange="jcRenderGantt()">
+                <option value="Day">Day</option><option value="Week" selected>Week</option><option value="Month">Month</option>
+              </select>
+              <span class="jc-gantt-legend"><i style="background:var(--text-3)"></i>Received</span>
+              <span class="jc-gantt-legend"><i style="background:var(--blue)"></i>In Progress</span>
+              <span class="jc-gantt-legend"><i style="background:var(--amber)"></i>On Hold</span>
+              <span class="jc-gantt-legend"><i style="background:var(--green)"></i>Completed</span>
+              <span class="jc-gantt-legend"><i style="background:var(--red)"></i>Overdue</span>
+              <span id="jc-gantt-note"></span>
+            </div>
+            <div id="jc-gantt-chart"></div>
           </div>
           <div class="jc-dash-body" id="jc-dash-body">
             <div class="jc-kpis" id="jc-kpis"></div>
@@ -7890,7 +7930,7 @@ async function jcLoadDashboard() {
   if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="9" class="jc-empty-state">Loading…</td></tr>';
   try {
     jcDashData = await sbGet('jobs',
-      `company_id=eq.${currentCompany.id}&order=created_at.desc&select=id,job_no,customer,job_type,status,priority,date_received,due_date,description,quoted_ttd,location,updated_at`);
+      `company_id=eq.${currentCompany.id}&order=created_at.desc&select=id,job_no,customer,job_type,status,priority,date_received,due_date,date_completed,description,quoted_ttd,location,updated_at`);
     jcRenderDash();
     const badge = document.getElementById('badge-work-orders') || document.getElementById('badge-job-cards');
     if (badge) {
@@ -7906,6 +7946,87 @@ function jcRenderDash() {
   jcRenderKPIs(jobs);
   jcRenderActionCards(jobs);
   jcRenderDashTable(jobs);
+  if (jcDashView === 'gantt') jcRenderGantt();
+}
+
+// ── Work Orders Gantt (frappe-gantt, read-only, lazy-loaded) ─────
+let jcDashView = 'list';
+let jcGanttInstance = null;
+function jcLoadGanttLib() {
+  if (window.Gantt) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const base = 'https://cdn.jsdelivr.net/npm/frappe-gantt@1.0.3/dist/';
+    if (!document.getElementById('frappe-gantt-css')) {
+      const l = document.createElement('link');
+      l.id = 'frappe-gantt-css'; l.rel = 'stylesheet'; l.href = base + 'frappe-gantt.css';
+      document.head.appendChild(l);
+    }
+    const s = document.createElement('script');
+    s.src = base + 'frappe-gantt.umd.js';
+    s.onload = resolve; s.onerror = () => reject(new Error('Failed to load Gantt library. Check your connection.'));
+    document.head.appendChild(s);
+  });
+}
+function jcSetDashView(view) {
+  jcDashView = view;
+  document.getElementById('jc-vt-list')?.classList.toggle('active', view === 'list');
+  document.getElementById('jc-vt-gantt')?.classList.toggle('active', view === 'gantt');
+  document.getElementById('jc-gantt-wrap')?.classList.toggle('active', view === 'gantt');
+  const body = document.getElementById('jc-dash-body');
+  if (body) body.style.display = view === 'gantt' ? 'none' : '';
+  if (view === 'gantt') jcRenderGantt();
+}
+function jcGanttTasks(jobs) {
+  const today = new Date().toISOString().slice(0,10);
+  const done  = ['Completed','Invoiced','Closed'];
+  const clsOf = { Received:'gc-received','In Progress':'gc-progress','On Hold':'gc-hold',Completed:'gc-done',Invoiced:'gc-done',Closed:'gc-done' };
+  const addDay = d => new Date(new Date(d + 'T00:00:00').getTime() + 864e5).toISOString().slice(0,10);
+  const tasks = [];
+  let skipped = 0;
+  jobs.forEach(j => {
+    const start = j.date_received || (j.due_date ? j.due_date : null);
+    if (!start) { skipped++; return; }
+    const isDone = done.includes(j.status);
+    let end = isDone ? (j.date_completed || j.due_date) : (j.due_date || today);
+    if (!isDone && end < today && j.due_date) end = today;   // overdue bar runs to today
+    if (!end || end <= start) end = addDay(start);
+    const overdue = !isDone && j.due_date && j.due_date < today;
+    tasks.push({
+      id: j.id,
+      name: escHTML(`${j.job_no} · ${j.customer || '—'}`),
+      start, end, progress: 0,
+      custom_class: overdue ? 'gc-overdue' : (clsOf[j.status] || 'gc-received')
+    });
+  });
+  return { tasks, skipped };
+}
+async function jcRenderGantt() {
+  const host = document.getElementById('jc-gantt-chart'); if (!host) return;
+  const note = document.getElementById('jc-gantt-note');
+  const jobs = jcGetFiltered();
+  const { tasks, skipped } = jcGanttTasks(jobs);
+  if (note) note.textContent = `${tasks.length} job${tasks.length === 1 ? '' : 's'}` + (skipped ? ` · ${skipped} without dates hidden` : '');
+  if (!tasks.length) { jcGanttInstance = null; host.innerHTML = '<div class="jc-empty-state">No jobs with dates match the current filters.</div>'; return; }
+  try { await jcLoadGanttLib(); }
+  catch (e) { host.innerHTML = `<div class="jc-empty-state">${escHTML(e.message)}</div>`; return; }
+  if (jcDashView !== 'gantt') return;   // user switched back while the library loaded
+  const byId = Object.fromEntries(jobs.map(j => [j.id, j]));
+  host.innerHTML = '<svg id="jc-gantt-svg"></svg>';
+  jcGanttInstance = new Gantt('#jc-gantt-svg', tasks, {
+    view_mode: document.getElementById('jc-gantt-zoom')?.value || 'Week',
+    readonly: true,
+    popup_on: 'hover',
+    today_button: true,
+    scroll_to: 'today',
+    on_click: t => jcOpenJob(t.id),
+    popup: ctx => {
+      const j = byId[ctx.task.id] || {};
+      ctx.set_title(escHTML(j.job_no || ''));
+      ctx.set_subtitle(escHTML(j.customer || ''));
+      ctx.set_details(`<div class="jc-gantt-popup">${escHTML(j.status || '')} · ${escHTML(j.priority || '')}<br>Received: ${escHTML(j.date_received || '—')}<br>Due: ${escHTML(j.due_date || '—')}` +
+        (j.date_completed ? `<br>Completed: ${escHTML(j.date_completed)}` : '') + `<br>${escHTML((j.description || '').substring(0,80))}</div>`);
+    }
+  });
 }
 function jcGetFiltered() {
   const search  = (document.getElementById('jc-dash-search')?.value || '').toLowerCase();
