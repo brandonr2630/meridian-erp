@@ -113,6 +113,13 @@ test("load: missing job_phases / job_task_links degrade to v1 (no throw, notice,
   assert.ok(!e.log.calls.some((c) => c.table === "config_tasks"));
   assert.ok(e.log.order.includes("kpi") && e.log.order.includes("gantt"));
 });
+test("load: without the migration the legacy depends_on parent is exposed as a link, so KPI strip and Gantt agree", async () => {
+  const b = base(); b.tasks[1] = { ...b.tasks[1], depends_on: "t1" };
+  const e = env({ ...b, missing: true }); await e.api.jcLoadTasks(); await tick();
+  assert.equal(JSON.stringify(e.api.jcSchedLinks), JSON.stringify([{ task_id: "t2", predecessor_id: "t1", lag_days: 0 }]));
+  const v2 = env({ ...b }); await v2.api.jcLoadTasks(); await tick();
+  assert.equal(v2.api.jcSchedV2, true); assert.equal(v2.api.jcSchedLinks.length, 0, "with the migration the links table is authoritative");
+});
 test("load: a failing task fetch toasts, leaves an empty table and does not throw", async () => {
   const e = env({ ...base() }); e.srv.sbGet = async (t) => { if (t === "job_tasks") throw new Error("down"); return []; };
   await e.api.jcLoadTasks(); await tick();

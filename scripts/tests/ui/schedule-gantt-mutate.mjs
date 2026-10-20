@@ -31,7 +31,7 @@ const MUTANTS = [
   ["TODAY line at the start of the day, not the middle", "x: X(T) + px / 2, day", "x: X(T), day"],
   ["TODAY line drawn under the bars", ["  for (const c of layout.connectors) {", "  if (layout.today) body.appendChild(S('line', { class: 'gt-today-ln', x1: layout.today.x, x2: layout.today.x, y1: 0, y2: bh }));   // above the bars\n"],
     ["  if (layout.today) body.appendChild(S('line', { class: 'gt-today-ln', x1: layout.today.x, x2: layout.today.x, y1: 0, y2: bh }));\n  for (const c of layout.connectors) {", ""]],
-  ["today taken as the UTC date", "String(d.getDate()).padStart(2, '0')", "String(d.getUTCDate()).padStart(2, '0')"],
+  ["today taken as the UTC date", "String(d.getFullYear()).padStart(4, '0') + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')", "String(d.getFullYear()).padStart(4, '0') + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0')"],
   ["unescaped label: text helper assigns innerHTML", "if (text != null) n.textContent = String(text); return n; };\n  const S", "if (text != null) n.innerHTML = String(text); return n; };\n  const S"],
   ["unescaped label: svg text helper assigns innerHTML", "if (text != null) n.textContent = String(text);\n    return n;", "if (text != null) n.innerHTML = String(text);\n    return n;"],
   ["critical colour ignores crit", "colour = crit ? JC_GANTT_CRIT : col;", "colour = col;"],
@@ -73,12 +73,15 @@ let caught = 0; const survivors = [];
 try {
   for (const m of MUTANTS) {
     const [froms, tos] = MUT_FIX(m);
-    let src = original;
+    // patterns are matched inside the Gantt block only (other schedule blocks in index.html may contain similar text)
+    const GB = original.indexOf("// ── SCHEDULE GANTT RENDERER ──"), GE = original.indexOf("// ── END SCHEDULE GANTT RENDERER ──");
+    let blk = original.slice(GB, GE);
     froms.forEach((from, i) => {
-      const count = src.split(from).length - 1;
+      const count = blk.split(from).length - 1;
       if (count !== 1) { console.error(`mutant "${m[0]}": pattern ${i} found ${count}x (need exactly 1)`); process.exit(2); }
-      src = src.replace(from, () => tos[i]);
+      blk = blk.replace(from, () => tos[i]);
     });
+    const src = original.slice(0, GB) + blk + original.slice(GE);
     const file = join(dir, "index.html"); writeFileSync(file, src);
     const r = spawnSync(process.execPath, ["--test", testFile], { env: { ...process.env, UI_SRC: file }, encoding: "utf8" });
     if (r.status !== 0) { caught++; console.log("caught    " + m[0]); } else { survivors.push(m[0]); console.log("SURVIVED  " + m[0]); }

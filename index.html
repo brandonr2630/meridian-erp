@@ -9047,7 +9047,7 @@ function jcSchedSerial(key, fn) {
   next.catch(() => {}).then(() => { if (jcSchedChains.get(key) === next) jcSchedChains.delete(key); });
   return next;
 }
-function jcSchedToday() {
+function jcTableToday() {
   const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
@@ -9078,7 +9078,7 @@ function jcSchedRunCompute() {
   if (typeof jcSchedCompute !== 'function') return null;
   try {
     return jcSchedCompute({ tasks: jcTasks, links: jcSchedLinks, phases: jcSchedPhases,
-      job: { due_date: (typeof document !== 'undefined' && document.getElementById('jc-f-due-date')?.value) || null }, today: jcSchedToday() });
+      job: { due_date: (typeof document !== 'undefined' && document.getElementById('jc-f-due-date')?.value) || null }, today: jcTableToday() });
   } catch (e) { return null; }
 }
 // is_critical is a cache of the computed critical path: rewrite it for rows that differ, in at most two batched PATCHes
@@ -9390,7 +9390,11 @@ async function jcLoadTasks() {
     jcTasks = Array.isArray(tasks) ? tasks : [];
     jcSchedV2 = Array.isArray(phases) && Array.isArray(links);
     if (jcSchedV2) { jcSchedPhases = phases; jcSchedLinks = links; }
-    else if (!failed) jcSchedNotice = JC_SCHED_NOTICE_V1;
+    else {
+      if (!failed) jcSchedNotice = JC_SCHED_NOTICE_V1;
+      // v1 fallback: the single depends_on parent still drives the critical path, so the KPI strip and the Gantt agree before the migration
+      jcSchedLinks = jcTasks.filter(x => x && x.depends_on && x.id).map(x => ({ task_id: x.id, predecessor_id: x.depends_on, lag_days: 0 }));
+    }
   }
   jcRenderTasks();
   if (jcSchedV2) { jcSchedSyncCritical(); jcSchedEnsureCatalogue(); }
