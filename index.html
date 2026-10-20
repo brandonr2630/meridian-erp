@@ -1544,6 +1544,64 @@ body {
 .jc-sched-overall { font-weight:700; color:var(--text-2); }
 .jc-sched-input { width:100%; min-width:0; }
 .jc-sched-empty { padding:16px; text-align:center; font-size:12px; color:var(--text-3); }
+/* schedule-gantt:begin */
+.gt-root { margin-top:4px; }
+.gt-controls { display:flex; flex-wrap:wrap; align-items:center; gap:6px 16px; margin:0 0 8px; font-size:12px; color:var(--text-2); }
+.gt-lg { display:inline-flex; align-items:center; gap:6px; }
+.gt-toggle { cursor:pointer; margin-left:auto; }
+.gt-sw { display:inline-block; width:18px; height:10px; border-radius:2px; box-sizing:border-box; }
+.gt-sw-ghost { background:var(--text-2); opacity:.35; height:6px; }
+.gt-sw-actual { background:linear-gradient(90deg,#5B9BD5 55%,rgba(91,155,213,.38) 55%); border:1px solid #5B9BD5; }
+.gt-sw-crit { background:#E05C5C; border:1.5px solid #E8A020; }
+.gt-sw-ms { width:9px; height:9px; background:transparent; border:2px solid #5B9BD5; transform:rotate(45deg); border-radius:1px; margin:0 3px; }
+.gt-wrap { position:relative; overflow:auto; max-height:min(70vh,640px); border:1px solid var(--border); border-radius:var(--radius-lg); background:var(--bg-2); }
+.gt-inner { display:flex; width:max-content; min-width:100%; }
+.gt-left { position:sticky; left:0; z-index:4; flex:none; width:320px; background:var(--bg-2); border-right:1px solid var(--border-2); }
+.gt-right { flex:none; position:relative; }
+.gt-lhead { position:sticky; top:0; z-index:5; box-sizing:border-box; height:44px; display:grid; grid-template-columns:minmax(0,1fr) 96px 44px; align-items:end; padding:0 8px 6px; background:var(--bg-3); border-bottom:1px solid var(--border-2); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--text-2); }
+.gt-lrow { display:grid; grid-template-columns:minmax(0,1fr) 96px 44px; align-items:center; box-sizing:border-box; padding:0 8px; border-bottom:1px solid var(--border); font-size:12px; color:var(--text); }
+.gt-lrow:hover { background:var(--bg-3); }
+.gt-l-phase { font-weight:700; }
+.gt-l-task .gt-name, .gt-l-milestone .gt-name { padding-left:18px; }
+.gt-l-unsched .gt-nm { color:var(--text-2); }
+.gt-l-crit .gt-nm::before { content:''; display:inline-block; width:6px; height:6px; margin-right:6px; border-radius:50%; background:#E05C5C; vertical-align:middle; }
+.gt-name { display:flex; align-items:center; gap:4px; min-width:0; }
+.gt-nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.gt-sub { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; color:var(--text-2); padding-right:6px; font-weight:400; }
+.gt-r { text-align:right; font-variant-numeric:tabular-nums; }
+.gt-chev { flex:none; width:18px; height:18px; padding:0; border:0; background:transparent; color:var(--text-2); cursor:pointer; font-size:12px; line-height:18px; border-radius:3px; }
+.gt-chev:hover { background:var(--bg-4); color:var(--text); }
+.gt-axis { position:sticky; top:0; z-index:3; display:block; }
+.gt-body { display:block; }
+.gt-axis-bg { fill:var(--bg-3); }
+.gt-axis-ln { stroke:var(--border-2); stroke-width:1; }
+.gt-axis-ln-s { stroke:var(--border); }
+.gt-axis-m { fill:var(--text); font-size:11px; font-weight:700; }
+.gt-axis-d { fill:var(--text-2); font-size:10px; }
+.gt-axis-m2 { fill:var(--text-2); font-weight:600; }
+.gt-wk { fill:var(--text); fill-opacity:.04; }
+.gt-grid { stroke:var(--border); stroke-width:1; fill:none; }
+.gt-grid-m { stroke:var(--border-2); }
+.gt-sep { stroke:var(--border); stroke-width:1; fill:none; }
+.gt-hit { fill:transparent; }
+.gt-row:hover .gt-hit { fill:var(--text); fill-opacity:.04; }
+.gt-ghost { fill:var(--text-2); fill-opacity:.35; }
+.gt-pct { font-size:10px; font-weight:700; }
+.gt-pct-in { fill:#fff; stroke:rgba(0,0,0,.6); stroke-width:2.5px; paint-order:stroke; }
+.gt-pct-out { fill:var(--text); }
+.gt-ms-lbl { fill:var(--text); font-size:11px; }
+.gt-unsched { fill:var(--text-2); font-size:11px; font-style:italic; }
+.gt-link path { stroke:var(--text-2); stroke-width:1; opacity:.7; }
+.gt-link polygon { fill:var(--text-2); opacity:.7; }
+.gt-link-c path { stroke:#E8A020; stroke-width:1.5; opacity:1; }
+.gt-link-c polygon { fill:#E8A020; opacity:1; }
+.gt-today-ln { stroke:var(--gold); stroke-width:1.5; }
+.gt-today-flag { fill:var(--gold); }
+.gt-today-tx { fill:#000; font-size:8.5px; font-weight:800; letter-spacing:.04em; }
+.gt-tip { position:fixed; z-index:700; max-width:270px; padding:8px 10px; background:var(--bg-3); color:var(--text); border:1px solid var(--border-2); border-radius:var(--radius); box-shadow:var(--shadow-lg); font-size:12px; pointer-events:none; }
+.gt-tip-t { font-weight:700; margin-bottom:4px; word-break:break-word; }
+.gt-tip-l { color:var(--text-2); }
+/* schedule-gantt:end */
 #jc-gantt-chart .bar-progress { display:none; }
 .jc-gantt-main { display:flex; align-items:flex-start; }
 #jc-gantt-chart { flex:1; min-width:0; }
@@ -8310,6 +8368,411 @@ function jcSchedCompute({ tasks, links, phases, job, today } = {}) {
     phaseRollups, forecastEnd: jcSchedYmd(fe), status, slipDays: slip, crit, slackByTask, warnings };
 }
 // ── END SCHEDULE COMPUTE ──
+// ── SCHEDULE GANTT RENDERER ──
+// Phase A (Schedule v2) staff UI: the custom per-job Gantt drawn into #jc-sched-chart (the portfolio Gantt stays on frappe-gantt).
+// Two halves. jcGanttLayout(model, opts) is PURE: plain data in, plain data out (rows with y, bars with x/width, ghost bars,
+// milestone diamonds, TODAY x, axis ticks, connector paths), no DOM, so it is unit-testable. jcGanttDraw(el, layout, ui) only
+// draws that data. User strings (task, phase, assignee names) reach the DOM through textContent / setAttribute ONLY, never innerHTML.
+// Reads at call time: jcTasks, jcSchedPhases, jcSchedLinks (declared by the task-table block; undefined is treated as []).
+// Dates are integer UTC day numbers via the shared compute helpers (jcSchedDay / jcSchedYmd): no Date maths, no DST drift.
+// Dates outside 1990..2100 are treated as bad data (row shows "unscheduled") so one typo can never make a 40,000-day chart.
+const JC_GANTT_ZOOM = Object.freeze({ Day: 28, Week: 8, Month: 3 });   // px per day, driven by #jc-sched-zoom
+const JC_GANTT_ROW_H = 28, JC_GANTT_AXIS_H = 44, JC_GANTT_LEFT_W = 320;
+const JC_GANTT_BAR_H = 14, JC_GANTT_GHOST_H = 8, JC_GANTT_MS_R = 7, JC_GANTT_MIN_W = 3;
+const JC_GANTT_CRIT = '#E05C5C', JC_GANTT_CRIT_EDGE = '#E8A020';        // = --red / --amber
+const JC_GANTT_NEUTRAL = '#8A8A8A';
+const JC_GANTT_PALETTE = Object.freeze(['#5B9BD5', '#4CAF7D', '#9B8AD6', '#4DB6B0', '#D67BA0', '#B5A86A']);
+const JC_GANTT_UNPH = '__unphased__';
+const JC_GANTT_DAY_LO = jcSchedDay('1990-01-01'), JC_GANTT_DAY_HI = jcSchedDay('2100-12-31');
+const JC_GANTT_MON = Object.freeze(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']);
+// module state: collapsed phases (keyed by phase id, reset when the open job changes), the dependency toggle, scroll bookkeeping
+const jcGanttCollapsed = new Set();
+let jcGanttJobId = null, jcGanttShowAll = false, jcGanttViewKey = null, jcGanttLastWrap = null;
+
+function jcGanttDay(v) { const d = jcSchedDay(v); return d != null && d >= JC_GANTT_DAY_LO && d <= JC_GANTT_DAY_HI ? d : null; }
+const jcGanttPos = (v, dflt) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : dflt; };
+const jcGanttPct = v => { const n = Number(v); return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 0; };
+const jcGanttColour = c => (typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c)) ? c : null;
+const jcGanttTrunc = (s, n) => s.length > n ? s.slice(0, n - 1) + '…' : s;
+function jcGanttFmt(day, withYear) {
+  const y = jcSchedYmd(day); if (!y) return '';
+  return (+y.slice(8, 10)) + ' ' + JC_GANTT_MON[+y.slice(5, 7) - 1] + (withYear ? ' ' + y.slice(0, 4) : '');
+}
+const jcGanttNum = n => Math.round(n * 10) / 10;
+
+function jcGanttLayout(model, opts) {
+  model = model || {}; opts = opts || {};
+  const rowH = jcGanttPos(opts.rowH, JC_GANTT_ROW_H);
+  const px = jcGanttPos(model.pxPerDay != null ? model.pxPerDay : opts.pxPerDay, 28);
+  const showAll = !!(opts.showAll != null ? opts.showAll : model.showAll);
+  const cin = model.collapsed;
+  const isCollapsed = k => !!cin && (typeof cin.has === 'function' ? cin.has(k) : Array.isArray(cin) ? cin.includes(k) : false);
+
+  const phases = (Array.isArray(model.phases) ? model.phases : []).filter(p => p && p.id != null)
+    .map((p, i) => ({ p, i })).sort((a, b) => ((jcSchedNum(a.p.sort_order) ?? 0) - (jcSchedNum(b.p.sort_order) ?? 0)) || a.i - b.i).map(x => x.p);
+  const rawTasks = Array.isArray(model.tasks) ? model.tasks : [];
+
+  // ---- normalise tasks: day numbers, clamped progress, bad data flagged not thrown ----
+  const nt = [];
+  rawTasks.forEach((t, i) => {
+    if (!t) return;
+    const ms = !!t.is_milestone;
+    let s = jcGanttDay(t.start_date), e = jcGanttDay(t.end_date), bad = false;
+    if (ms) { const d = e ?? s; s = e = d; }                                    // a milestone sits at its end_date
+    else if (s == null || e == null) { s = e = null; }                          // a task needs both dates to be drawn
+    else if (e < s) { bad = true; const x = s; s = e; e = x; }                  // bad data: draw the span, flag it
+    let bs = jcGanttDay(t.baseline_start), be = jcGanttDay(t.baseline_end);
+    if (bs == null || be == null) { bs = be = null; } else if (be < bs) { const x = bs; bs = be; be = x; }
+    nt.push({ t, id: t.id != null ? t.id : '#' + i, ms, s, e, bs, be, bad, prog: jcGanttPct(t.progress),
+      name: String(t.task_name == null ? '' : t.task_name).trim() || '(unnamed)', assignee: String(t.assignee == null ? '' : t.assignee).trim() });
+  });
+  const hasBaseline = typeof model.hasBaseline === 'boolean' ? model.hasBaseline
+    : rawTasks.some(t => t && (t.baseline_locked_at || (t.baseline_start && t.baseline_end)));
+  // critical set: live compute when it worked, else the cached is_critical column
+  const comp = model.compute && Array.isArray(model.compute.crit) ? model.compute : null;
+  const critSet = new Set(comp ? comp.crit : nt.filter(n => n.t.is_critical).map(n => n.id));
+
+  // ---- visible day range (pad 2 days left, >= 240 px right, at least 14 days) unless the caller pins one ----
+  const T = jcGanttDay(model.today);
+  let lo = Infinity, hi = -Infinity;
+  const see = d => { if (d != null) { if (d < lo) lo = d; if (d > hi) hi = d; } };
+  nt.forEach(n => { see(n.s); see(n.e); see(n.bs); see(n.be); });
+  see(T);
+  const rs = jcGanttDay(opts.rangeStart), re = jcGanttDay(opts.rangeEnd);
+  let minDay, maxDay;
+  if (rs != null && re != null && re >= rs) { minDay = rs; maxDay = re; }
+  else {
+    if (lo === Infinity) lo = hi = jcSchedDay('2026-01-01');
+    minDay = lo - 2; maxDay = hi + Math.max(7, Math.ceil(240 / px)); if (maxDay - minDay < 13) maxDay = minDay + 13;   // right pad leaves room for a milestone label
+  }
+  const X = d => (d - minDay) * px;                 // left edge of day d
+  const width = (maxDay - minDay + 1) * px;
+  const spanOf = (s, e) => {                         // bar geometry for days s..e inclusive, clipped to the range
+    if (e < minDay) return { outside: 'left' };
+    if (s > maxDay) return { outside: 'right' };
+    const cs = Math.max(s, minDay), ce = Math.min(e, maxDay);
+    return { x: X(cs), width: Math.max(JC_GANTT_MIN_W, (ce - cs + 1) * px), clipL: s < minDay, clipR: e > maxDay };
+  };
+
+  // ---- axis ticks: month band always; day band per day (>=20 px/day) or per Monday (>=6 px/day) ----
+  const ticks = [];
+  {
+    const ym = jcSchedYmd(minDay);
+    let y = +ym.slice(0, 4), m = +ym.slice(5, 7);
+    const iso = (yy, mm) => String(yy).padStart(4, '0') + '-' + String(mm).padStart(2, '0') + '-01';
+    for (let guard = 0; guard < 1500; guard++) {
+      const first = jcSchedDay(iso(y, m));
+      if (first > maxDay) break;
+      const ny = m === 12 ? y + 1 : y, nm = m === 12 ? 1 : m + 1;
+      const x0 = Math.max(0, X(first)), x1 = Math.min(width, X(jcSchedDay(iso(ny, nm))));
+      const w = x1 - x0;
+      ticks.push({ kind: 'month', x: x0, w, line: first >= minDay, label: w >= 70 ? JC_GANTT_MON[m - 1] + ' ' + y : w >= 28 ? JC_GANTT_MON[m - 1] : '' });
+      const lbl = w >= 70 ? JC_GANTT_MON[m - 1] + ' ' + y : w >= 28 ? JC_GANTT_MON[m - 1] : '', stepPx = Math.ceil(180 / px) * px;   // repeat the month name about every 180 px so it is readable wherever the pane is scrolled
+      if (lbl) for (let xx = x0 + stepPx; xx <= x1 - 60; xx += stepPx) ticks.push({ kind: 'monthlbl', x: xx, w: 0, line: false, label: lbl });
+      y = ny; m = nm;
+    }
+    const span = maxDay - minDay;
+    if (px >= 20 && span <= 4000) {
+      for (let d = minDay; d <= maxDay; d++) { const dow = ((d % 7) + 7 + 4) % 7; ticks.push({ kind: 'day', x: X(d), w: px, label: String(+jcSchedYmd(d).slice(8, 10)), weekend: dow === 0 || dow === 6 }); }
+    } else if (px >= 6 && span <= 20000) {
+      for (let d = minDay; d <= maxDay; d++) if (((d % 7) + 7 + 4) % 7 === 1) ticks.push({ kind: 'week', x: X(d), w: 7 * px, label: String(+jcSchedYmd(d).slice(8, 10)), weekend: false });
+    }
+  }
+
+  // ---- groups: phases in sort order, then the implicit Unphased group (tasks with no / unknown phase_id) ----
+  const gmap = new Map(), groups = phases.map((p, gi) => { const g = { key: p.id, phase: p, gi, tasks: [] }; gmap.set(p.id, g); return g; });
+  const loose = [];
+  nt.forEach(n => { const g = n.t.phase_id != null ? gmap.get(n.t.phase_id) : undefined; (g ? g.tasks : loose).push(n); });
+  if (loose.length) groups.push({ key: JC_GANTT_UNPH, phase: null, gi: groups.length, tasks: loose });
+  const rollups = new Map();
+  if (comp && Array.isArray(comp.phaseRollups)) for (const r of comp.phaseRollups) if (r) rollups.set(r.phase_id == null ? null : r.phase_id, r);
+
+  const rows = [], anchors = new Map(), cy0 = rowH / 2;
+  const tipFor = n => {
+    const lines = [];
+    if (n.s != null) lines.push(n.ms ? 'Date: ' + jcSchedYmd(n.e) : 'Dates: ' + jcSchedYmd(n.s) + ' → ' + jcSchedYmd(n.e) + ' (' + (n.e - n.s + 1) + ' d)');
+    else lines.push('Unscheduled (no dates)');
+    if (n.bs != null) lines.push('Baseline: ' + jcSchedYmd(n.bs) + ' → ' + jcSchedYmd(n.be));
+    else if (hasBaseline) lines.push('Added after baseline');
+    if (n.e != null && n.be != null) { const sl = n.e - n.be; lines.push('Slip: ' + (sl > 0 ? '+' + sl + ' d late' : sl < 0 ? (-sl) + ' d early' : 'on baseline')); }
+    lines.push('Progress: ' + Math.round(n.prog) + '%');
+    if (n.assignee) lines.push('Assignee: ' + n.assignee);
+    if (critSet.has(n.id)) lines.push('On the critical path');
+    if (n.bad) lines.push('Check dates: end is before start');
+    return { title: n.name, lines };
+  };
+
+  for (const g of groups) {
+    const key = g.key, col = g.phase ? (jcGanttColour(g.phase.colour) || JC_GANTT_PALETTE[g.gi % JC_GANTT_PALETTE.length]) : JC_GANTT_NEUTRAL;
+    const collapsed = isCollapsed(key);
+    let s0 = null, e0 = null;
+    for (const n of g.tasks) { if (n.s != null && (s0 == null || n.s < s0)) s0 = n.s; if (n.e != null && (e0 == null || n.e > e0)) e0 = n.e; }
+    const roll = rollups.get(g.phase ? g.phase.id : null);
+    const overall = roll && Number.isFinite(roll.overall) ? roll.overall : null;
+    const y = rows.length * rowH;
+    const label = g.phase ? (String(g.phase.name == null ? '' : g.phase.name).trim() || '(unnamed phase)') : 'Unphased';
+    let bar = null, spanText = '';
+    if (s0 != null && e0 != null) {
+      const sp = spanOf(s0, e0), wy = jcSchedYmd(s0).slice(0, 4) !== jcSchedYmd(e0).slice(0, 4);
+      spanText = jcGanttFmt(s0, wy) + ' – ' + jcGanttFmt(e0, wy);
+      if (sp.x != null) bar = { x: sp.x, y: y + cy0 - 3, width: sp.width, height: 6, progressWidth: sp.width * jcGanttPct(overall) / 100, colour: col };
+    }
+    rows.push({ kind: 'phase', key, id: key, y, h: rowH, label, colour: col, tint: col + '24', collapsed, taskCount: g.tasks.length,
+      spanText, start: s0 != null ? jcSchedYmd(s0) : null, end: e0 != null ? jcSchedYmd(e0) : null, pct: overall,
+      pctText: overall == null ? '—' : Math.round(overall) + '%', bar,
+      tip: { title: label, lines: [g.tasks.length + ' task' + (g.tasks.length === 1 ? '' : 's'), spanText ? 'Span: ' + spanText : 'No dated tasks', overall == null ? 'Progress: n/a' : 'Progress: ' + Math.round(overall) + '%'] } });
+    if (collapsed) continue;
+    for (const n of g.tasks) {
+      const y2 = rows.length * rowH, crit = critSet.has(n.id), colour = crit ? JC_GANTT_CRIT : col;
+      const row = { kind: n.ms ? 'milestone' : 'task', key: n.id, id: n.id, phaseKey: key, y: y2, h: rowH, label: n.name, assignee: n.assignee,
+        progress: n.prog, pctText: n.ms ? (n.prog >= 100 ? 'Done' : '—') : Math.round(n.prog) + '%', scheduled: n.s != null, unscheduled: n.s == null,
+        critical: crit, colour, badRange: n.bad, bar: null, ghost: null, diamond: null, pctLabel: null, outside: null, tip: tipFor(n) };
+      if (n.s != null && n.ms) {
+        const cx = X(n.e) + px / 2, cy = y2 + cy0, r = JC_GANTT_MS_R;
+        if (n.e < minDay) row.outside = 'left'; else if (n.e > maxDay) row.outside = 'right';
+        else {
+          const filled = n.prog >= 100, pastDue = T != null && n.e < T && !filled;
+          row.diamond = { cx, cy, r, filled, pastDue, fill: filled ? colour : 'none', stroke: pastDue ? JC_GANTT_CRIT : colour,
+            points: [[cx, cy - r], [cx + r, cy], [cx, cy + r], [cx - r, cy]].map(p => jcGanttNum(p[0]) + ',' + jcGanttNum(p[1])).join(' '),
+            label: { text: jcGanttTrunc(n.name, 40), x: cx + r + 6, y: cy } };
+          anchors.set(n.id, { y: cy, x0: cx - r, x1: cx + r });
+        }
+      } else if (n.s != null) {
+        const sp = spanOf(n.s, n.e);
+        if (sp.outside) row.outside = sp.outside;
+        else {
+          const by = y2 + (rowH - JC_GANTT_BAR_H) / 2;
+          row.bar = { x: sp.x, y: by, width: sp.width, height: JC_GANTT_BAR_H, progressWidth: sp.width * n.prog / 100, colour, critical: crit, clipL: sp.clipL, clipR: sp.clipR };
+          const inside = sp.width >= 36;
+          row.pctLabel = { text: Math.round(n.prog) + '%', inside, x: inside ? sp.x + sp.width / 2 : sp.x + sp.width + 5, y: y2 + cy0, anchor: inside ? 'middle' : 'start' };
+          anchors.set(n.id, { y: y2 + cy0, x0: sp.x, x1: sp.x + sp.width });
+          if (n.bs != null) {
+            const gs = spanOf(n.bs, n.be);
+            if (!gs.outside) row.ghost = { x: gs.x, y: by + 4, width: gs.width, height: JC_GANTT_GHOST_H };
+          }
+        }
+      }
+      rows.push(row);
+    }
+  }
+
+  // ---- dependency connectors (finish of predecessor -> start of successor), only between visible, drawn rows ----
+  const connectors = [], seen = new Set(), gap = 6;
+  for (const l of (Array.isArray(model.links) ? model.links : [])) {
+    if (!l || l.task_id == null || l.predecessor_id == null || l.task_id === l.predecessor_id) continue;
+    const k = l.predecessor_id + '>' + l.task_id; if (seen.has(k)) continue; seen.add(k);
+    const a = anchors.get(l.predecessor_id), b = anchors.get(l.task_id);
+    if (!a || !b || a.y === b.y) continue;
+    const critical = critSet.has(l.predecessor_id) && critSet.has(l.task_id);
+    if (!critical && !showAll) continue;
+    const x1 = a.x1, y1 = a.y, x2 = b.x0, y2 = b.y;
+    let d;
+    if (x2 - x1 >= 2 * gap) d = 'M' + jcGanttNum(x1) + ' ' + jcGanttNum(y1) + 'H' + jcGanttNum(x1 + gap) + 'V' + jcGanttNum(y2) + 'H' + jcGanttNum(x2);
+    else { const ym = y2 > y1 ? y1 + cy0 : y1 - cy0;       // successor starts before the predecessor finishes: route round the bars
+      d = 'M' + jcGanttNum(x1) + ' ' + jcGanttNum(y1) + 'H' + jcGanttNum(x1 + gap) + 'V' + jcGanttNum(ym) + 'H' + jcGanttNum(x2 - gap) + 'V' + jcGanttNum(y2) + 'H' + jcGanttNum(x2); }
+    connectors.push({ from: l.predecessor_id, to: l.task_id, critical, lag: jcSchedNum(l.lag_days) ?? 0, d,
+      head: jcGanttNum(x2) + ',' + jcGanttNum(y2) + ' ' + jcGanttNum(x2 - 5) + ',' + jcGanttNum(y2 - 3) + ' ' + jcGanttNum(x2 - 5) + ',' + jcGanttNum(y2 + 3) });
+  }
+
+  const todayIn = T != null && T >= minDay && T <= maxDay;
+  return { rowH, axisH: JC_GANTT_AXIS_H, pxPerDay: px, minDay, maxDay, minDate: jcSchedYmd(minDay), maxDate: jcSchedYmd(maxDay),
+    width, height: rows.length * rowH, rows, connectors, ticks, hasBaseline, critSource: comp ? 'compute' : 'cache', showAll,
+    today: todayIn ? { x: X(T) + px / 2, day: jcSchedYmd(T), label: 'TODAY' } : null, empty: rows.length === 0 };
+}
+
+// Draws a layout into el (rebuilt from scratch). ui = { showAll, onToggle(phaseKey), onToggleAll(bool) }. Returns { wrap }.
+function jcGanttDraw(el, layout, ui) {
+  ui = ui || {};
+  const doc = el.ownerDocument || document, NS = 'http://www.w3.org/2000/svg';
+  el.textContent = '';
+  if (!layout || layout.empty) { const m = doc.createElement('div'); m.className = 'jc-sched-empty'; m.textContent = 'No tasks to chart yet.'; el.appendChild(m); return { wrap: null }; }
+  const H = (tag, cls, text) => { const n = doc.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = String(text); return n; };
+  const S = (tag, a, text) => {
+    const n = doc.createElementNS(NS, tag);
+    if (a) for (const k in a) { const v = a[k]; if (v == null || (typeof v === 'number' && !Number.isFinite(v))) continue; n.setAttribute(k, typeof v === 'number' ? String(jcGanttNum(v)) : String(v)); }
+    if (text != null) n.textContent = String(text);
+    return n;
+  };
+  const root = H('div', 'gt-root');
+  // ---- control row: legend + the dependency toggle ----
+  const bar = H('div', 'gt-controls');
+  [['ghost', 'Planned (baseline)'], ['actual', 'Actual / progress'], ['crit', 'Critical'], ['ms', 'Milestone']].forEach(it => {
+    const lg = H('span', 'gt-lg'); lg.appendChild(H('i', 'gt-sw gt-sw-' + it[0])); lg.appendChild(doc.createTextNode(it[1])); bar.appendChild(lg);
+  });
+  const lab = H('label', 'gt-lg gt-toggle'), cb = doc.createElement('input');
+  cb.type = 'checkbox'; cb.setAttribute('type', 'checkbox'); cb.checked = !!ui.showAll;
+  cb.addEventListener('change', () => { if (ui.onToggleAll) ui.onToggleAll(!!cb.checked); });
+  lab.appendChild(cb); lab.appendChild(doc.createTextNode(' Show all dependencies')); bar.appendChild(lab);
+  root.appendChild(bar);
+  // ---- tooltip (one shared node, position:fixed) ----
+  const tip = H('div', 'gt-tip'); tip.style.display = 'none'; root.appendChild(tip);
+  const showTip = (t, ev) => {
+    tip.textContent = ''; tip.appendChild(H('div', 'gt-tip-t', t.title));
+    for (const ln of t.lines) tip.appendChild(H('div', 'gt-tip-l', ln));
+    tip.style.display = 'block';
+    const vw = (typeof window !== 'undefined' && window.innerWidth) || 1200;
+    tip.style.left = Math.max(4, Math.min((ev && ev.clientX || 0) + 14, vw - 280)) + 'px'; tip.style.top = ((ev && ev.clientY || 0) + 14) + 'px';
+  };
+  const hideTip = () => { tip.style.display = 'none'; };
+  const hover = (node, t) => { node.addEventListener('mouseenter', ev => showTip(t, ev)); node.addEventListener('mousemove', ev => showTip(t, ev)); node.addEventListener('mouseleave', hideTip); };
+
+  const wrap = H('div', 'gt-wrap'), inner = H('div', 'gt-inner'), left = H('div', 'gt-left'), right = H('div', 'gt-right');
+  // ---- left pane (CSS-grid rows, same 28 px height as the svg rows) ----
+  const lh = H('div', 'gt-lhead'); lh.appendChild(H('span', null, 'Task')); lh.appendChild(H('span', null, 'Assignee')); lh.appendChild(H('span', 'gt-r', '%'));
+  left.appendChild(lh);
+  for (const r of layout.rows) {
+    const lr = H('div', 'gt-lrow gt-l-' + r.kind + (r.unscheduled ? ' gt-l-unsched' : '') + (r.critical ? ' gt-l-crit' : ''));
+    lr.style.height = r.h + 'px';
+    const nm = H('span', 'gt-name');
+    if (r.kind === 'phase') {
+      lr.style.background = r.tint;
+      const ch = H('button', 'gt-chev', r.collapsed ? '▸' : '▾'); ch.type = 'button'; ch.setAttribute('type', 'button');
+      ch.setAttribute('aria-expanded', r.collapsed ? 'false' : 'true'); ch.setAttribute('aria-label', (r.collapsed ? 'Expand ' : 'Collapse ') + r.label);
+      ch.addEventListener('click', () => { if (ui.onToggle) ui.onToggle(r.key); });
+      nm.appendChild(ch); nm.appendChild(H('span', 'gt-nm', r.label));
+      lr.appendChild(nm); lr.appendChild(H('span', 'gt-sub', r.spanText)); lr.appendChild(H('span', 'gt-r gt-pct-c', r.pctText));
+    } else {
+      nm.appendChild(H('span', 'gt-nm', r.label));
+      lr.appendChild(nm); lr.appendChild(H('span', 'gt-sub', r.assignee)); lr.appendChild(H('span', 'gt-r', r.pctText));
+    }
+    nm.setAttribute('title', r.label); hover(lr, r.tip);
+    left.appendChild(lr);
+  }
+  // ---- sticky date axis (own svg: sticky positioning cannot live inside the body svg) ----
+  const W = layout.width, ax = S('svg', { class: 'gt-axis', width: W, height: layout.axisH });
+  ax.appendChild(S('rect', { class: 'gt-axis-bg', x: 0, y: 0, width: W, height: layout.axisH }));
+  const bandA = 16, bandB = 32;
+  for (const t of layout.ticks) {
+    if (t.kind === 'monthlbl') { ax.appendChild(S('text', { class: 'gt-axis-m gt-axis-m2', x: t.x + 4, y: 12 }, t.label)); continue; }
+    if (t.kind === 'month') {
+      if (t.line) ax.appendChild(S('line', { class: 'gt-axis-ln', x1: t.x, x2: t.x, y1: 0, y2: bandB }));
+      if (t.label) ax.appendChild(S('text', { class: 'gt-axis-m', x: t.x + 4, y: 12 }, t.label));
+    } else {
+      if (t.weekend) ax.appendChild(S('rect', { class: 'gt-wk', x: t.x, y: bandA, width: t.w, height: bandB - bandA }));
+      ax.appendChild(S('line', { class: 'gt-axis-ln gt-axis-ln-s', x1: t.x, x2: t.x, y1: bandA, y2: bandB }));
+      ax.appendChild(S('text', { class: 'gt-axis-d', x: t.kind === 'day' ? t.x + t.w / 2 : t.x + 3, y: 28, 'text-anchor': t.kind === 'day' ? 'middle' : 'start' }, t.label));
+    }
+  }
+  ax.appendChild(S('line', { class: 'gt-axis-ln', x1: 0, x2: W, y1: bandA, y2: bandA }));
+  if (layout.today) {
+    const tx = layout.today.x;
+    ax.appendChild(S('line', { class: 'gt-today-ln', x1: tx, x2: tx, y1: bandB, y2: layout.axisH }));
+    ax.appendChild(S('rect', { class: 'gt-today-flag', x: tx - 19, y: bandB, width: 38, height: 11, rx: 2 }));
+    ax.appendChild(S('text', { class: 'gt-today-tx', x: tx, y: bandB + 8.5, 'text-anchor': 'middle' }, layout.today.label));
+  }
+  // ---- body svg ----
+  const bh = layout.height, body = S('svg', { class: 'gt-body', width: W, height: bh });
+  let grid = '', gridM = '', seps = '';
+  for (const t of layout.ticks) {
+    if (t.kind === 'monthlbl') continue;
+    if (t.kind === 'month') { if (t.line) gridM += 'M' + jcGanttNum(t.x) + ' 0V' + bh; }
+    else {
+      if (t.weekend) body.appendChild(S('rect', { class: 'gt-wk', x: t.x, y: 0, width: t.w, height: bh }));
+      grid += 'M' + jcGanttNum(t.x) + ' 0V' + bh;
+    }
+  }
+  for (const r of layout.rows) {
+    if (r.kind === 'phase') body.appendChild(S('rect', { x: 0, y: r.y, width: W, height: r.h, fill: r.colour, 'fill-opacity': 0.14 }));
+    seps += 'M0 ' + jcGanttNum(r.y + r.h) + 'H' + jcGanttNum(W);
+  }
+  if (grid) body.appendChild(S('path', { class: 'gt-grid', d: grid }));
+  if (gridM) body.appendChild(S('path', { class: 'gt-grid gt-grid-m', d: gridM }));
+  if (seps) body.appendChild(S('path', { class: 'gt-sep', d: seps }));
+  for (const c of layout.connectors) {
+    const g = S('g', { class: 'gt-link' + (c.critical ? ' gt-link-c' : '') });
+    g.appendChild(S('path', { d: c.d, fill: 'none' })); g.appendChild(S('polygon', { points: c.head }));
+    body.appendChild(g);
+  }
+  for (const r of layout.rows) {
+    const g = S('g', { class: 'gt-row gt-row-' + r.kind, 'data-id': r.id });
+    g.appendChild(S('rect', { class: 'gt-hit', x: 0, y: r.y, width: W, height: r.h }));
+    g.appendChild(S('title', null, r.tip.title + '\n' + r.tip.lines.join('\n')));
+    if (r.kind === 'phase') {
+      if (r.bar) {
+        g.appendChild(S('rect', { x: r.bar.x, y: r.bar.y, width: r.bar.width, height: r.bar.height, rx: 3, fill: r.bar.colour, 'fill-opacity': 0.35 }));
+        if (r.bar.progressWidth > 0) g.appendChild(S('rect', { x: r.bar.x, y: r.bar.y, width: r.bar.progressWidth, height: r.bar.height, rx: 3, fill: r.bar.colour }));
+      }
+    } else if (r.unscheduled) {
+      g.appendChild(S('text', { class: 'gt-unsched', x: 8, y: r.y + r.h / 2 + 3.5 }, 'unscheduled'));
+    } else if (r.outside) {
+      g.appendChild(S('text', { class: 'gt-unsched', x: r.outside === 'left' ? 8 : W - 8, y: r.y + r.h / 2 + 3.5, 'text-anchor': r.outside === 'left' ? 'start' : 'end' }, r.outside === 'left' ? '← before range' : 'after range →'));
+    } else if (r.diamond) {
+      const d = r.diamond;
+      g.appendChild(S('polygon', { class: 'gt-ms' + (d.filled ? ' gt-ms-done' : ''), points: d.points, fill: d.fill, stroke: d.stroke, 'stroke-width': 2, 'stroke-linejoin': 'round' }));
+      g.appendChild(S('text', { class: 'gt-ms-lbl', x: d.label.x, y: d.label.y + 3.5 }, d.label.text));
+    } else if (r.bar) {
+      const b = r.bar;
+      if (r.ghost) g.appendChild(S('rect', { class: 'gt-ghost', x: r.ghost.x, y: r.ghost.y, width: r.ghost.width, height: r.ghost.height, rx: 2 }));
+      g.appendChild(S('rect', { class: 'gt-bar', x: b.x, y: b.y, width: b.width, height: b.height, rx: 3, fill: b.colour, 'fill-opacity': 0.38, stroke: b.critical ? JC_GANTT_CRIT_EDGE : b.colour, 'stroke-width': b.critical ? 1.5 : 1 }));
+      if (b.progressWidth > 0) g.appendChild(S('rect', { class: 'gt-prog', x: b.x, y: b.y, width: b.progressWidth, height: b.height, rx: 3, fill: b.colour }));
+      if (r.pctLabel) g.appendChild(S('text', { class: r.pctLabel.inside ? 'gt-pct gt-pct-in' : 'gt-pct gt-pct-out', x: r.pctLabel.x, y: r.pctLabel.y + 3.5, 'text-anchor': r.pctLabel.anchor }, r.pctLabel.text));
+    }
+    hover(g, r.tip);
+    body.appendChild(g);
+  }
+  if (layout.today) body.appendChild(S('line', { class: 'gt-today-ln', x1: layout.today.x, x2: layout.today.x, y1: 0, y2: bh }));   // above the bars
+  right.appendChild(ax); right.appendChild(body);
+  inner.appendChild(left); inner.appendChild(right); wrap.appendChild(inner); root.appendChild(wrap);
+  el.appendChild(root);
+  return { wrap };
+}
+
+// today as local-midnight YYYY-MM-DD (NOT the UTC date, which flips the day in the evening in Trinidad)
+function jcGanttToday() {
+  const d = new Date();
+  return String(d.getFullYear()).padStart(4, '0') + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+// due_date / status of the open job: the live form wins (it reflects unsaved edits), the dashboard row is the fallback
+function jcGanttJobCtx() {
+  const out = { due_date: null, status: null };
+  try {
+    const due = document.getElementById('jc-f-due-date');
+    if (due && due.value) out.due_date = due.value;
+    const b = document.querySelector('#jc-status-btns .jc-status-btn.active');
+    if (b && b.textContent) out.status = b.textContent.trim();
+    if ((!out.due_date || !out.status) && typeof jcDashData !== 'undefined' && typeof jcCurrentJobId !== 'undefined' && jcCurrentJobId && Array.isArray(jcDashData)) {
+      const j = jcDashData.find(x => x && x.id === jcCurrentJobId);
+      if (j) { out.due_date = out.due_date || j.due_date || null; out.status = out.status || j.status || null; }
+    }
+  } catch (e) { /* context is best effort */ }
+  return out;
+}
+// Entry point (called by jcRenderSchedGantt). Never throws: any failure becomes a quiet message.
+function jcRenderJobGantt() {
+  let host = null;
+  try {
+    host = document.getElementById('jc-sched-chart'); if (!host) return;
+    const tasks = Array.isArray(jcTasks) ? jcTasks : [];
+    const jobId = typeof jcCurrentJobId !== 'undefined' ? jcCurrentJobId : null;
+    if (jobId !== jcGanttJobId) { jcGanttCollapsed.clear(); jcGanttJobId = jobId; jcGanttViewKey = null; }
+    if (!tasks.length) { host.textContent = ''; jcGanttLastWrap = null; return; }
+    const sel = document.getElementById('jc-sched-zoom'), px = JC_GANTT_ZOOM[sel && sel.value] || JC_GANTT_ZOOM.Day;
+    const today = jcGanttToday(), job = jcGanttJobCtx();
+    const phases = typeof jcSchedPhases !== 'undefined' && Array.isArray(jcSchedPhases) ? jcSchedPhases : [];
+    let links = typeof jcSchedLinks !== 'undefined' && Array.isArray(jcSchedLinks) ? jcSchedLinks : [];
+    if (!links.length) links = tasks.filter(t => t && t.depends_on).map(t => ({ task_id: t.id, predecessor_id: t.depends_on, lag_days: 0 }));   // v1 rows: single depends_on
+    let compute = null;
+    try { compute = jcSchedCompute({ tasks, links, phases, job, today }); } catch (e) { compute = null; }   // cached is_critical takes over
+    const layout = jcGanttLayout({ tasks, phases, links, compute, today, pxPerDay: px, collapsed: jcGanttCollapsed, showAll: jcGanttShowAll });
+    const prev = jcGanttLastWrap, keepL = prev ? prev.scrollLeft || 0 : 0, keepT = prev ? prev.scrollTop || 0 : 0;
+    const res = jcGanttDraw(host, layout, {
+      showAll: jcGanttShowAll,
+      onToggle: k => { if (jcGanttCollapsed.has(k)) jcGanttCollapsed.delete(k); else jcGanttCollapsed.add(k); jcRenderJobGantt(); },
+      onToggleAll: v => { jcGanttShowAll = !!v; jcRenderJobGantt(); }
+    });
+    jcGanttLastWrap = res.wrap;
+    const wrap = res.wrap; if (!wrap) return;
+    const key = jobId + '|' + px;
+    if (key !== jcGanttViewKey) {      // first draw of this job / zoom: bring TODAY into view; later redraws keep the scroll position
+      jcGanttViewKey = key;
+      wrap.scrollLeft = layout.today ? Math.max(0, layout.today.x - 0.35 * Math.max(0, (wrap.clientWidth || 0) - JC_GANTT_LEFT_W)) : 0;
+    } else { wrap.scrollLeft = keepL; wrap.scrollTop = keepT; }
+  } catch (e) {
+    try { if (host) { host.textContent = ''; const m = document.createElement('div'); m.className = 'jc-sched-empty'; m.textContent = 'The schedule chart could not be drawn.'; host.appendChild(m); } } catch (e2) { /* nothing more to do */ }
+    try { console.warn('jcRenderJobGantt', e); } catch (e3) { /* no console */ }
+  }
+}
+// ── END SCHEDULE GANTT RENDERER ──
 async function jcLoadTasks() {
   jcTasks = [];
   if (jcCurrentJobId) {
@@ -8398,34 +8861,7 @@ async function jcDeleteTask(id) {
   } catch (e) { showToast('Failed to delete task: ' + (e.message || e), 'error'); }
 }
 async function jcRenderSchedGantt() {
-  const host = document.getElementById('jc-sched-chart'); if (!host) return;
-  const today = new Date().toISOString().slice(0, 10);
-  const dated = jcTasks.filter(t => t.start_date && t.end_date);
-  if (!dated.length) { jcSchedGantt = null; host.innerHTML = ''; return; }
-  try { await jcLoadGanttLib(); }
-  catch (e) { host.innerHTML = `<div class="jc-sched-empty">${escHTML(e.message)}</div>`; return; }
-  const addDay = d => new Date(new Date(d + 'T00:00:00').getTime() + 864e5).toISOString().slice(0, 10);
-  const items = dated.map(t => ({
-    id: t.id,
-    name: escHTML(t.task_name || '(unnamed)'),   // frappe renders names via innerHTML
-    start: t.start_date,
-    end: t.end_date > t.start_date ? t.end_date : addDay(t.start_date),
-    progress: t.progress || 0,
-    dependencies: t.depends_on && dated.some(d => d.id === t.depends_on) ? t.depends_on : '',
-    custom_class: (t.end_date < today && (t.progress || 0) < 100) ? 'gc-late' : ''
-  }));
-  const byId = Object.fromEntries(dated.map(t => [t.id, t]));
-  host.innerHTML = '<svg id="jc-sched-svg"></svg>';
-  jcSchedGantt = new Gantt('#jc-sched-svg', items, {
-    view_mode: document.getElementById('jc-sched-zoom')?.value || 'Day',
-    readonly: true, popup_on: 'hover', today_button: true, scroll_to: 'today',
-    popup: ctx => {
-      const t = byId[ctx.task.id] || {};
-      ctx.set_title(escHTML(t.task_name || '(unnamed)'));
-      ctx.set_subtitle(escHTML(t.assignee || ''));
-      ctx.set_details(`<div class="jc-gantt-popup">${escHTML(t.start_date)} → ${escHTML(t.end_date)}<br>${t.progress || 0}% complete</div>`);
-    }
-  });
+  jcRenderJobGantt();   // custom per-job renderer (SCHEDULE GANTT RENDERER block); the portfolio Gantt still uses frappe-gantt
 }
 
 function jcGetFiltered() {
