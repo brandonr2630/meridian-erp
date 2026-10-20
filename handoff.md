@@ -1,6 +1,23 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-20 · Session 59 (D0c applied to prod)*
+*Last updated: 2026-10-20 · Session 60 (user-admin functions)*
+
+---
+
+## Session 60 — create-erp-user v8 DEPLOYED; company-scoped user-admin functions built (v9 / v4, NOT deployed)
+
+**Date:** 2026-10-20. (1) `create-erp-user` v8 (real Auth error messages, PR #149) deployed to prod with `verify_jwt=false`; probed without credentials: OPTIONS 200, POST without token 401. (2) Closes the parked finding that both user functions authorised with the non-company-scoped `user_has_perm('admin:users')`.
+
+| File | What |
+|---|---|
+| `supabase/functions/{create,update}-erp-user/authz.ts` | IDENTICAL copy in both folders (a test fails on drift; the deploy takes one folder per function). Verifies the bearer token with Supabase Auth, then reads the caller's rights from the database (service role, keyed on the verified user id): `isSuper` = an active role with `admin:companies`; `adminCompanies` = companies where a role assigned IN THAT COMPANY carries `admin:users`. |
+| `create-erp-user/handler.ts` (+ `index.ts`) | Caller must administer the TARGET company; company must exist; role must exist and be global or owned by that company; only a super admin may assign a role with `admin:companies`; server-side 12 character password minimum and email/uuid validation; everything is checked before anything is created; writes a `staff.create` audit row (no secrets). |
+| `update-erp-user/handler.ts` (+ `index.ts`, `errors.ts`) | Super admin may change anyone; otherwise the caller must administer EVERY company the target belongs to and the target must not be a super admin; callers with no admin rights get 403 before any lookup (no existence oracle); 12 character minimum (was 8); the real Auth reason is reported (it read `message`, GoTrue sends `msg`); `staff.credentials.update` audit row names fields only. Source is now in the repo (it was not before). |
+| `supabase/tests/authz/` | 39 tests against an in-memory Auth/PostgREST fake (`node --test supabase/tests/authz/create.test.mjs supabase/tests/authz/update.test.mjs`) and `mutate.mjs` (25 deliberate breakages, all caught). |
+
+**NOT deployed.** Deploying changes live behaviour of Create User and Edit User, so it waits for approval (`verify_jwt=false`, deploy folder contents of each function incl. `authz.ts` and `errors.ts`). After deploy, test with a throwaway user as an admin.
+
+**Finding (separate, bigger, NOT fixed):** the same escalation exists at the database level, so tightening the functions alone does not close it. `erp_user_company_roles` INSERT/UPDATE policies (`ucr_insert`, `ucr_update`) allow any holder of `admin:users` (not company-scoped) to assign or change ANY role, including `super_admin`, for rows in their companies; `erp_users` UPDATE (`rls_erp_users_update`) lets ANY staff member in a company edit every profile in it (name, `is_active`, `company_id`). The ERP's Edit Permissions modal writes `erp_user_company_roles` directly. Fix = a D0d migration (role-assignment policies requiring a company-scoped admin and forbidding `admin:companies` roles unless super admin; restrict `erp_users` updates) plus routing the modal through a function. Needs its own tests and approval.
 
 ---
 
