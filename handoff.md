@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-20 · Session 62 (Phase A compute module, JS side)*
+*Last updated: 2026-10-20 · Session 63 (Phase A KPI strip + baseline lock UI)*
 
 ---
 

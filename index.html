@@ -1542,6 +1542,32 @@ body {
 #jc-sched-chart .bar-label { font-size:11px; }
 .jc-sched-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:10px 0 6px; font-size:12px; color:var(--text-3); }
 .jc-sched-overall { font-weight:700; color:var(--text-2); }
+/* schedule-kpi:begin */
+.jc-kpi2-row { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:0 0 6px; }
+.jc-kpi2 { background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-lg); padding:12px 14px; min-width:0; }
+.jc-kpi2-label { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text-3); margin-bottom:6px; }
+.jc-kpi2-num { font-family:'DM Mono',monospace; font-size:28px; font-weight:700; color:var(--gold); line-height:1; }
+.jc-kpi2-sub { font-size:12px; color:var(--text-2); margin-top:6px; overflow-wrap:anywhere; }
+.jc-kpi2-grey { color:var(--text-3); }
+.jc-kpi2-dim .jc-kpi2-pill { opacity:.9; }
+.jc-kpi2-note { font-size:11px; color:var(--text-3); margin-top:4px; }
+.jc-kpi2-track { position:relative; height:6px; border-radius:3px; background:var(--bg-4); margin-top:10px; }
+.jc-kpi2-fill { height:100%; border-radius:3px; background:var(--gold); }
+.jc-kpi2-plan { position:absolute; top:-3px; bottom:-3px; width:2px; margin-left:-1px; background:var(--text); border-radius:1px; }
+.jc-kpi2-pill { display:inline-block; padding:3px 12px; border-radius:999px; font-size:13px; font-weight:700; border:1px solid transparent; }
+.jc-kpi2-pill.ok   { background:var(--green-bg); color:var(--green); border-color:var(--green); }
+.jc-kpi2-pill.warn { background:var(--amber-bg); color:var(--amber); border-color:var(--amber); }
+.jc-kpi2-pill.bad  { background:var(--red-bg);   color:var(--red);   border-color:var(--red); }
+.jc-kpi2-pill.done { background:var(--bg-3); color:var(--green); border-color:var(--border-2); }
+.jc-kpi2-pill.hold { background:var(--bg-3); color:var(--text-2); border-color:var(--border-2); }
+.jc-kpi2-base { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 6px; font-size:12px; color:var(--text-3); }
+.jc-kpi2-ask { display:flex; flex-direction:column; gap:6px; flex:1 1 280px; max-width:460px; }
+.jc-kpi2-asklabel { font-size:11px; font-weight:600; color:var(--text-2); }
+.jc-kpi2-ask textarea { width:100%; resize:vertical; background:var(--bg-3); color:var(--text); border:1px solid var(--border-2); border-radius:var(--radius); padding:6px 8px; font:inherit; font-size:12px; }
+.jc-kpi2-askbtns { display:flex; gap:8px; }
+.jc-kpi2-quiet { font-size:12px; color:var(--text-3); padding:6px 0; }
+@media (max-width:560px) { .jc-kpi2-row { grid-template-columns:1fr; } }
+/* schedule-kpi:end */
 .jc-sched-input { width:100%; min-width:0; }
 .jc-sched-empty { padding:16px; text-align:center; font-size:12px; color:var(--text-3); }
 #jc-gantt-chart .bar-progress { display:none; }
@@ -3386,8 +3412,9 @@ body.light .global-search-results, body.light .split-btn-menu {
             <div class="card" id="jc-sched-card">
               <div class="card-header"><span class="card-header-icon">📅</span><span class="card-header-title">Schedule &amp; Tasks</span></div>
               <div class="card-body">
+                <div id="jc-sched-kpis"></div>
                 <div class="jc-sched-bar">
-                  <span class="jc-sched-overall" id="jc-sched-overall"></span>
+                  <span class="jc-sched-overall" id="jc-sched-overall" hidden></span>
                   <select class="jc-dash-filter" id="jc-sched-zoom" onchange="jcRenderSchedGantt()">
                     <option value="Day" selected>Day</option><option value="Week">Week</option><option value="Month">Month</option>
                   </select>
@@ -8121,6 +8148,202 @@ async function jcRenderGantt() {
 let jcTasks = [];
 let jcSchedGantt = null;
 const jcCanEditTasks = () => can('ops:work-orders:write');
+// ── SCHEDULE KPI ──
+// Phase A (Schedule v2) staff UI, leaf 1: KPI strip (Overall progress + Schedule status tiles) and the baseline lock UI.
+// Entry point jcRenderSchedKpis() renders into #jc-sched-kpis; the task loader/table code calls it after every load/edit.
+// All state is read at CALL time (jcTasks, jcSchedPhases, jcSchedLinks, jcCurrentJobId, the job form); every dynamic string
+// goes through escHTML. The lock action is the RPC lock_job_baseline(p_job_id, p_reason) (SQL migration is a separate step).
+let jcKpiAsk = false;          // re-baseline reason form is open
+let jcKpiReasonText = '';      // survives re-renders while the form is open
+let jcKpiBusy = false;         // RPC in flight
+const jcKpiAudit = {};         // `${jobId}|${lockedAt}` -> { name } once fetched ('pending' while in flight)
+const JC_KPI_MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function jcKpiPad(n) { return String(n).padStart(2, '0'); }
+// Local-midnight 'YYYY-MM-DD' (the compute module takes `today` as a string and never reads the clock itself).
+function jcSchedToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${jcKpiPad(d.getMonth() + 1)}-${jcKpiPad(d.getDate())}`;
+}
+// 'YYYY-MM-DD' or an ISO timestamp -> 'dd Mon' (plus ' yyyy' when not the current year); '' when unparseable.
+function jcKpiFmtDate(s, today) {
+  if (s == null || s === '') return '';
+  let y, m, d;
+  const plain = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s));
+  if (plain) { y = +plain[1]; m = +plain[2]; d = +plain[3]; }
+  else { const dt = new Date(s); if (isNaN(dt.getTime())) return ''; y = dt.getFullYear(); m = dt.getMonth() + 1; d = dt.getDate(); }
+  if (!(m >= 1 && m <= 12)) return '';
+  const cy = +String(today || jcSchedToday()).slice(0, 4);
+  return `${jcKpiPad(d)} ${JC_KPI_MON[m - 1]}${y === cy ? '' : ' ' + y}`;
+}
+function jcKpiDayNum(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s == null ? '' : s));
+  return m ? Math.floor(Date.UTC(+m[1], +m[2] - 1, +m[3]) / 86400000) : null;
+}
+
+// The open job as the form holds it (id, job number, status, due date). Never throws.
+function jcSchedJobCtx() {
+  const out = { id: null, job_no: '', status: '', due_date: null };
+  try {
+    out.id = (typeof jcCurrentJobId !== 'undefined' && jcCurrentJobId) || null;
+    const no = document.getElementById('jc-job-no-display');
+    const noText = no ? String(no.textContent || '').trim() : '';
+    out.job_no = noText === '—' ? '' : noText;
+    const st = document.querySelector('#jc-status-btns .jc-status-btn.active');
+    out.status = st ? String(st.textContent || '').trim() : '';
+    const due = document.getElementById('jc-f-due-date');
+    out.due_date = due && due.value ? String(due.value) : null;
+  } catch (_) { /* leave the defaults */ }
+  return out;
+}
+
+function jcKpiState() {
+  const tasks = (typeof jcTasks !== 'undefined' && Array.isArray(jcTasks) ? jcTasks : []).filter(t => t && typeof t === 'object');
+  const phases = typeof jcSchedPhases !== 'undefined' && Array.isArray(jcSchedPhases) ? jcSchedPhases : [];
+  const links = typeof jcSchedLinks !== 'undefined' && Array.isArray(jcSchedLinks) ? jcSchedLinks : [];
+  return { tasks, phases, links, job: jcSchedJobCtx() };
+}
+function jcKpiLockedAt(tasks) {   // latest baseline_locked_at over the tasks (ISO strings compare lexically), or null
+  let max = null;
+  for (const t of tasks) if (t.baseline_locked_at && (max == null || String(t.baseline_locked_at) > max)) max = String(t.baseline_locked_at);
+  return max;
+}
+// Who may press the button: approve permission, not a read-only role, a saved job, and at least one dated task.
+function jcKpiCanLock(st) {
+  if (!can('ops:work-orders:approve')) return false;
+  if (jcIsReadOnlyRole()) return false;
+  if (!st.job.id) return false;
+  return st.tasks.some(t => t.start_date && t.end_date);
+}
+
+const JC_KPI_PILL = { 'On track': 'ok', 'At risk': 'warn', 'Late': 'bad', 'Complete': 'done', 'On hold': 'hold' };
+const jcKpiPct = v => { const n = Number(v); return isFinite(n) ? Math.min(100, Math.max(0, n)) : 0; };
+
+// Name of whoever locked the current baseline: latest baseline_locked / baseline_reset audit row, cached per job + lock time.
+function jcKpiAuditName(jobId, lockedAt) {
+  const key = `${jobId}|${lockedAt}`, hit = jcKpiAudit[key];
+  if (hit && hit !== 'pending') return hit.name;
+  if (!hit) {
+    jcKpiAudit[key] = 'pending';
+    Promise.resolve().then(() => sbGet('job_audit_log', `job_id=eq.${encodeURIComponent(jobId)}&action_type=in.(baseline_locked,baseline_reset)&order=created_at.desc&limit=1`))
+      .then(rows => { jcKpiAudit[key] = { name: Array.isArray(rows) && rows[0] && rows[0].username ? String(rows[0].username) : '' }; })
+      .catch(() => { jcKpiAudit[key] = { name: '' }; })
+      .then(() => { if (jcSchedJobCtx().id === jobId) jcRenderSchedKpis(); });
+  }
+  return '';
+}
+
+function jcKpiHtml(st) {
+  const today = jcSchedToday();
+  const c = jcSchedCompute({ tasks: st.tasks, links: st.links, phases: st.phases,
+    job: { id: st.job.id, status: st.job.status, due_date: st.job.due_date }, today });
+  const hasTasks = st.tasks.length > 0, lockedAt = jcKpiLockedAt(st.tasks);
+  const overall = jcKpiPct(c.overallDisplay), planned = jcKpiPct(c.plannedDisplay);
+
+  const progress = `<div class="jc-kpi2" id="jc-kpi-progress">
+      <div class="jc-kpi2-label">Overall progress</div>
+      <div class="jc-kpi2-num">${overall}%</div>
+      <div class="jc-kpi2-sub">${hasTasks ? `planned ${planned}% today` : 'No tasks yet'}</div>
+      <div class="jc-kpi2-track" role="img" aria-label="${overall}% complete, ${planned}% planned today">
+        <div class="jc-kpi2-fill" style="width:${overall}%"></div>${hasTasks ? `<div class="jc-kpi2-plan" style="left:${planned}%"></div>` : ''}
+      </div></div>`;
+
+  const label = JC_KPI_PILL[c.status] ? c.status : 'On track', cls = JC_KPI_PILL[c.status] || 'ok';
+  let line;
+  if (!c.forecastEnd) line = 'Not scheduled';
+  else {
+    const fc = jcKpiFmtDate(c.forecastEnd, today), due = jcKpiFmtDate(st.job.due_date, today);
+    const dd = jcKpiDayNum(st.job.due_date), fd = jcKpiDayNum(c.forecastEnd);
+    const delta = dd != null && fd != null ? fd - dd : null;
+    line = `Handover forecast ${fc}` + (due ? ` · due ${due}` + (delta == null ? '' : delta === 0 ? ' (on due date)' : ` (${delta > 0 ? '+' : '−'}${Math.abs(delta)} d)`) : ' · no due date');
+  }
+  const status = `<div class="jc-kpi2${cls === 'hold' ? ' jc-kpi2-dim' : ''}" id="jc-kpi-status">
+      <div class="jc-kpi2-label">Schedule status</div>
+      <div><span class="jc-kpi2-pill ${cls}">${escHTML(label)}</span></div>
+      <div class="jc-kpi2-sub${cls === 'hold' ? ' jc-kpi2-grey' : ''}">${escHTML(line)}</div>
+      ${lockedAt ? '' : '<div class="jc-kpi2-note">No baseline: status uses the due date only</div>'}
+    </div>`;
+
+  // Baseline caption + action
+  let caption = '';
+  if (lockedAt) {
+    const name = st.job.id ? jcKpiAuditName(st.job.id, lockedAt) : '';
+    caption = `Baseline locked ${escHTML(jcKpiFmtDate(lockedAt, today))}${name ? ' by ' + escHTML(name) : ''}`;
+  }
+  let action = '';
+  if (jcKpiCanLock(st)) {
+    if (jcKpiAsk && lockedAt) {
+      action = `<div class="jc-kpi2-ask" id="jc-kpi-ask">
+        <label class="jc-kpi2-asklabel" for="jc-kpi-reason">Reason for re-baselining (required)</label>
+        <textarea id="jc-kpi-reason" rows="2" maxlength="500" oninput="jcKpiReasonInput(this.value)">${escHTML(jcKpiReasonText)}</textarea>
+        <div class="jc-kpi2-askbtns"><button type="button" class="btn btn-primary btn-sm" id="jc-kpi-confirm" onclick="jcKpiConfirmRebaseline()"${jcKpiBusy ? ' disabled' : ''}>Confirm re-baseline</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="jc-kpi-cancel" onclick="jcKpiCancel()"${jcKpiBusy ? ' disabled' : ''}>Cancel</button></div></div>`;
+    } else {
+      action = `<button type="button" class="btn btn-ghost btn-sm" id="jc-kpi-lock" onclick="jcKpiLockClick()"${jcKpiBusy ? ' disabled' : ''}>${lockedAt ? 'Re-baseline' : 'Lock baseline'}</button>`;
+    }
+  }
+  const base = caption || action ? `<div class="jc-kpi2-base">${caption ? `<span class="jc-kpi2-cap" id="jc-kpi-caption">${caption}</span>` : ''}${action}</div>` : '';
+  return `<div class="jc-kpi2-row">${progress}${status}</div>${base}`;
+}
+
+// Entry point. Never throws: any failure degrades to a quiet message.
+function jcRenderSchedKpis() {
+  let el = null;
+  try {
+    el = document.getElementById('jc-sched-kpis');
+    if (!el) return;
+    el.innerHTML = jcKpiHtml(jcKpiState());
+  } catch (e) {
+    try { if (el) el.innerHTML = '<div class="jc-kpi2-quiet">Schedule KPIs unavailable</div>'; } catch (_) { /* nothing more to do */ }
+  }
+}
+
+function jcKpiReasonInput(v) { jcKpiReasonText = String(v == null ? '' : v); }
+function jcKpiCancel() { jcKpiAsk = false; jcKpiReasonText = ''; jcRenderSchedKpis(); }
+// Minimal authenticated RPC call: goes through sb(), so JWT, refresh-on-401 and the Prefer header match every other call.
+function jcRpc(name, args) { return sb(`rpc/${name}`, { method: 'POST', body: args }); }
+
+async function jcKpiLockClick() {
+  const st = jcKpiState();
+  if (!jcKpiCanLock(st)) { showToast('You do not have permission to lock the baseline.', 'warn'); return; }
+  if (jcKpiBusy) return;
+  if (jcKpiLockedAt(st.tasks)) {   // baseline exists: ask for the mandatory reason inline
+    jcKpiAsk = true; jcRenderSchedKpis();
+    const ta = document.getElementById('jc-kpi-reason'); if (ta && ta.focus) ta.focus();
+    return;
+  }
+  const ok = await showConfirm('Lock the current plan as the baseline? Later date changes will then show as slippage against it.', 'Lock baseline', 'Lock baseline', false);
+  if (ok) await jcKpiDoLock(st.job.id, null);
+}
+async function jcKpiConfirmRebaseline() {
+  const st = jcKpiState();
+  if (!jcKpiCanLock(st)) { showToast('You do not have permission to lock the baseline.', 'warn'); return; }
+  const ta = document.getElementById('jc-kpi-reason');
+  const reason = String(ta && ta.value != null ? ta.value : jcKpiReasonText).trim();
+  jcKpiReasonText = reason;
+  if (!reason) { showToast('A reason is required to re-baseline.', 'warn'); return; }
+  await jcKpiDoLock(st.job.id, reason);
+}
+async function jcKpiDoLock(jobId, reason) {
+  if (jcKpiBusy || !jobId) return;
+  jcKpiBusy = true; jcRenderSchedKpis();
+  let done = false;
+  try {
+    await jcRpc('lock_job_baseline', { p_job_id: jobId, p_reason: reason });
+    done = true;
+    showToast(reason ? 'Baseline reset.' : 'Baseline locked.');
+  } catch (e) {
+    const msg = String((e && e.message) || e || '');
+    if (/could not find the function|PGRST202|HTTP 404/i.test(msg)) showToast('Baseline locking is not available yet', 'warn');
+    else showToast(msg || 'Could not lock the baseline.', 'error');
+  } finally { jcKpiBusy = false; }
+  if (done) {
+    jcKpiAsk = false; jcKpiReasonText = '';
+    if (typeof jcLoadTasks === 'function') await jcLoadTasks();   // reloads and re-renders the KPIs
+  }
+  jcRenderSchedKpis();
+}
+// ── END SCHEDULE KPI ──
 // ── SCHEDULE COMPUTE (shared) ──
 // Phase A (Schedule v2). ONE DOM-free implementation of task weight, planned %, overall %, critical path and schedule
 // status. It mirrors the SQL source of truth (job_task_weight, job_task_planned_pct, job_schedule_status) line by line;
