@@ -11,7 +11,7 @@ jobs:
     uses: brandonr2630/projects/.github/workflows/deploy.yml@master
     with:
       deploy_dir: /home/terranre/public_html/erp.terranresources.com
-      # Keep internal specs and dev scripts off the public web root.
-      exclude_extra: '^docs/specs/|^scripts/'
+      # Keep internal specs, dev scripts and SQL off the public web root.
+      exclude_extra: '^docs/specs/|^scripts/|^supabase/'
     secrets: inherit
 

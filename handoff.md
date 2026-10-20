@@ -1,6 +1,26 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-19 · Session 54*
+*Last updated: 2026-10-20 · Session 55*
+
+---
+
+## Session 55 — D0a staff-only hardening (built and tested, NOT applied to prod)
+
+**Date:** 2026-10-20 · Spec: `docs/specs/project-portal/phase-d-client-portal.md` (D0)
+
+| File | What |
+|---|---|
+| `supabase/migrations/202610200900_d0a_staff_only_storage.sql` | `is_erp_staff()`; RESTRICTIVE `d0_staff_only` (authenticated) and `d0_no_anon` (anon) on the 21 open-policy tables plus `notification_types`; tenant-scoped, permission-checked `job-drawings` storage policies (company prefix only, no legacy fallback; `ops:work-orders:read` to view, `write` to upload, company admin to delete); `company-logos` upload limited to the company's admin (or super_admin for `new-*` logos); restrictive staff-only/anon-deny guards on the ERP buckets; `search_path` pinned on 4 functions; `next_job_no()` and `is_company_admin()` revoked from anon/PUBLIC and `next_job_no()` checks `is_erp_staff()`; audit-log index. |
+| `supabase/rollbacks/202610200900_d0a_down.sql` | Exact prior policies, grants and function bodies. |
+| `supabase/tests/d0a/` | `bash supabase/tests/d0a/run.sh` runs everything on a throwaway Postgres 17 container (needs Docker) seeded with a stub of the live schema. |
+
+**Test evidence (2026-10-20):** 9 checks prove the holes exist before; 195 checks after (all 22 tables as client/removed/anon/staff, storage as seven roles, logos, function ACLs and `search_path`, Q-C/Q-R inventory gates); 8 after rollback; idempotent re-apply; re-apply after rollback; mutation check: breaking the migration three ways (permissive staff policy, missing company-prefix check, missing staff check) is caught each time.
+
+**Limits:** the stub is not Supabase (storage.objects is a plain table; auth.uid() reads a setting). **Not applied to prod.** Behavior to be aware of: the Office Admin role (1 active user) lacks `ops:work-orders:read/write`, so that user loses drawing view/upload (they cannot open Work Orders today either); staff are NOT company-scoped on the 22 tables until D0c (restrictive policy only removes non-staff). D0b (edge function that bans removed staff) is still to do. Deploy now excludes `supabase/` along with `docs/specs/` and `scripts/`.
+
+**Security review fixes (same session):** the first draft kept a legacy-key storage fallback that matched `job_drawings.storage_key`; any company member can write that table, so a member could plant a row naming another company's object and read (or, as admin, delete) it. A first fix limited it to non-UUID keys but still trusted client-writable rows. **Final design: no fallback at all.** Drawing access is decided by the key's company prefix alone, and step 0 of the migration aborts (changing nothing) if any existing `job-drawings` object does not follow `<company_id>/<job_id>/...` (live check 2026-10-20: 0 of 1). Covered by 'IDOR' tests (they failed against the fallback) and an abort test; 195 checks pass after, plus rollback and re-apply. **Follow-up (Phase B guard / D0c):** also enforce that `job_drawings.storage_key` starts with `company_id/` on INSERT/UPDATE.
+
+**Before applying to prod:** run `Q-S1` and the drawing atom-coverage query (Phase D spec), confirm the migration role can create policies on `storage.objects` (the existing drawing policies were created that way), then apply, then verify as a real `operations_tech` and `viewer` login (open/save a work order, upload and view a drawing PDF, Job Config).
 
 ---
 
