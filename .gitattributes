@@ -1,5 +1,5 @@
 
 supabase/tests/d0a/run.sh text eol=lf
 supabase/tests/d0a/*.sql text eol=lf
-supabase/functions/**/*.ts text eol=lf
+supabase/functions/erp-user-access/*.ts text eol=lf
 supabase/tests/d0b/*.mjs text eol=lf
