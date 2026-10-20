@@ -3,3 +3,6 @@ supabase/tests/d0a/run.sh text eol=lf
 supabase/tests/d0a/*.sql text eol=lf
 supabase/functions/erp-user-access/*.ts text eol=lf
 supabase/tests/d0b/*.mjs text eol=lf
+supabase/tests/d0c_common/* text eol=lf
+supabase/tests/d0c_*/*.sql text eol=lf
+supabase/tests/d0c_*/*.json text eol=lf
