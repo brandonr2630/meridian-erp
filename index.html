@@ -8668,7 +8668,8 @@ async function jcDeleteJob() {
   if (!ok) return;
   try {
     const jobNo = document.getElementById('jc-job-no-display').textContent;
-    sbPost('job_audit_log', { job_id:jcCurrentJobId, job_no:jobNo, user_id:currentUser.auth_user_id, username:currentUser.full_name, action_type:'job_deleted', description:`Job ${jobNo} deleted by ${currentUser.full_name}` }).catch(()=>{});
+    // await the audit insert BEFORE deleting the job: the row's FK/RLS check needs the job to still exist (D0c audit policy)
+    await sbPost('job_audit_log', { job_id:jcCurrentJobId, job_no:jobNo, user_id:currentUser.auth_user_id, username:currentUser.full_name, action_type:'job_deleted', description:`Job ${jobNo} deleted by ${currentUser.full_name}` }).catch(()=>{});
     await sbDelete('jobs', jcCurrentJobId);
     jcCurrentJobId = null;
     showToast('🗑 Job ' + jobNo + ' deleted.', 'success');
