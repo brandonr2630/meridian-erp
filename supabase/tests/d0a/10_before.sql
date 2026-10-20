@@ -10,7 +10,7 @@ BEGIN
   PERFORM t_expect('before: client reads employees',           t_count('authenticated', client, 'select * from public.employees'), 'n:2');
   PERFORM t_expect('before: client writes jobs',               t_dml('authenticated', client, 'update public.jobs set quoted_ttd = 1'), 'rows:2');
   -- storage: any authenticated user lists/reads/deletes every company's drawings and uploads logos
-  PERFORM t_expect('before: client lists all drawings',        t_count('authenticated', client, 'select * from storage.objects where bucket_id = ''job-drawings'''), 'n:3');
+  PERFORM t_expect('before: client lists all drawings',        t_count('authenticated', client, 'select * from storage.objects where bucket_id = ''job-drawings'''), 'n:2');
   PERFORM t_expect('before: client deletes a drawing',         t_dml('authenticated', client, 'delete from storage.objects where bucket_id = ''job-drawings'' and name like ''c2%'''), 'rows:1');
   PERFORM t_expect('before: client uploads a logo',            t_dml('authenticated', client, 'insert into storage.objects (bucket_id, name) values (''company-logos'', ''x.png'')'), 'rows:1');
   -- anon can run the definer functions

@@ -4,7 +4,7 @@ DO $$
 DECLARE client uuid := '88888888-8888-8888-8888-888888888888';
 BEGIN
   PERFORM t_expect('rollback: client reads all jobs again',      t_count('authenticated', client, 'select * from public.jobs'), 'n:2');
-  PERFORM t_expect('rollback: client lists drawings again',      t_count('authenticated', client, 'select * from storage.objects where bucket_id = ''job-drawings'''), 'n:3');
+  PERFORM t_expect('rollback: client lists drawings again',      t_count('authenticated', client, 'select * from storage.objects where bucket_id = ''job-drawings'''), 'n:2');
   PERFORM t_expect('rollback: anon runs next_job_no again',      t_dml('anon', null, 'select public.next_job_no()'), 'rows:1');
   PERFORM t_expect('rollback: d0 table policies gone',           (select count(*)::text from pg_policies where policyname like 'd0\_%'), '0');
   PERFORM t_expect('rollback: legacy storage policies restored', (select count(*)::text from pg_policies where schemaname='storage' and policyname in ('job-drawings auth read','job-drawings auth upload','job-drawings auth delete','Authenticated logo upload')), '4');

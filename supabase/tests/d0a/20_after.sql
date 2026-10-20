@@ -45,10 +45,10 @@ BEGIN
   PERFORM t_expect('invoices: no d0 policy added', (select count(*)::text from pg_policies where tablename='invoices' and policyname like 'd0_%'), '0');
 
   -- ── storage: job-drawings ───────────────────────────────────────────────────
-  PERFORM t_expect('drawings: ops sees own company + legacy key',  t_count('authenticated', ops,    'select * from storage.objects where bucket_id = ''job-drawings'''), 'n:2');
+  PERFORM t_expect('drawings: ops sees own company only',  t_count('authenticated', ops,    'select * from storage.objects where bucket_id = ''job-drawings'''), 'n:1');
   PERFORM t_expect('drawings: ops2 sees only its company',         t_count('authenticated', ops2,   'select * from storage.objects where bucket_id = ''job-drawings'''), 'n:1');
-  PERFORM t_expect('drawings: viewer can read (has read atom)',    t_count('authenticated', viewer, 'select * from storage.objects where bucket_id = ''job-drawings'''), 'n:2');
-  PERFORM t_expect('drawings: super reads company drawings',       t_count('authenticated', sup,    'select * from storage.objects where bucket_id = ''job-drawings'''), 'n:2');
+  PERFORM t_expect('drawings: viewer can read (has read atom)',    t_count('authenticated', viewer, 'select * from storage.objects where bucket_id = ''job-drawings'''), 'n:1');
+  PERFORM t_expect('drawings: super reads company drawings',       t_count('authenticated', sup,    'select * from storage.objects where bucket_id = ''job-drawings'''), 'n:1');
   PERFORM t_expect('drawings: office (no read atom) sees none',    t_count('authenticated', office, 'select * from storage.objects where bucket_id = ''job-drawings'''), 'n:0');
   PERFORM t_expect('drawings: client sees none',                   t_count('authenticated', client, 'select * from storage.objects where bucket_id = ''job-drawings'''), 'n:0');
   PERFORM t_expect('drawings: removed sees none',                  t_count('authenticated', removed,'select * from storage.objects where bucket_id = ''job-drawings'''), 'n:0');
@@ -66,7 +66,6 @@ BEGIN
   -- two C1 objects exist at this point: the seeded one and the one ops uploaded above
   PERFORM t_expect('drawings: admin deletes own company objects',  t_dml('authenticated', adm,    'delete from storage.objects where bucket_id = ''job-drawings'' and name like ''c1%'''), 'rows:2');
   PERFORM t_expect('drawings: admin cannot delete other company',  t_dml('authenticated', adm,    'delete from storage.objects where bucket_id = ''job-drawings'' and name like ''c2%'''), 'rows:0');
-  PERFORM t_expect('drawings: admin deletes legacy key via fallback', t_dml('authenticated', adm, 'delete from storage.objects where bucket_id = ''job-drawings'' and name = ''legacy/odd-name.pdf'''), 'rows:1');
   PERFORM t_expect('drawings: nobody can overwrite (no UPDATE policy)', t_dml('authenticated', adm, 'update storage.objects set name = name where bucket_id = ''job-drawings'''), 'rows:0');
 
   -- cross-tenant IDOR via the legacy-key fallback: a C1 member plants a job_drawings row that names a C2 object key

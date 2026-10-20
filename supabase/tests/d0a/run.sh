@@ -20,6 +20,12 @@ apply() { out=$(run < "$1" 2>&1) || { echo "$out" | grep -E "ERROR|FAIL" | head 
 # assertion files raise on the first mismatch; report PASS count, or the failing assertion
 assert() { out=$(run < "$1" 2>&1) || { echo "$out" | grep -E "ERROR|FAIL" | head -5; echo "FAILED: $1"; exit 1; }; echo "   PASS count: $(echo "$out" | grep -c 'NOTICE:  PASS')"; }
 step "stub live schema";               apply 00_stub_schema.sql
+step "pre-flight refuses a non-conforming drawing key (and changes nothing)"
+run -c "insert into storage.objects (bucket_id, name) values ('job-drawings', 'legacy/odd.pdf')"
+if run < "$MIG" >/dev/null 2>&1; then echo "FAILED: migration applied despite a non-conforming drawing key"; exit 1; fi
+[ -z "$(run -tAc "select to_regproc('public.is_erp_staff')")" ] || { echo "FAILED: aborted migration left changes behind"; exit 1; }
+run -c "delete from storage.objects where name = 'legacy/odd.pdf'"
+echo "   refused, nothing changed"
 step "BEFORE: holes exist";            assert 10_before.sql
 step "apply D0a";                      apply "$MIG"
 step "apply D0a again (idempotent)";   apply "$MIG"

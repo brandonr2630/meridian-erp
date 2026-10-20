@@ -17,6 +17,20 @@
 -- Rollback: supabase/rollbacks/202610200900_d0a_down.sql
 -- Not covered here (D0c, later): replacing the legacy permissive policies with company/permission scoped ones.
 
+-- ── 0. pre-flight: no legacy-key fallback exists, so refuse to run if any drawing object is non-conforming ──
+DO $$
+DECLARE bad int;
+BEGIN
+  SELECT count(*) INTO bad FROM storage.objects o
+  WHERE o.bucket_id = 'job-drawings'
+    AND NOT EXISTS (SELECT 1 FROM public.jobs j
+                     WHERE j.id::text = (storage.foldername(o.name))[2]
+                       AND j.company_id::text = (storage.foldername(o.name))[1]);
+  IF bad > 0 THEN
+    RAISE EXCEPTION 'D0a aborted: % job-drawings object(s) do not follow <company_id>/<job_id>/<file> keys; migrate them first (no legacy fallback by design)', bad;
+  END IF;
+END $$;
+
 -- ── 1. staff identity ───────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.is_erp_staff()
 RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
@@ -49,10 +63,10 @@ BEGIN
 END $$;
 
 -- ── 3. storage ──────────────────────────────────────────────────────────────
--- job-drawings object keys are <company_id>/<job_id>/<epoch>-<name> (ERP upload path). The legacy fallback accepts an object
--- whose name equals a job_drawings.storage_key row in the caller's company, ONLY when the key's first path segment is not
--- UUID-shaped: job_drawings rows are writable by any company member, so a UUID-prefixed key must pass the company-prefix
--- rule and can never be claimed across tenants by planting a row (security review finding, test 'IDOR').
+-- job-drawings object keys are <company_id>/<job_id>/<epoch>-<name> (the only ERP upload path). Access is decided by the key's
+-- company prefix alone. There is deliberately NO fallback keyed on job_drawings.storage_key: those rows are writable by any
+-- company member, so trusting them would let a member claim another tenant's object (security review). Step 0 aborts if any
+-- existing object does not follow the convention.
 DROP POLICY IF EXISTS "job-drawings auth read"   ON storage.objects;
 DROP POLICY IF EXISTS "job-drawings auth upload" ON storage.objects;
 DROP POLICY IF EXISTS "job-drawings auth delete" ON storage.objects;
@@ -65,11 +79,8 @@ DROP POLICY IF EXISTS d0_storage_staff_only ON storage.objects;
 DROP POLICY IF EXISTS d0_storage_no_anon ON storage.objects;
 
 CREATE POLICY d0_drawings_select ON storage.objects FOR SELECT TO authenticated
-  USING (bucket_id = 'job-drawings' AND public.user_has_perm('ops:work-orders:read') AND (
-          (storage.foldername(name))[1] IN (SELECT c::text FROM public.my_company_ids() c)
-       OR EXISTS (SELECT 1 FROM public.job_drawings d
-                   WHERE d.storage_key = storage.objects.name AND d.company_id IN (SELECT public.my_company_ids())
-                     AND NOT (coalesce((storage.foldername(storage.objects.name))[1], '') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'))));
+  USING (bucket_id = 'job-drawings' AND public.user_has_perm('ops:work-orders:read')
+         AND (storage.foldername(name))[1] IN (SELECT c::text FROM public.my_company_ids() c));
 
 CREATE POLICY d0_drawings_insert ON storage.objects FOR INSERT TO authenticated
   WITH CHECK (bucket_id = 'job-drawings'
@@ -80,12 +91,9 @@ CREATE POLICY d0_drawings_insert ON storage.objects FOR INSERT TO authenticated
                              AND j.company_id::text = (storage.foldername(storage.objects.name))[1]));
 
 CREATE POLICY d0_drawings_delete ON storage.objects FOR DELETE TO authenticated
-  USING (bucket_id = 'job-drawings' AND (
-          EXISTS (SELECT 1 FROM public.companies co
-                   WHERE co.id::text = (storage.foldername(storage.objects.name))[1] AND public.is_company_admin(co.id))
-       OR EXISTS (SELECT 1 FROM public.job_drawings d
-                   WHERE d.storage_key = storage.objects.name AND public.is_company_admin(d.company_id)
-                     AND NOT (coalesce((storage.foldername(storage.objects.name))[1], '') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'))));
+  USING (bucket_id = 'job-drawings' AND EXISTS (
+          SELECT 1 FROM public.companies co
+           WHERE co.id::text = (storage.foldername(storage.objects.name))[1] AND public.is_company_admin(co.id)));
 -- No UPDATE policy (none exists today): an existing object cannot be overwritten by any JWT.
 
 CREATE POLICY d0_logos_insert ON storage.objects FOR INSERT TO authenticated
