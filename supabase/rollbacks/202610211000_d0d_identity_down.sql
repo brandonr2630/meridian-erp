@@ -58,6 +58,7 @@ CREATE POLICY roles_delete ON public.erp_roles FOR DELETE
        AND ucr.company_id = erp_roles.company_id AND (rr.permissions ->> 'admin:roles')::boolean = true));
 
 DROP FUNCTION IF EXISTS public.d0d_overrides_ok(jsonb);
+DROP FUNCTION IF EXISTS public.d0d_can_admin_user(uuid, uuid);
 DROP FUNCTION IF EXISTS public.d0d_role_assignable(uuid, uuid);
 DROP FUNCTION IF EXISTS public.d0d_user_is_super(uuid);
 DROP FUNCTION IF EXISTS public.d0d_role_is_super(uuid);

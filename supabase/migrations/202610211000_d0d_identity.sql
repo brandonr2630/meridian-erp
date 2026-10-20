@@ -15,8 +15,8 @@
 --   d0d_my_erp_user_id()               caller's ACTIVE erp_users.id, else NULL.
 --   d0d_actor_has_atom(cid, atom)      caller (active) holds atom through a ROLE assigned IN company cid (overrides do not count).
 --   d0d_can_admin_users(cid)           is_super_admin() OR d0d_actor_has_atom(cid,'admin:users')   (company-scoped, unlike user_has_perm).
---   d0d_role_is_super(rid)             role carries admin:companies. Returns false for non-staff callers (no oracle for clients).
---   d0d_user_is_super(uid)             erp user holds a super role anywhere. Returns false for non-staff callers.
+--   d0d_role_is_super(rid)             role carries admin:companies. Returns false unless the caller is a user admin (no oracle).
+--   d0d_user_is_super(uid)             erp user holds a super role anywhere. Returns false unless the caller is a user admin.
 --   d0d_role_assignable(cid, rid)      role exists, is global or owned by cid, and (not super or caller is super).
 --   d0d_overrides_ok(ov)               non-super callers may not put admin:companies=true into permission_overrides.
 -- Triggers (SECURITY INVOKER, so current_user is the real caller; sessions running as postgres / service_role / supabase_admin bypass):
@@ -26,6 +26,15 @@
 --                    nobody but a super changes their OWN is_active / company_id; non-supers cannot touch a super admin's row).
 --   d0d_roles_guard  BEFORE INSERT OR UPDATE on erp_roles  admin:companies only via super; ceiling rule (a non-super may only newly
 --                    grant atoms they themselves hold in the role's company); id / company_id / is_system immutable for non-super.
+--   d0d_can_admin_user(uid, home)      can the caller manage THIS person: super, or administers the home company AND every company the person has an
+--                                      assignment in (their profile columns are global, so one company's admin must not lock them out of another).
+--
+-- Hardening added after the independent attack review:
+--   * authenticated INSERT on erp_users is super-only (the app never inserts over REST; create-erp-user uses service_role), which also kills the
+--     puppet-user chain.  * roles: permission values must be booleans for non-supers, the ceiling is symmetric (adding AND removing),  * roles_select shows
+--     global + own-company roles (+ everything to supers),  * role_is_super / user_is_super answer only to user admins.
+-- RESIDUAL (by design): a holder of admin:users can still create a puppet user with a fresh email through the create-erp-user edge function and
+-- assign any non-super role in their company, i.e. admin:users effectively means every non-super atom in that company.
 -- Idempotent. Rollback: supabase/rollbacks/202610211000_d0d_identity_down.sql
 
 -- == 1. helpers ==============================================================================================================
@@ -58,15 +67,24 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.d0d_role_is_super(rid uuid) RETURNS boolean
   LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
-  SELECT public.is_erp_staff()
+  SELECT (public.is_super_admin() OR public.user_has_perm('admin:users'))
          AND coalesce((SELECT public.d0d_atom_true(r.permissions, 'admin:companies') FROM public.erp_roles r WHERE r.id = rid), false)
 $$;
 
 CREATE OR REPLACE FUNCTION public.d0d_user_is_super(uid uuid) RETURNS boolean
   LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
-  SELECT public.is_erp_staff()
+  SELECT (public.is_super_admin() OR public.user_has_perm('admin:users'))
          AND EXISTS (SELECT 1 FROM public.erp_user_company_roles ucr JOIN public.erp_roles r ON r.id = ucr.role_id
                       WHERE ucr.user_id = uid AND public.d0d_atom_true(r.permissions, 'admin:companies'))
+$$;
+
+-- can the caller administer THIS person? is_active / full_name / force_password_change / company_id / email / auth_user_id are global to the person,
+-- so the caller must administer the home company AND every company the person has an assignment in (a super always can).
+CREATE OR REPLACE FUNCTION public.d0d_can_admin_user(uid uuid, home uuid) RETURNS boolean
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+  SELECT public.is_super_admin()
+         OR (home IS NOT NULL AND public.d0d_can_admin_users(home)
+             AND NOT EXISTS (SELECT 1 FROM public.erp_user_company_roles ucr WHERE ucr.user_id = uid AND NOT public.d0d_can_admin_users(ucr.company_id)))
 $$;
 
 CREATE OR REPLACE FUNCTION public.d0d_role_assignable(cid uuid, rid uuid) RETURNS boolean
@@ -84,10 +102,10 @@ $$;
 
 REVOKE ALL ON FUNCTION public.d0d_atom_true(jsonb, text), public.d0d_my_erp_user_id(), public.d0d_actor_has_atom(uuid, text),
   public.d0d_can_admin_users(uuid), public.d0d_role_is_super(uuid), public.d0d_user_is_super(uuid),
-  public.d0d_role_assignable(uuid, uuid), public.d0d_overrides_ok(jsonb) FROM PUBLIC, anon;
+  public.d0d_role_assignable(uuid, uuid), public.d0d_overrides_ok(jsonb), public.d0d_can_admin_user(uuid, uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.d0d_atom_true(jsonb, text), public.d0d_my_erp_user_id(), public.d0d_actor_has_atom(uuid, text),
   public.d0d_can_admin_users(uuid), public.d0d_role_is_super(uuid), public.d0d_user_is_super(uuid),
-  public.d0d_role_assignable(uuid, uuid), public.d0d_overrides_ok(jsonb) TO authenticated;
+  public.d0d_role_assignable(uuid, uuid), public.d0d_overrides_ok(jsonb), public.d0d_can_admin_user(uuid, uuid) TO authenticated;
 
 -- == 2. erp_user_company_roles ===============================================================================================
 DROP POLICY IF EXISTS ucr_select_own ON public.erp_user_company_roles;
@@ -139,11 +157,11 @@ CREATE TRIGGER d0d_ucr_guard BEFORE UPDATE ON public.erp_user_company_roles
 -- SELECT and DELETE policies are intentionally untouched (own row / super / same-company colleagues; delete = super only).
 DROP POLICY IF EXISTS rls_erp_users_insert ON public.erp_users;
 CREATE POLICY rls_erp_users_insert ON public.erp_users FOR INSERT TO authenticated
-  WITH CHECK (company_id IS NOT NULL AND public.d0d_can_admin_users(company_id));
+  WITH CHECK (company_id IS NOT NULL AND public.is_super_admin());
 
 DROP POLICY IF EXISTS rls_erp_users_update ON public.erp_users;
 CREATE POLICY rls_erp_users_update ON public.erp_users FOR UPDATE TO authenticated
-  USING (id = (SELECT public.d0d_my_erp_user_id()) OR public.d0d_can_admin_users(company_id))
+  USING (id = (SELECT public.d0d_my_erp_user_id()) OR public.d0d_can_admin_user(id, company_id))
   WITH CHECK (id = (SELECT public.d0d_my_erp_user_id()) OR (company_id IS NOT NULL AND public.d0d_can_admin_users(company_id)));
 
 -- no staff-only restrictive here: a user must be able to read their own row at login. Anon deny only.
@@ -163,7 +181,7 @@ BEGIN
   IF public.is_super_admin() THEN RETURN NEW; END IF;
 
   v_self  := coalesce(OLD.id = public.d0d_my_erp_user_id(), false);
-  v_admin := OLD.company_id IS NOT NULL AND public.d0d_can_admin_users(OLD.company_id);
+  v_admin := public.d0d_can_admin_user(OLD.id, OLD.company_id);
 
   IF NOT v_self AND public.d0d_user_is_super(OLD.id) THEN
     RAISE EXCEPTION 'erp_users: a super admin profile can only be changed by a super admin' USING ERRCODE = '42501';
@@ -197,7 +215,9 @@ CREATE TRIGGER d0d_users_guard BEFORE UPDATE ON public.erp_users
 
 -- == 4. erp_roles ============================================================================================================
 DROP POLICY IF EXISTS roles_select ON public.erp_roles;
-CREATE POLICY roles_select ON public.erp_roles FOR SELECT TO authenticated USING ((SELECT public.is_erp_staff()));
+CREATE POLICY roles_select ON public.erp_roles FOR SELECT TO authenticated
+  USING ((SELECT public.is_erp_staff())
+         AND (company_id IS NULL OR company_id IN (SELECT public.my_company_ids()) OR (SELECT public.is_super_admin())));
 
 DROP POLICY IF EXISTS roles_insert ON public.erp_roles;
 CREATE POLICY roles_insert ON public.erp_roles FOR INSERT TO authenticated
@@ -218,7 +238,7 @@ CREATE POLICY d0_no_anon ON public.erp_roles AS RESTRICTIVE FOR ALL TO anon USIN
 
 CREATE OR REPLACE FUNCTION public.d0d_roles_guard() RETURNS trigger
   LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
-DECLARE k text;
+DECLARE k text; v_old jsonb;
 BEGIN
   IF current_user IN ('postgres', 'service_role', 'supabase_admin') THEN RETURN NEW; END IF;
   IF public.is_super_admin() THEN RETURN NEW; END IF;
@@ -236,17 +256,23 @@ BEGIN
   IF TG_OP = 'UPDATE' AND (NEW.id IS DISTINCT FROM OLD.id OR NEW.company_id IS DISTINCT FROM OLD.company_id OR NEW.is_system IS DISTINCT FROM OLD.is_system) THEN
     RAISE EXCEPTION 'erp_roles: id, company_id and is_system cannot be changed' USING ERRCODE = '42501';
   END IF;
-  -- ceiling rule: you can only newly grant atoms you hold yourself, through a role assigned in the role's company
+  -- every permission value must be a real boolean: a planted "x" / 1 / null makes the live (x->>k)::boolean helpers raise 22P02 for all holders
   IF NEW.permissions IS NOT NULL THEN
     FOR k IN SELECT jsonb_object_keys(NEW.permissions) LOOP
-      IF public.d0d_atom_true(NEW.permissions, k)
-         AND NOT (TG_OP = 'UPDATE' AND public.d0d_atom_true(OLD.permissions, k))
-         AND NOT public.d0d_actor_has_atom(NEW.company_id, k) THEN
-        RAISE EXCEPTION 'erp_roles: you cannot grant the permission "%" because you do not hold it in this company', k USING ERRCODE = '42501';
+      IF jsonb_typeof(NEW.permissions -> k) <> 'boolean' THEN
+        RAISE EXCEPTION 'erp_roles: permission values must be true or false ("%" is not)', k USING ERRCODE = '42501';
       END IF;
     END LOOP;
   END IF;
-  RETURN NEW;
+  -- symmetric ceiling: any atom whose truth value changes (added OR removed) must be held by the actor through a role in the role's company
+  v_old := CASE WHEN TG_OP = 'UPDATE' AND jsonb_typeof(OLD.permissions) = 'object' THEN OLD.permissions ELSE '{}'::jsonb END;
+  FOR k IN SELECT s.x FROM (SELECT jsonb_object_keys(coalesce(NEW.permissions, '{}'::jsonb)) AS x
+                            UNION SELECT jsonb_object_keys(v_old)) s LOOP
+    IF public.d0d_atom_true(NEW.permissions, k) IS DISTINCT FROM public.d0d_atom_true(v_old, k)
+       AND NOT public.d0d_actor_has_atom(NEW.company_id, k) THEN
+      RAISE EXCEPTION 'erp_roles: you cannot grant or remove the permission "%" because you do not hold it in this company', k USING ERRCODE = '42501';
+    END IF;
+  END LOOP;  RETURN NEW;
 END $$;
 REVOKE ALL ON FUNCTION public.d0d_roles_guard() FROM PUBLIC, anon;
 DROP TRIGGER IF EXISTS d0d_roles_guard ON public.erp_roles;

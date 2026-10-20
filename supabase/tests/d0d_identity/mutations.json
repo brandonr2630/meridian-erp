@@ -45,8 +45,8 @@
   "replace": "SELECT true"
  },
  {
-  "name": "role_is_super: staff gate removed",
-  "find": "SELECT public.is_erp_staff()\n         AND coalesce((SELECT public.d0d_atom_true(r.permissions, 'admin:companies')",
+  "name": "role_is_super: admin gate removed",
+  "find": "SELECT (public.is_super_admin() OR public.user_has_perm('admin:users'))\n         AND coalesce((SELECT public.d0d_atom_true(r.permissions, 'admin:companies')",
   "replace": "SELECT true\n         AND coalesce((SELECT public.d0d_atom_true(r.permissions, 'admin:companies')"
  },
  {
@@ -55,8 +55,8 @@
   "replace": "coalesce((SELECT public.d0d_atom_true(r.permissions, 'admin:users') FROM public.erp_roles r"
  },
  {
-  "name": "user_is_super: staff gate removed",
-  "find": "SELECT public.is_erp_staff()\n         AND EXISTS (SELECT 1 FROM public.erp_user_company_roles ucr JOIN public.erp_roles r ON r.id = ucr.role_id\n                      WHERE ucr.user_id = uid",
+  "name": "user_is_super: admin gate removed",
+  "find": "SELECT (public.is_super_admin() OR public.user_has_perm('admin:users'))\n         AND EXISTS (SELECT 1 FROM public.erp_user_company_roles ucr JOIN public.erp_roles r ON r.id = ucr.role_id\n                      WHERE ucr.user_id = uid",
   "replace": "SELECT true\n         AND EXISTS (SELECT 1 FROM public.erp_user_company_roles ucr JOIN public.erp_roles r ON r.id = ucr.role_id\n                      WHERE ucr.user_id = uid"
  },
  {
@@ -88,13 +88,13 @@
  },
  {
   "name": "grants: PUBLIC keeps execute",
-  "find": "public.d0d_role_assignable(uuid, uuid), public.d0d_overrides_ok(jsonb) FROM PUBLIC, anon;",
-  "replace": "public.d0d_role_assignable(uuid, uuid), public.d0d_overrides_ok(jsonb) FROM anon;"
+  "find": "public.d0d_overrides_ok(jsonb), public.d0d_can_admin_user(uuid, uuid) FROM PUBLIC, anon;",
+  "replace": "public.d0d_overrides_ok(jsonb), public.d0d_can_admin_user(uuid, uuid) FROM anon;"
  },
  {
   "name": "grants: authenticated loses execute on helpers",
-  "find": "public.d0d_role_assignable(uuid, uuid), public.d0d_overrides_ok(jsonb) TO authenticated;",
-  "replace": "public.d0d_role_assignable(uuid, uuid), public.d0d_overrides_ok(jsonb) TO service_role;"
+  "find": "public.d0d_overrides_ok(jsonb), public.d0d_can_admin_user(uuid, uuid) TO authenticated;",
+  "replace": "public.d0d_overrides_ok(jsonb), public.d0d_can_admin_user(uuid, uuid) TO service_role;"
  },
  {
   "name": "search_path not pinned on a definer helper",
@@ -215,41 +215,44 @@
   "replace": "IF session_user IN ('postgres', 'service_role', 'supabase_admin') THEN RETURN NEW; END IF;\n  IF (NEW.id"
  },
  {
-  "name": "users insert: old policy (any company member)",
-  "find": "WITH CHECK (company_id IS NOT NULL AND public.d0d_can_admin_users(company_id));",
-  "replace": "WITH CHECK (public.is_super_admin() OR company_id IN (SELECT public.my_company_ids()));"
+  "name": "users insert: company admins may insert (puppet hole)",
+  "find": "WITH CHECK (company_id IS NOT NULL AND public.is_super_admin());",
+  "replace": "WITH CHECK (company_id IS NOT NULL AND public.d0d_can_admin_users(company_id));"
  },
  {
   "name": "users insert: NULL company allowed",
-  "find": "WITH CHECK (company_id IS NOT NULL AND public.d0d_can_admin_users(company_id));",
-  "replace": "WITH CHECK (company_id IS NULL OR public.d0d_can_admin_users(company_id));"
+  "find": "WITH CHECK (company_id IS NOT NULL AND public.is_super_admin());",
+  "replace": "WITH CHECK (company_id IS NULL OR public.is_super_admin());"
  },
  {
-  "name": "users insert: admin check removed",
-  "find": "WITH CHECK (company_id IS NOT NULL AND public.d0d_can_admin_users(company_id));",
+  "name": "users insert: super check removed (any staff may insert)",
+  "find": "WITH CHECK (company_id IS NOT NULL AND public.is_super_admin());",
   "replace": "WITH CHECK (company_id IS NOT NULL);"
  },
  {
   "name": "users update: own-row branch removed from USING",
-  "find": "USING (id = (SELECT public.d0d_my_erp_user_id()) OR public.d0d_can_admin_users(company_id))\n  WITH CHECK",
-  "replace": "USING (public.d0d_can_admin_users(company_id))\n  WITH CHECK"
+  "find": "USING (id = (SELECT public.d0d_my_erp_user_id()) OR public.d0d_can_admin_user(id, company_id))\n  WITH CHECK",
+  "replace": "USING (public.d0d_can_admin_user(id, company_id))\n  WITH CHECK"
  },
  {
   "name": "users update: admin branch removed from USING",
-  "find": "USING (id = (SELECT public.d0d_my_erp_user_id()) OR public.d0d_can_admin_users(company_id))\n  WITH CHECK",
+  "find": "USING (id = (SELECT public.d0d_my_erp_user_id()) OR public.d0d_can_admin_user(id, company_id))\n  WITH CHECK",
   "replace": "USING (id = (SELECT public.d0d_my_erp_user_id()))\n  WITH CHECK"
  },
  {
   "name": "users update: any colleague editable (old behaviour)",
-  "find": "USING (id = (SELECT public.d0d_my_erp_user_id()) OR public.d0d_can_admin_users(company_id))\n  WITH CHECK",
+  "find": "USING (id = (SELECT public.d0d_my_erp_user_id()) OR public.d0d_can_admin_user(id, company_id))\n  WITH CHECK",
   "replace": "USING (id = (SELECT public.d0d_my_erp_user_id()) OR company_id IN (SELECT public.my_company_ids()))\n  WITH CHECK"
+ },
+ {
+  "name": "users update: home company only (shared users lockout)",
+  "find": "USING (id = (SELECT public.d0d_my_erp_user_id()) OR public.d0d_can_admin_user(id, company_id))\n  WITH CHECK",
+  "replace": "USING (id = (SELECT public.d0d_my_erp_user_id()) OR public.d0d_can_admin_users(company_id))\n  WITH CHECK"
  },
  {
   "name": "users update: WITH CHECK admin branch opened",
   "find": "OR (company_id IS NOT NULL AND public.d0d_can_admin_users(company_id)));",
-  "replace": "OR true);",
-  "equivalent": true,
-  "reason": "USING requires can_admin on the OLD company and d0d_users_guard rejects any company_id move to a company the caller does not administer (also NULL), so the WITH CHECK admin branch never decides differently; defence in depth."
+  "replace": "OR true);"
  },
  {
   "name": "users: restrictive anon policy opened",
@@ -300,8 +303,25 @@
  },
  {
   "name": "users guard: everyone treated as admin",
-  "find": "v_admin := OLD.company_id IS NOT NULL AND public.d0d_can_admin_users(OLD.company_id);",
+  "find": "v_admin := public.d0d_can_admin_user(OLD.id, OLD.company_id);",
   "replace": "v_admin := true;"
+ },
+ {
+  "name": "users guard: admin decided on the home company only",
+  "find": "v_admin := public.d0d_can_admin_user(OLD.id, OLD.company_id);",
+  "replace": "v_admin := OLD.company_id IS NOT NULL AND public.d0d_can_admin_users(OLD.company_id);"
+ },
+ {
+  "name": "can_admin_user: other-company assignments ignored",
+  "find": "\n             AND NOT EXISTS (SELECT 1 FROM public.erp_user_company_roles ucr WHERE ucr.user_id = uid AND NOT public.d0d_can_admin_users(ucr.company_id)))",
+  "replace": ")"
+ },
+ {
+  "name": "can_admin_user: super bypass removed",
+  "find": "SELECT public.is_super_admin()\n         OR (home IS NOT NULL",
+  "replace": "SELECT false\n         OR (home IS NOT NULL",
+  "equivalent": true,
+  "reason": "d0d_can_admin_users already returns true for a super for any company, so the explicit bypass changes nothing for rows with a home company; rows without one are refused by the erp_users update WITH CHECK (company_id IS NOT NULL) for everybody but the owner of the row."
  },
  {
   "name": "users guard: id/created_at lock removed",
@@ -320,8 +340,23 @@
  },
  {
   "name": "roles select: any logged-in user",
-  "find": "FOR SELECT TO authenticated USING ((SELECT public.is_erp_staff()));",
+  "find": "FOR SELECT TO authenticated\n  USING ((SELECT public.is_erp_staff())\n         AND (company_id IS NULL OR company_id IN (SELECT public.my_company_ids()) OR (SELECT public.is_super_admin())));",
   "replace": "FOR SELECT TO authenticated USING (auth.uid() IS NOT NULL);"
+ },
+ {
+  "name": "roles select: other companies visible",
+  "find": "\n         AND (company_id IS NULL OR company_id IN (SELECT public.my_company_ids()) OR (SELECT public.is_super_admin())));",
+  "replace": ");"
+ },
+ {
+  "name": "roles select: super limited to own companies",
+  "find": " OR (SELECT public.is_super_admin())));",
+  "replace": "));"
+ },
+ {
+  "name": "roles select: staff gate removed",
+  "find": "USING ((SELECT public.is_erp_staff())\n         AND (company_id IS NULL",
+  "replace": "USING (true\n         AND (company_id IS NULL"
  },
  {
   "name": "roles insert: admin:roles check removed",
@@ -353,9 +388,7 @@
  {
   "name": "roles update: is_system removed from WITH CHECK",
   "find": "WITH CHECK (is_system = false AND company_id IS NOT NULL AND public.d0d_actor_has_atom(company_id, 'admin:roles'));\n\nDROP POLICY IF EXISTS roles_delete",
-  "replace": "WITH CHECK (company_id IS NOT NULL AND public.d0d_actor_has_atom(company_id, 'admin:roles'));\n\nDROP POLICY IF EXISTS roles_delete",
-  "equivalent": true,
-  "reason": "d0d_roles_guard already rejects any is_system change for non-supers (checked by 'custom role cannot be flipped to system'); the WITH CHECK clause is defence in depth."
+  "replace": "WITH CHECK (company_id IS NOT NULL AND public.d0d_actor_has_atom(company_id, 'admin:roles'));\n\nDROP POLICY IF EXISTS roles_delete"
  },
  {
   "name": "roles delete: admin:roles removed",
@@ -420,19 +453,29 @@
   "replace": "AND false THEN"
  },
  {
-  "name": "roles guard: ceiling ignores atoms already on the role",
-  "find": "AND NOT (TG_OP = 'UPDATE' AND public.d0d_atom_true(OLD.permissions, k))\n",
-  "replace": "\n"
+  "name": "roles guard: ceiling is one-sided (removals allowed)",
+  "find": "IF public.d0d_atom_true(NEW.permissions, k) IS DISTINCT FROM public.d0d_atom_true(v_old, k)",
+  "replace": "IF public.d0d_atom_true(NEW.permissions, k) AND NOT public.d0d_atom_true(v_old, k)"
+ },
+ {
+  "name": "roles guard: previous value ignored (renames of roles with unheld atoms fail)",
+  "find": "v_old := CASE WHEN TG_OP = 'UPDATE' AND jsonb_typeof(OLD.permissions) = 'object' THEN OLD.permissions ELSE '{}'::jsonb END;",
+  "replace": "v_old := '{}'::jsonb;"
+ },
+ {
+  "name": "roles guard: keys deleted from the role are not checked",
+  "find": "\n                            UNION SELECT jsonb_object_keys(v_old)) s LOOP",
+  "replace": ") s LOOP"
+ },
+ {
+  "name": "roles guard: non-boolean values allowed",
+  "find": "IF jsonb_typeof(NEW.permissions -> k) <> 'boolean' THEN",
+  "replace": "IF false THEN"
  },
  {
   "name": "roles guard: ceiling counts atoms from any company",
   "find": "AND NOT public.d0d_actor_has_atom(NEW.company_id, k) THEN",
   "replace": "AND NOT (SELECT public.user_has_perm(k)) THEN"
- },
- {
-  "name": "roles guard: ceiling uses boolean-only truthiness",
-  "find": "IF public.d0d_atom_true(NEW.permissions, k)\n         AND NOT",
-  "replace": "IF (NEW.permissions -> k) = 'true'::jsonb\n         AND NOT"
  },
  {
   "name": "roles guard: service_role no longer bypasses",

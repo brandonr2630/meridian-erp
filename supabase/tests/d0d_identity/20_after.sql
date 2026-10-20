@@ -33,13 +33,14 @@ BEGIN
   PERFORM t_expect('struct: erp_roles policies', (SELECT string_agg(policyname, ',' ORDER BY policyname) FROM pg_policies WHERE tablename='erp_roles'), 'd0_no_anon,roles_delete,roles_insert,roles_select,roles_update');
   PERFORM t_expect('struct: erp_roles policies none public', (SELECT count(*)::text FROM pg_policies WHERE tablename='erp_roles' AND roles NOT IN ('{authenticated}','{anon}')), '0');
   PERFORM t_expect('struct: 3 d0d triggers', (SELECT count(*)::text FROM pg_trigger WHERE tgname IN ('d0d_ucr_guard','d0d_users_guard','d0d_roles_guard') AND NOT tgisinternal), '3');
-  PERFORM t_expect('struct: 8 helpers + 3 trigger fns exist', (SELECT count(*)::text FROM pg_proc WHERE proname LIKE 'd0d\_%' AND pronamespace='public'::regnamespace), '11');
+  PERFORM t_expect('struct: 9 helpers + 3 trigger fns exist', (SELECT count(*)::text FROM pg_proc WHERE proname LIKE 'd0d\_%' AND pronamespace='public'::regnamespace), '12');
   PERFORM t_expect('struct: every d0d function pins search_path', (SELECT count(*)::text FROM pg_proc WHERE proname LIKE 'd0d\_%' AND pronamespace='public'::regnamespace AND NOT (proconfig::text LIKE '%search_path=public, pg_temp%')), '0');
   PERFORM t_expect('struct: no d0d function executable by PUBLIC or anon', (SELECT count(*)::text FROM pg_proc WHERE proname LIKE 'd0d\_%' AND pronamespace='public'::regnamespace AND (has_function_privilege('anon', oid, 'EXECUTE') OR coalesce(proacl::text,'=X') ~ '(^|,|\{)=X')), '0');
-  PERFORM t_expect('struct: authenticated can execute the 8 helpers', (SELECT count(*)::text FROM pg_proc WHERE proname LIKE 'd0d\_%' AND proname NOT LIKE '%guard' AND pronamespace='public'::regnamespace AND has_function_privilege('authenticated', oid, 'EXECUTE')), '8');
+  PERFORM t_expect('struct: authenticated can execute the 9 helpers', (SELECT count(*)::text FROM pg_proc WHERE proname LIKE 'd0d\_%' AND proname NOT LIKE '%guard' AND pronamespace='public'::regnamespace AND has_function_privilege('authenticated', oid, 'EXECUTE')), '9');
   PERFORM t_expect('struct: authenticated cannot execute trigger functions', (SELECT count(*)::text FROM pg_proc WHERE proname LIKE 'd0d\_%guard' AND has_function_privilege('authenticated', oid, 'EXECUTE')), '0');
   PERFORM t_expect('struct: trigger functions are SECURITY INVOKER (so current_user is the real caller)', (SELECT count(*)::text FROM pg_proc WHERE proname LIKE 'd0d\_%guard' AND prosecdef), '0');
-  PERFORM t_expect('struct: helpers except d0d_atom_true are SECURITY DEFINER', (SELECT count(*)::text FROM pg_proc WHERE proname LIKE 'd0d\_%' AND proname NOT LIKE '%guard' AND proname<>'d0d_atom_true' AND prosecdef), '7');
+  PERFORM t_expect('struct: helpers except d0d_atom_true are SECURITY DEFINER', (SELECT count(*)::text FROM pg_proc WHERE proname LIKE 'd0d\_%' AND proname NOT LIKE '%guard' AND proname<>'d0d_atom_true' AND prosecdef), '8');
+  PERFORM t_expect('struct: UNIQUE(user_id, company_id) exists on ucr (the self-INSERT equivalence relies on it)', (SELECT count(*)::text FROM pg_constraint WHERE conrelid='public.erp_user_company_roles'::regclass AND contype='u' AND pg_get_constraintdef(oid) = 'UNIQUE (user_id, company_id)'), '1');
   PERFORM t_expect('struct: RLS still enabled on the 3 tables', (SELECT count(*)::text FROM pg_class WHERE relname IN ('erp_users','erp_roles','erp_user_company_roles') AND relrowsecurity), '3');
 
   -- ── d0d_atom_true (same truthiness as (x->>k)::boolean, never raises) ──
@@ -79,11 +80,11 @@ BEGIN
   PERFORM t_expect('atom-held: Office Admin holds admin:roles in C1', t_count(A, offc, 'SELECT 1 WHERE public.d0d_actor_has_atom('''||C1||''',''admin:roles'')'), 'n:1');
   PERFORM t_expect('atom-held: Office Admin lacks admin:users', t_count(A, offc, 'SELECT 1 WHERE public.d0d_actor_has_atom('''||C1||''',''admin:users'')'), 'n:0');
   PERFORM t_expect('atom-held: atoms are company scoped (mixed holds admin:users only in C1)', t_count(A, mixed, 'SELECT 1 WHERE public.d0d_actor_has_atom('''||C2||''',''admin:users'')'), 'n:0');
-  PERFORM t_expect('role_is_super: super role true for staff', t_count(A, viewr, 'SELECT 1 WHERE public.d0d_role_is_super('''||RS||''')'), 'n:1');
-  PERFORM t_expect('role_is_super: company_admin false', t_count(A, viewr, 'SELECT 1 WHERE public.d0d_role_is_super('''||RA||''')'), 'n:0');
+  PERFORM t_expect('role_is_super: super role true for staff', t_count(A, cadm, 'SELECT 1 WHERE public.d0d_role_is_super('''||RS||''')'), 'n:1');
+  PERFORM t_expect('role_is_super: company_admin false', t_count(A, cadm, 'SELECT 1 WHERE public.d0d_role_is_super('''||RA||''')'), 'n:0');
   PERFORM t_expect('role_is_super: no oracle for client-like', t_count(A, clnt, 'SELECT 1 WHERE public.d0d_role_is_super('''||RS||''')'), 'n:0');
-  PERFORM t_expect('user_is_super: super user', t_count(A, viewr, 'SELECT 1 WHERE public.d0d_user_is_super('''||U04||''')'), 'n:1');
-  PERFORM t_expect('user_is_super: ordinary user', t_count(A, viewr, 'SELECT 1 WHERE public.d0d_user_is_super('''||U01||''')'), 'n:0');
+  PERFORM t_expect('user_is_super: super user', t_count(A, cadm, 'SELECT 1 WHERE public.d0d_user_is_super('''||U04||''')'), 'n:1');
+  PERFORM t_expect('user_is_super: ordinary user', t_count(A, cadm, 'SELECT 1 WHERE public.d0d_user_is_super('''||U01||''')'), 'n:0');
   PERFORM t_expect('user_is_super: no oracle for client-like', t_count(A, clnt, 'SELECT 1 WHERE public.d0d_user_is_super('''||U04||''')'), 'n:0');
   PERFORM t_expect('assignable: company_admin cannot assign super role', t_count(A, cadm, 'SELECT 1 WHERE public.d0d_role_assignable('''||C1||''','''||RS||''')'), 'n:0');
   PERFORM t_expect('assignable: super can assign super role', t_count(A, sup, 'SELECT 1 WHERE public.d0d_role_assignable('''||C1||''','''||RS||''')'), 'n:1');
@@ -146,9 +147,9 @@ BEGIN
   PERFORM t_expect('users sel: client-like sees nothing', t_count(A, clnt, 'SELECT 1 FROM erp_users'), 'n:0');
   PERFORM t_expect('users sel: anon is refused (select policy calls is_super_admin, revoked from anon)', t_count('anon', NULL, 'SELECT 1 FROM erp_users'), 'err:42501');
   -- erp_roles SELECT: staff only
-  PERFORM t_expect('roles sel: ops reads all 9 roles', t_count(A, ops, 'SELECT 1 FROM erp_roles'), 'n:9');
-  PERFORM t_expect('roles sel: viewer reads roles', t_count(A, viewr, 'SELECT 1 FROM erp_roles'), 'n:9');
-  PERFORM t_expect('roles sel: Office Admin reads roles', t_count(A, offc, 'SELECT 1 FROM erp_roles'), 'n:9');
+  PERFORM t_expect('roles sel: ops reads global + own-company roles (8)', t_count(A, ops, 'SELECT 1 FROM erp_roles'), 'n:8');
+  PERFORM t_expect('roles sel: viewer reads roles (8)', t_count(A, viewr, 'SELECT 1 FROM erp_roles'), 'n:8');
+  PERFORM t_expect('roles sel: Office Admin reads roles (8)', t_count(A, offc, 'SELECT 1 FROM erp_roles'), 'n:8');
   PERFORM t_expect('roles sel: super reads roles', t_count(A, sup, 'SELECT 1 FROM erp_roles'), 'n:9');
   PERFORM t_expect('roles sel: client-like login cannot read roles', t_count(A, clnt, 'SELECT 1 FROM erp_roles'), 'n:0');
   PERFORM t_expect('roles sel: deactivated cannot read roles', t_count(A, gone, 'SELECT 1 FROM erp_roles'), 'n:0');
@@ -337,7 +338,7 @@ BEGIN
   PERFORM t_deny('users ins: mixed (not admin in C2) cannot insert into C2', t_dmlm(A, mixed, format(INSU, NEWA, 'client', 'cl@t.test', C2)));
   PERFORM t_deny('users ins: admin of C2 cannot insert into C1', t_dmlm(A, cadm2, format(INSU, NEWA, 'client', 'cl@t.test', C1)));
   PERFORM t_deny('users ins: admin cannot insert a profile without a company', t_dmlm(A, cadm, format(INSU, NEWA, 'client', 'cl@t.test', NULL)));
-  PERFORM t_expect('users ins: duplicate auth_user_id stays unique', left(t_dmlm(A, cadm, format(INSU, ops, 'dup', 'dup@t.test', C1)), 9), 'err:23505');
+  PERFORM t_expect('users ins: duplicate auth_user_id stays unique (as super)', left(t_dmlm(A, sup, format(INSU, ops, 'dup', 'dup@t.test', C1)), 9), 'err:23505');
   PERFORM t_expect('users ins: the attempted client login is NOT staff', t_count(A, NEWA::uuid, 'SELECT 1 WHERE public.is_erp_staff()'), 'n:0');
 
   -- UPDATE: colleagues
@@ -372,7 +373,7 @@ BEGIN
   PERFORM t_expect('users upd: ... nobody was deactivated', (SELECT count(*)::text FROM erp_users WHERE is_active), '12');
   PERFORM t_deny('users upd: mass rename by staff refused', t_dmlm(A, viewr, 'UPDATE erp_users SET full_name=''m'''));
   -- admin limits
-  PERFORM t_denym('users upd: company_admin cannot touch a super admin profile', t_dmlm(A, cadm, format('UPDATE erp_users SET full_name=%L WHERE id=%L', 'x', U04)), 'super admin profile');
+  PERFORM t_expect('users upd: company_admin cannot touch a super admin profile that also lives in C2 (filtered)', t_dmlm(A, cadm, format('UPDATE erp_users SET full_name=%L WHERE id=%L', 'x', U04)), 'rows:0');
   PERFORM t_denym('users upd: company_admin cannot deactivate the second super admin', t_dmlm(A, cadm, format('UPDATE erp_users SET is_active=false WHERE id=%L', U08)), 'super admin profile');
   PERFORM t_denym('users upd: company_admin cannot change a colleague email', t_dmlm(A, cadm, format('UPDATE erp_users SET email=%L WHERE id=%L', 'x@evil.test', U01)), 'email can only');
   PERFORM t_denym('users upd: company_admin cannot hijack a colleague via auth_user_id', t_dmlm(A, cadm, format('UPDATE erp_users SET auth_user_id=gen_random_uuid() WHERE id=%L', U01)), 'auth_user_id can only');
@@ -431,17 +432,17 @@ BEGIN
   PERFORM t_expect('ok: company_admin deactivates a colleague', t_dmlm(A, cadm, format('UPDATE erp_users SET is_active=false WHERE id=%L', U11)), 'rows:1');
   PERFORM t_expect('ok: company_admin reactivates a colleague', t_dmlm(A, cadm, format('UPDATE erp_users SET is_active=true WHERE id=%L', U11)), 'rows:1');
   PERFORM t_expect('ok: company_admin forces a colleague password change', t_dmlm(A, cadm, format('UPDATE erp_users SET force_password_change=true WHERE id=%L', U01)), 'rows:1');
-  PERFORM t_expect('ok: admin bulk touch of non-super colleagues (last_login only)', t_dmlm(A, cadm, format('UPDATE erp_users SET last_login=now() WHERE company_id=%L AND id NOT IN (%L,%L)', C1, U04, U08)), 'rows:8');
+  PERFORM t_expect('ok: admin bulk touch of non-super colleagues that live only in C1 (last_login only; mixed and dual belong to C2 too)', t_dmlm(A, cadm, format('UPDATE erp_users SET last_login=now() WHERE company_id=%L AND id NOT IN (%L,%L)', C1, U04, U08)), 'rows:6');
   PERFORM t_expect('ok: company_admin of C2 edits a C2 user', t_dmlm(A, cadm2, format('UPDATE erp_users SET full_name=%L WHERE id=%L', 'C2 Renamed', U12)), 'rows:1');
   PERFORM t_expect('ok: dual admin moves a user C1 -> C2 (administers both)', t_dmlm(A, dual, format('UPDATE erp_users SET company_id=%L WHERE id=%L', C2, U11)), 'rows:1');
   PERFORM t_expect('ok: dual admin moves the user back', t_dmlm(A, dual, format('UPDATE erp_users SET company_id=%L WHERE id=%L', C1, U11)), 'rows:1');
   -- creating profiles (admins only, own company)
-  PERFORM t_expect('ok: admin of C1 inserts a C1 profile', t_dmlm(A, cadm, format(INSU, 'dddddddd-dddd-dddd-dddd-dddddddd0001', 'new1', 'new1@t.test', C1)), 'rows:1');
-  PERFORM t_expect('ok: admin of C2 inserts a C2 profile', t_dmlm(A, cadm2, format(INSU, 'dddddddd-dddd-dddd-dddd-dddddddd0002', 'new2', 'new2@t.test', C2)), 'rows:1');
-  PERFORM t_expect('ok: mixed inserts into C1 (administered)', t_dmlm(A, mixed, format(INSU, 'dddddddd-dddd-dddd-dddd-dddddddd0003', 'new3', 'new3@t.test', C1)), 'rows:1');
-  PERFORM t_expect('ok: dual admin inserts into C2', t_dmlm(A, dual, format(INSU, 'dddddddd-dddd-dddd-dddd-dddddddd0004', 'new4', 'new4@t.test', C2)), 'rows:1');
+  PERFORM t_deny('users ins: company admins can no longer insert profiles (cadm)', t_dmlm(A, cadm, format(INSU, 'dddddddd-dddd-dddd-dddd-dddddddd0001', 'new1', 'new1@t.test', C1)));
+  PERFORM t_deny('users ins: company admins can no longer insert profiles (cadm2)', t_dmlm(A, cadm2, format(INSU, 'dddddddd-dddd-dddd-dddd-dddddddd0002', 'new2', 'new2@t.test', C2)));
+  PERFORM t_deny('users ins: company admins can no longer insert profiles (mixed)', t_dmlm(A, mixed, format(INSU, 'dddddddd-dddd-dddd-dddd-dddddddd0003', 'new3', 'new3@t.test', C1)));
+  PERFORM t_deny('users ins: company admins can no longer insert profiles (dual)', t_dmlm(A, dual, format(INSU, 'dddddddd-dddd-dddd-dddd-dddddddd0004', 'new4', 'new4@t.test', C2)));
   PERFORM t_expect('ok: super inserts anywhere', t_dmlm(A, sup, format(INSU, 'dddddddd-dddd-dddd-dddd-dddddddd0005', 'new5', 'new5@t.test', C2)), 'rows:1');
-  PERFORM t_expect('ok: the new C2 colleague is visible to the C2 admin', t_count(A, cadm2, format('SELECT 1 FROM erp_users WHERE email=%L', 'new2@t.test')), 'n:1');
+  PERFORM t_expect('ok: the profile created by the super is visible to the C2 admin', t_count(A, cadm2, format('SELECT 1 FROM erp_users WHERE email=%L', 'new5@t.test')), 'n:1');
   -- super admin
   PERFORM t_expect('ok: super changes a colleague email', t_dmlm(A, sup, format('UPDATE erp_users SET email=%L WHERE id=%L', 'ops-new@t.test', U01)), 'rows:1');
   PERFORM t_expect('ok: super changes a colleague auth_user_id', t_dmlm(A, sup, format('UPDATE erp_users SET auth_user_id=%L WHERE id=%L', 'aaaa0099-0000-0000-0000-000000000099', U01)), 'rows:1');
@@ -497,7 +498,7 @@ BEGIN
   PERFORM t_denym('roles ceiling: Office Admin cannot grant admin:users it lacks', t_dmlm(A, offc, format(INSR, 'UserAdmins', '{"admin:users":true}', C1, U05)), 'admin:users');
   PERFORM t_denym('roles ceiling: Office Admin cannot add ops:work-orders:write to an existing role', t_dmlm(A, offc, format(UPDR, 'C1 Custom', '{"ops:work-orders:read":true,"ops:work-orders:write":true}', R1)), 'ops:work-orders:write');
   PERFORM t_denym('roles ceiling: company_admin cannot grant finance:bank:read it lacks', t_dmlm(A, cadm, format(INSR, 'Bankers', '{"finance:bank:read":true}', C1, U03)), 'finance:bank:read');
-  PERFORM t_denym('roles ceiling: string "true" of an unheld atom is still a grant', t_dmlm(A, cadm, format(INSR, 'Bankers', '{"finance:bank:read":"true"}', C1, U03)), 'finance:bank:read');
+  PERFORM t_denym('roles: string "true" permission value refused (non-boolean)', t_dmlm(A, cadm, format(INSR, 'Bankers', '{"finance:bank:read":"true"}', C1, U03)), 'true or false');
   PERFORM t_denym('roles ceiling: company_admin cannot add an unheld atom on update', t_dmlm(A, cadm, format(UPDR, 'C1 Custom', '{"ops:work-orders:read":true,"finance:bank:read":true}', R1)), 'finance:bank:read');
   -- dual: company_admin in C1 (holds admin:roles there) but only finance:bank:read-in-C2 via a C2-owned role
   INSERT INTO erp_roles (id, name, company_id, permissions) VALUES ('a0000000-0000-0000-0000-0000000000b2', 'C2 Bank', C2::uuid, '{"finance:bank:read":true}');
@@ -565,7 +566,7 @@ DECLARE
 BEGIN
   PERFORM t_expect('ok: Role Manager create by company_admin (atoms it holds)', t_dmlm(A, cadm, format(INSR, 'Team Lead', '{"ops:work-orders:read":true,"finance:ap:read":true}', C1, U03)), 'rows:1');
   PERFORM t_expect('ok: company_admin creates a role with admin:users + admin:roles (it holds both)', t_dmlm(A, cadm, format(INSR, 'Delegates', '{"admin:users":true,"admin:roles":true}', C1, U03)), 'rows:1');
-  PERFORM t_expect('ok: string-true of a HELD atom is fine', t_dmlm(A, cadm, format(INSR, 'StrTrue', '{"finance:ap:read":"true"}', C1, U03)), 'rows:1');
+  PERFORM t_denym('roles: string-true of a HELD atom is refused too (non-boolean)', t_dmlm(A, cadm, format(INSR, 'StrTrue', '{"finance:ap:read":"true"}', C1, U03)), 'true or false');
   PERFORM t_expect('ok: Office Admin creates a role within its own atoms', t_dmlm(A, offc, format(INSR, 'AP Clerk', '{"finance:ap:read":true,"ops:work-orders:read":true}', C1, U05)), 'rows:1');
   PERFORM t_expect('ok: admin:companies=false is not a grant', t_dmlm(A, offc, format(INSR, 'ExplicitFalse', '{"admin:companies":false,"ops:work-orders:read":true}', C1, U05)), 'rows:1');
   PERFORM t_expect('ok: unheld atom with value false is not a grant', t_dmlm(A, offc, format(INSR, 'NoBank', '{"finance:bank:read":false,"finance:ap:write":true}', C1, U05)), 'rows:1');
@@ -687,5 +688,163 @@ BEGIN
   -- deactivated holder of an admin:roles role cannot edit roles
   UPDATE erp_users SET is_active = false WHERE id = U05::uuid;
   PERFORM t_expect('edge: deactivated Office Admin cannot edit a role', t_dmlm(A, offc, format('UPDATE erp_roles SET name=%L WHERE id=%L', 'x', R1)), 'rows:0');
+END $$;
+ROLLBACK;
+-- ═══ review round 2: puppet inserts, shared users, symmetric ceiling, non-boolean values, info leaks ═══
+BEGIN;
+DO $$
+DECLARE
+  ops uuid := '11111111-1111-1111-1111-111111111111'; viewr uuid := '22222222-2222-2222-2222-222222222222';
+  cadm uuid := '33333333-3333-3333-3333-333333333333'; sup uuid := '44444444-4444-4444-4444-444444444444';
+  offc uuid := '55555555-5555-5555-5555-555555555555'; gone uuid := '66666666-6666-6666-6666-666666666666';
+  ops2 uuid := '77777777-7777-7777-7777-777777777777'; sup2 uuid := 'aaaa0008-0000-0000-0000-000000000008';
+  cadm2 uuid := '10101010-1010-1010-1010-101010101010'; mixed uuid := '11111111-aaaa-1111-1111-111111111111';
+  sp1 uuid := 'aaaa0011-0000-0000-0000-000000000011'; sp2 uuid := 'aaaa0012-0000-0000-0000-000000000012';
+  dual uuid := 'aaaa0013-0000-0000-0000-000000000013'; clnt uuid := 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+  C1 text := 'c1000000-0000-0000-0000-000000000001'; C2 text := 'c2000000-0000-0000-0000-000000000002';
+  U01 text := 'e0000000-0000-0000-0000-000000000001'; U02 text := 'e0000000-0000-0000-0000-000000000002'; U03 text := 'e0000000-0000-0000-0000-000000000003';
+  U04 text := 'e0000000-0000-0000-0000-000000000004'; U05 text := 'e0000000-0000-0000-0000-000000000005'; U06 text := 'e0000000-0000-0000-0000-000000000006';
+  U07 text := 'e0000000-0000-0000-0000-000000000007'; U08 text := 'e0000000-0000-0000-0000-000000000008'; U09 text := 'e0000000-0000-0000-0000-000000000009';
+  U10 text := 'e0000000-0000-0000-0000-000000000010'; U11 text := 'e0000000-0000-0000-0000-000000000011'; U12 text := 'e0000000-0000-0000-0000-000000000012';
+  U13 text := 'e0000000-0000-0000-0000-000000000013';
+  RO text := 'a0000000-0000-0000-0000-000000000001'; RV text := 'a0000000-0000-0000-0000-000000000002'; RA text := 'a0000000-0000-0000-0000-000000000003';
+  RS text := 'a0000000-0000-0000-0000-000000000004'; RF text := 'a0000000-0000-0000-0000-000000000005'; R1 text := 'a0000000-0000-0000-0000-000000000006';
+  R2 text := 'a0000000-0000-0000-0000-000000000007'; RD text := 'a0000000-0000-0000-0000-000000000008'; RB text := 'a0000000-0000-0000-0000-000000000009';
+  A text := 'authenticated';
+  INSU text := 'INSERT INTO erp_users (auth_user_id, full_name, email, is_active, company_id) VALUES (%L,%L,%L,true,%L)';
+BEGIN
+  PERFORM t_deny('r2-1: company admin cannot insert a profile for an arbitrary auth_user_id', t_dmlm(A, cadm, format(INSU, 'dddddddd-dddd-dddd-dddd-dddddddd0101', 'puppet', 'puppet@t.test', C1)));
+  PERFORM t_deny('r2-1: company admin of C2 cannot either', t_dmlm(A, cadm2, format(INSU, 'dddddddd-dddd-dddd-dddd-dddddddd0102', 'puppet2', 'puppet2@t.test', C2)));
+  PERFORM t_deny('r2-1: dual admin cannot either', t_dmlm(A, dual, format(INSU, 'dddddddd-dddd-dddd-dddd-dddddddd0103', 'puppet3', 'puppet3@t.test', C1)));
+  PERFORM t_expect('r2-1: no puppet exists, so the puppet self-modification chain cannot start', (SELECT count(*)::text FROM erp_users WHERE email LIKE 'puppet%'), '0');
+  PERFORM t_expect('r2-1: the arbitrary login is not staff', t_count(A, 'dddddddd-dddd-dddd-dddd-dddddddd0101'::uuid, 'SELECT 1 WHERE public.is_erp_staff()'), 'n:0');
+  PERFORM t_expect('r2-1: super admin can still insert', t_dmlm(A, sup, format(INSU, 'dddddddd-dddd-dddd-dddd-dddddddd0104', 'ok', 'ok@t.test', C1)), 'rows:1');
+END $$;
+ROLLBACK;
+
+BEGIN;
+DO $$
+DECLARE
+  ops uuid := '11111111-1111-1111-1111-111111111111'; viewr uuid := '22222222-2222-2222-2222-222222222222';
+  cadm uuid := '33333333-3333-3333-3333-333333333333'; sup uuid := '44444444-4444-4444-4444-444444444444';
+  offc uuid := '55555555-5555-5555-5555-555555555555'; gone uuid := '66666666-6666-6666-6666-666666666666';
+  ops2 uuid := '77777777-7777-7777-7777-777777777777'; sup2 uuid := 'aaaa0008-0000-0000-0000-000000000008';
+  cadm2 uuid := '10101010-1010-1010-1010-101010101010'; mixed uuid := '11111111-aaaa-1111-1111-111111111111';
+  sp1 uuid := 'aaaa0011-0000-0000-0000-000000000011'; sp2 uuid := 'aaaa0012-0000-0000-0000-000000000012';
+  dual uuid := 'aaaa0013-0000-0000-0000-000000000013'; clnt uuid := 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+  C1 text := 'c1000000-0000-0000-0000-000000000001'; C2 text := 'c2000000-0000-0000-0000-000000000002';
+  U01 text := 'e0000000-0000-0000-0000-000000000001'; U02 text := 'e0000000-0000-0000-0000-000000000002'; U03 text := 'e0000000-0000-0000-0000-000000000003';
+  U04 text := 'e0000000-0000-0000-0000-000000000004'; U05 text := 'e0000000-0000-0000-0000-000000000005'; U06 text := 'e0000000-0000-0000-0000-000000000006';
+  U07 text := 'e0000000-0000-0000-0000-000000000007'; U08 text := 'e0000000-0000-0000-0000-000000000008'; U09 text := 'e0000000-0000-0000-0000-000000000009';
+  U10 text := 'e0000000-0000-0000-0000-000000000010'; U11 text := 'e0000000-0000-0000-0000-000000000011'; U12 text := 'e0000000-0000-0000-0000-000000000012';
+  U13 text := 'e0000000-0000-0000-0000-000000000013';
+  RO text := 'a0000000-0000-0000-0000-000000000001'; RV text := 'a0000000-0000-0000-0000-000000000002'; RA text := 'a0000000-0000-0000-0000-000000000003';
+  RS text := 'a0000000-0000-0000-0000-000000000004'; RF text := 'a0000000-0000-0000-0000-000000000005'; R1 text := 'a0000000-0000-0000-0000-000000000006';
+  R2 text := 'a0000000-0000-0000-0000-000000000007'; RD text := 'a0000000-0000-0000-0000-000000000008'; RB text := 'a0000000-0000-0000-0000-000000000009';
+  A text := 'authenticated';
+BEGIN
+  -- U10 'mixed': home C1, administered by cadm in C1 but also an ops member of C2 (cadm is not admin there)
+  PERFORM t_expect('r2-2: admin of C1 cannot deactivate a user who also belongs to C2', t_dmlm(A, cadm, format('UPDATE erp_users SET is_active=false WHERE id=%L', U10)), 'rows:0');
+  PERFORM t_expect('r2-2: ... nor rename him', t_dmlm(A, cadm, format('UPDATE erp_users SET full_name=%L WHERE id=%L', 'x', U10)), 'rows:0');
+  PERFORM t_expect('r2-2: ... nor force a password change', t_dmlm(A, cadm, format('UPDATE erp_users SET force_password_change=true WHERE id=%L', U10)), 'rows:0');
+  PERFORM t_expect('r2-2: ... nor move his company', t_dmlm(A, cadm, format('UPDATE erp_users SET company_id=%L WHERE id=%L', C1, U10)), 'rows:0');
+  PERFORM t_expect('r2-2: admin of C2 cannot touch him either (home is C1)', t_dmlm(A, cadm2, format('UPDATE erp_users SET is_active=false WHERE id=%L', U10)), 'rows:0');
+  PERFORM t_expect('r2-2: dual admin of both can', t_dmlm(A, dual, format('UPDATE erp_users SET is_active=false WHERE id=%L', U10)), 'rows:1');
+  PERFORM t_expect('r2-2: reactivation by the wrong admin (C1 only) is refused', t_dmlm(A, cadm, format('UPDATE erp_users SET is_active=true WHERE id=%L', U10)), 'rows:0');
+  PERFORM t_expect('r2-2: ... still inactive', (SELECT is_active::text FROM erp_users WHERE id=U10::uuid), 'false');
+  PERFORM t_expect('r2-2: a super can reactivate', t_dmlm(A, sup, format('UPDATE erp_users SET is_active=true WHERE id=%L', U10)), 'rows:1');
+  PERFORM t_denym('r2-2: mixed (admin of C1 only) cannot rename himself either: self-service stays limited when he belongs to a company he does not administer', t_dmlm(A, mixed, format('UPDATE erp_users SET full_name=%L WHERE id=%L', 'x', U10)), 'only last_login');
+  PERFORM t_expect('r2-2: dual (member of C1 and C2) is protected from admins of one company', t_dmlm(A, cadm2, format('UPDATE erp_users SET full_name=%L WHERE id=%L', 'x', U13)), 'rows:0');
+  PERFORM t_expect('r2-2: a user living in C1 only is still manageable by the C1 admin', t_dmlm(A, cadm, format('UPDATE erp_users SET is_active=false WHERE id=%L', U01)), 'rows:1');
+  PERFORM t_expect('r2-2: mass update by a C1 admin skips shared users', t_dmlm(A, cadm, format('UPDATE erp_users SET last_login=now() WHERE company_id=%L AND id NOT IN (%L,%L)', C1, U04, U08)), 'rows:6');
+END $$;
+ROLLBACK;
+
+BEGIN;
+DO $$
+DECLARE
+  ops uuid := '11111111-1111-1111-1111-111111111111'; viewr uuid := '22222222-2222-2222-2222-222222222222';
+  cadm uuid := '33333333-3333-3333-3333-333333333333'; sup uuid := '44444444-4444-4444-4444-444444444444';
+  offc uuid := '55555555-5555-5555-5555-555555555555'; gone uuid := '66666666-6666-6666-6666-666666666666';
+  ops2 uuid := '77777777-7777-7777-7777-777777777777'; sup2 uuid := 'aaaa0008-0000-0000-0000-000000000008';
+  cadm2 uuid := '10101010-1010-1010-1010-101010101010'; mixed uuid := '11111111-aaaa-1111-1111-111111111111';
+  sp1 uuid := 'aaaa0011-0000-0000-0000-000000000011'; sp2 uuid := 'aaaa0012-0000-0000-0000-000000000012';
+  dual uuid := 'aaaa0013-0000-0000-0000-000000000013'; clnt uuid := 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+  C1 text := 'c1000000-0000-0000-0000-000000000001'; C2 text := 'c2000000-0000-0000-0000-000000000002';
+  U01 text := 'e0000000-0000-0000-0000-000000000001'; U02 text := 'e0000000-0000-0000-0000-000000000002'; U03 text := 'e0000000-0000-0000-0000-000000000003';
+  U04 text := 'e0000000-0000-0000-0000-000000000004'; U05 text := 'e0000000-0000-0000-0000-000000000005'; U06 text := 'e0000000-0000-0000-0000-000000000006';
+  U07 text := 'e0000000-0000-0000-0000-000000000007'; U08 text := 'e0000000-0000-0000-0000-000000000008'; U09 text := 'e0000000-0000-0000-0000-000000000009';
+  U10 text := 'e0000000-0000-0000-0000-000000000010'; U11 text := 'e0000000-0000-0000-0000-000000000011'; U12 text := 'e0000000-0000-0000-0000-000000000012';
+  U13 text := 'e0000000-0000-0000-0000-000000000013';
+  RO text := 'a0000000-0000-0000-0000-000000000001'; RV text := 'a0000000-0000-0000-0000-000000000002'; RA text := 'a0000000-0000-0000-0000-000000000003';
+  RS text := 'a0000000-0000-0000-0000-000000000004'; RF text := 'a0000000-0000-0000-0000-000000000005'; R1 text := 'a0000000-0000-0000-0000-000000000006';
+  R2 text := 'a0000000-0000-0000-0000-000000000007'; RD text := 'a0000000-0000-0000-0000-000000000008'; RB text := 'a0000000-0000-0000-0000-000000000009';
+  A text := 'authenticated';
+  UPDR text := 'UPDATE erp_roles SET name=%L, permissions=%L, updated_at=now() WHERE id=%L';
+  INSR text := 'INSERT INTO erp_roles (name, permissions, company_id, created_by) VALUES (%L,%L,%L,%L)';
+  RA5 text := 'a0000000-0000-0000-0000-0000000000f5';
+BEGIN
+  INSERT INTO erp_roles (id, name, company_id, permissions) VALUES (RA5::uuid, 'Admins', C1::uuid, '{"admin:users":true,"admin:settings":true,"ops:work-orders:read":true,"finance:bank:read":true}');
+  PERFORM t_denym('r2-3: Office Admin (admin:roles only) cannot REMOVE admin:users from an admin role', t_dmlm(A, offc, format(UPDR, 'Admins', '{"admin:settings":true,"ops:work-orders:read":true,"finance:bank:read":true}', RA5)), 'admin:users');
+  PERFORM t_denym('r2-3: ... nor flip it to false', t_dmlm(A, offc, format(UPDR, 'Admins', '{"admin:users":false,"admin:settings":true,"ops:work-orders:read":true,"finance:bank:read":true}', RA5)), 'admin:users');
+  PERFORM t_denym('r2-3: ... nor remove finance:bank:read it does not hold', t_dmlm(A, offc, format(UPDR, 'Admins', '{"admin:users":true,"admin:settings":true,"ops:work-orders:read":true}', RA5)), 'finance:bank:read');
+  PERFORM t_denym('r2-3: ... nor wipe all atoms', t_dmlm(A, offc, format(UPDR, 'Admins', '{}', RA5)), 'admin:');
+  PERFORM t_expect('r2-3: Office Admin may remove an atom it holds (ops:work-orders:read)', t_dmlm(A, offc, format(UPDR, 'Admins', '{"admin:users":true,"admin:settings":true,"finance:bank:read":true}', RA5)), 'rows:1');
+  PERFORM t_expect('r2-3: company_admin removes admin:settings (holds it)', t_dmlm(A, cadm, format(UPDR, 'Admins', '{"admin:users":true,"finance:bank:read":true}', RA5)), 'rows:1');
+  PERFORM t_denym('r2-3: company_admin cannot remove finance:bank:read it does not hold', t_dmlm(A, cadm, format(UPDR, 'Admins', '{"admin:users":true}', RA5)), 'finance:bank:read');END $$;
+ROLLBACK;
+BEGIN;
+DO $$
+DECLARE
+  ops uuid := '11111111-1111-1111-1111-111111111111'; viewr uuid := '22222222-2222-2222-2222-222222222222';
+  cadm uuid := '33333333-3333-3333-3333-333333333333'; sup uuid := '44444444-4444-4444-4444-444444444444';
+  offc uuid := '55555555-5555-5555-5555-555555555555'; gone uuid := '66666666-6666-6666-6666-666666666666';
+  ops2 uuid := '77777777-7777-7777-7777-777777777777'; sup2 uuid := 'aaaa0008-0000-0000-0000-000000000008';
+  cadm2 uuid := '10101010-1010-1010-1010-101010101010'; mixed uuid := '11111111-aaaa-1111-1111-111111111111';
+  sp1 uuid := 'aaaa0011-0000-0000-0000-000000000011'; sp2 uuid := 'aaaa0012-0000-0000-0000-000000000012';
+  dual uuid := 'aaaa0013-0000-0000-0000-000000000013'; clnt uuid := 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+  C1 text := 'c1000000-0000-0000-0000-000000000001'; C2 text := 'c2000000-0000-0000-0000-000000000002';
+  U01 text := 'e0000000-0000-0000-0000-000000000001'; U02 text := 'e0000000-0000-0000-0000-000000000002'; U03 text := 'e0000000-0000-0000-0000-000000000003';
+  U04 text := 'e0000000-0000-0000-0000-000000000004'; U05 text := 'e0000000-0000-0000-0000-000000000005'; U06 text := 'e0000000-0000-0000-0000-000000000006';
+  U07 text := 'e0000000-0000-0000-0000-000000000007'; U08 text := 'e0000000-0000-0000-0000-000000000008'; U09 text := 'e0000000-0000-0000-0000-000000000009';
+  U10 text := 'e0000000-0000-0000-0000-000000000010'; U11 text := 'e0000000-0000-0000-0000-000000000011'; U12 text := 'e0000000-0000-0000-0000-000000000012';
+  U13 text := 'e0000000-0000-0000-0000-000000000013';
+  RO text := 'a0000000-0000-0000-0000-000000000001'; RV text := 'a0000000-0000-0000-0000-000000000002'; RA text := 'a0000000-0000-0000-0000-000000000003';
+  RS text := 'a0000000-0000-0000-0000-000000000004'; RF text := 'a0000000-0000-0000-0000-000000000005'; R1 text := 'a0000000-0000-0000-0000-000000000006';
+  R2 text := 'a0000000-0000-0000-0000-000000000007'; RD text := 'a0000000-0000-0000-0000-000000000008'; RB text := 'a0000000-0000-0000-0000-000000000009';
+  A text := 'authenticated';
+  INSR text := 'INSERT INTO erp_roles (name, permissions, company_id, created_by) VALUES (%L,%L,%L,%L)';
+  UPDR text := 'UPDATE erp_roles SET name=%L, permissions=%L, updated_at=now() WHERE id=%L';
+BEGIN
+  PERFORM t_denym('r2-4: non-boolean value on an unheld atom refused (user_has_perm DoS)', t_dmlm(A, offc, format(INSR, 'DoS', '{"admin:users":"x"}', C1, U05)), 'true or false');
+  PERFORM t_denym('r2-4: non-boolean value on a held atom refused', t_dmlm(A, offc, format(INSR, 'DoS', '{"ops:work-orders:read":"x"}', C1, U05)), 'true or false');
+  PERFORM t_denym('r2-4: number refused', t_dmlm(A, offc, format(INSR, 'DoS', '{"ops:work-orders:read":1}', C1, U05)), 'true or false');
+  PERFORM t_denym('r2-4: null refused', t_dmlm(A, cadm, format(UPDR, 'C1 Custom', '{"ops:work-orders:read":null}', R1)), 'true or false');
+  PERFORM t_denym('r2-4: nested object refused', t_dmlm(A, cadm, format(UPDR, 'C1 Custom', '{"ops:work-orders:read":{"a":1}}', R1)), 'true or false');
+  PERFORM t_expect('r2-4: nothing was planted', (SELECT count(*)::text FROM erp_roles WHERE name='DoS'), '0');
+  PERFORM t_expect('r2-4: user_has_perm still evaluates for every holder', t_count(A, ops, 'SELECT 1 WHERE public.user_has_perm(''admin:users'') OR true'), 'n:1');
+  PERFORM t_expect('r2-4: a super may still write anything (service tooling)', t_dmlm(A, sup2, format(INSR, 'SuperAnything', '{"x":"y"}', C1, U08)), 'rows:1');
+  PERFORM t_expect('r2-4: booleans stay fine', t_dmlm(A, cadm, format(INSR, 'Fine', '{"ops:work-orders:read":true,"finance:bank:read":false}', C1, U03)), 'rows:1');
+
+  -- r2-5a user_is_super / role_is_super oracle limited to user admins
+  PERFORM t_expect('r2-5a: plain staff learns nothing about who is super', t_count(A, viewr, 'SELECT 1 WHERE public.d0d_user_is_super('''||U04||''')'), 'n:0');
+  PERFORM t_expect('r2-5a: ops learns nothing about super roles', t_count(A, ops, 'SELECT 1 WHERE public.d0d_role_is_super('''||RS||''')'), 'n:0');
+  PERFORM t_expect('r2-5a: Office Admin (no admin:users) learns nothing', t_count(A, offc, 'SELECT 1 WHERE public.d0d_user_is_super('''||U04||''')'), 'n:0');
+  PERFORM t_expect('r2-5a: a user admin can ask', t_count(A, cadm, 'SELECT 1 WHERE public.d0d_user_is_super('''||U04||''')'), 'n:1');
+  -- r2-5b roles select scope
+  PERFORM t_expect('r2-5b: C1 staff cannot read a C2 custom role', t_count(A, ops, 'SELECT 1 FROM erp_roles WHERE id='''||R2||''''), 'n:0');
+  PERFORM t_expect('r2-5b: C1 staff reads a C1 custom role', t_count(A, ops, 'SELECT 1 FROM erp_roles WHERE id='''||R1||''''), 'n:1');
+  PERFORM t_expect('r2-5b: C1 staff reads global roles', t_count(A, ops, 'SELECT 1 FROM erp_roles WHERE company_id IS NULL'), 'n:4');
+  PERFORM t_expect('r2-5b: C2 staff reads the C2 role, not the C1 one', t_count(A, ops2, 'SELECT 1 FROM erp_roles WHERE id='''||R2||''''), 'n:1');
+  PERFORM t_expect('r2-5b: ... not the C1 one', t_count(A, ops2, 'SELECT 1 FROM erp_roles WHERE company_id='''||C1||''''), 'n:0');
+  PERFORM t_expect('r2-5b: member of both companies reads both', t_count(A, mixed, 'SELECT 1 FROM erp_roles'), 'n:11');
+  PERFORM t_expect('r2-5b: super reads everything', t_count(A, sup2, 'SELECT 1 FROM erp_roles'), 'n:11');
+  PERFORM t_expect('r2-5b: Role Manager / Edit Permissions dropdown (global + chosen company) for a C1 admin', t_count(A, cadm, 'SELECT id, name FROM erp_roles WHERE company_id IS NULL OR company_id='''||C1||''''), 'n:10');
+  PERFORM t_expect('r2-5b: ... dropdown for a super choosing C2', t_count(A, sup, 'SELECT id, name FROM erp_roles WHERE company_id IS NULL OR company_id='''||C2||''''), 'n:5');
+  PERFORM t_expect('r2-5b: client-like still reads nothing', t_count(A, clnt, 'SELECT 1 FROM erp_roles'), 'n:0');
+
+  -- r2-6 formerly "equivalent" mutants
+  PERFORM t_deny('r2-6: even a super cannot flip a custom role to is_system=true', t_dmlm(A, sup, format('UPDATE erp_roles SET is_system=true WHERE id=%L', R1)));
+  PERFORM t_deny('r2-6: even a super cannot null a colleague company_id', t_dmlm(A, sup, format('UPDATE erp_users SET company_id=NULL WHERE id=%L', U01)));
 END $$;
 ROLLBACK;

@@ -107,7 +107,7 @@ BEGIN
   res := res || pg_temp.t('probe admin renames the probe viewer (legit)', pa_auth, A, format('UPDATE erp_users SET full_name=%L WHERE id=%L', 'zz renamed', pv), 'rows:1') || E'\n';
   res := res || pg_temp.t('probe admin re-roles the probe viewer to operations_tech (legit)', pa_auth, A, format('UPDATE erp_user_company_roles SET role_id=%L, updated_at=now() WHERE user_id=%L AND company_id=%L', r_ops, pv, qql), 'rows:1') || E'\n';
   res := res || pg_temp.t('probe admin sets overrides on the probe viewer (legit)', pa_auth, A, format('UPDATE erp_user_company_roles SET permission_overrides=%L WHERE user_id=%L AND company_id=%L', '{"finance:ap:read":true}', pv, qql), 'rows:1') || E'\n';
-  res := res || pg_temp.t('probe admin inserts a profile in own company (design allows)', pa_auth, A, format('INSERT INTO erp_users (auth_user_id, full_name, email, is_active, company_id) VALUES (gen_random_uuid(),%L,%L,true,%L)', 'zz', 'zz-z@invalid.test', qql), 'rows:1') || E'\n';
+  res := res || pg_temp.t('probe admin CANNOT insert a profile (puppet / client takeover)', pa_auth, A, format('INSERT INTO erp_users (auth_user_id, full_name, email, is_active, company_id) VALUES (gen_random_uuid(),%L,%L,true,%L)', 'zz', 'zz-z@invalid.test', qql), 'deny') || E'\n';
   res := res || pg_temp.t('probe admin CANNOT assign the probe viewer super_admin', pa_auth, A, format('UPDATE erp_user_company_roles SET role_id=%L WHERE user_id=%L AND company_id=%L', r_super, pv, qql), 'deny') || E'\n';
   res := res || pg_temp.t('probe admin CANNOT make self super_admin', pa_auth, A, format('UPDATE erp_user_company_roles SET role_id=%L WHERE user_id=%L AND company_id=%L', r_super, pa, qql), 'rows:0') || E'\n';
   res := res || pg_temp.t('probe admin CANNOT edit own overrides', pa_auth, A, format('UPDATE erp_user_company_roles SET permission_overrides=%L WHERE user_id=%L AND company_id=%L', '{"admin:roles":true}', pa, qql), 'rows:0') || E'\n';
@@ -133,7 +133,11 @@ BEGIN
   res := res || pg_temp.t('probe viewer CANNOT insert a profile', pv_auth, A, format('INSERT INTO erp_users (auth_user_id, full_name, email, is_active, company_id) VALUES (gen_random_uuid(),%L,%L,true,%L)', 'x', 'zz-w@invalid.test', qql), 'deny') || E'\n';
   res := res || pg_temp.t('probe viewer CANNOT rename self', pv_auth, A, format('UPDATE erp_users SET full_name=%L WHERE id=%L', 'x', pv), 'deny') || E'\n';
   res := res || pg_temp.t('probe viewer CAN write own last_login', pv_auth, A, format('UPDATE erp_users SET last_login=now() WHERE id=%L', pv), 'rows:1') || E'\n';
-  -- ── super admins keep full ability ──
+  res := res || pg_temp.t('vikash cannot learn who is super', vikash, A, format('SELECT 1 WHERE public.d0d_user_is_super(%L)', b_id), 'n:0') || E'\n';
+  IF oth IS NOT NULL THEN
+    res := res || pg_temp.t('vikash cannot read another company custom roles', vikash, A, format('SELECT 1 FROM erp_roles WHERE company_id=%L', oth), 'n:0') || E'\n';
+  END IF;
+  res := res || pg_temp.t('brandon inserts a profile (super only)', brandon, A, format('INSERT INTO erp_users (auth_user_id, full_name, email, is_active, company_id) VALUES (gen_random_uuid(),%L,%L,true,%L)', 'zz', 'zz-s@invalid.test', qql), 'rows:1') || E'\n';  -- ── super admins keep full ability ──
   res := res || pg_temp.t('brandon renames the probe viewer', brandon, A, format('UPDATE erp_users SET full_name=%L WHERE id=%L', 'zz b', pv), 'rows:1') || E'\n';
   res := res || pg_temp.t('vanessa renames the probe viewer', vanessa, A, format('UPDATE erp_users SET full_name=%L WHERE id=%L', 'zz v', pv), 'rows:1') || E'\n';
   res := res || pg_temp.t('brandon deactivates the probe viewer', brandon, A, format('UPDATE erp_users SET is_active=false WHERE id=%L', pv), 'rows:1') || E'\n';
