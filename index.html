@@ -7302,25 +7302,47 @@ async function saveNewUser() {
   }
 }
 
+// D0b: staff access changes go through the erp-user-access edge function, which also bans/unbans the Supabase login.
+// (Flipping erp_users.is_active or deleting the row alone left a working login behind.)
+async function callUserAccess(authUserId, action) {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/erp-user-access`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${_accessToken}`,
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_KEY,
+    },
+    body: JSON.stringify({ auth_user_id: authUserId, action }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.error) throw new Error(data.error || 'Request failed (' + res.status + ')');
+  return data;
+}
+
 async function toggleUserActive(authUserId, currentlyActive) {
   const action = currentlyActive ? 'Deactivate' : 'Activate';
-  const ok = await showConfirm(`${action} this user?`, `${action} User`, action);
+  const detail = currentlyActive ? ' They will be signed out and will not be able to log in.' : '';
+  const ok = await showConfirm(`${action} this user?${detail}`, `${action} User`, action);
   if (!ok) return;
   try {
-    await sbPatchWhere('erp_users', `auth_user_id=eq.${authUserId}`, { is_active: !currentlyActive });
+    await callUserAccess(authUserId, currentlyActive ? 'deactivate' : 'activate');
     showToast(`User ${action.toLowerCase()}d.`, 'success');
-    await loadUserManagement();
   } catch(e) { showToast('Failed: ' + e.message, 'error'); }
+  await loadUserManagement();   // reload either way: a partial result may have changed the row
 }
 
 async function removeUser(authUserId, name) {
-  const ok = await showConfirm(`Permanently remove "${name}" from this ERP? This cannot be undone.`, 'Remove User', 'Remove');
+  const ok = await showConfirm(`Permanently remove "${name}" from this ERP? Their login will be disabled. This cannot be undone.`, 'Remove User', 'Remove');
   if (!ok) return;
   try {
-    await sbDeleteWhere('erp_users', `auth_user_id=eq.${authUserId}`);
-    showToast(`User "${name}" removed.`, 'success');
-    await loadUserManagement();
+    const r = await callUserAccess(authUserId, 'remove');
+    if (r.removed === false) {
+      showToast(`"${name}" can no longer log in. Their profile was kept (inactive) because existing records still reference it.`, 'info');
+    } else {
+      showToast(`User "${name}" removed.`, 'success');
+    }
   } catch(e) { showToast('Failed: ' + e.message, 'error'); }
+  await loadUserManagement();
 }
 
 function renderJobCostingPlaceholder() {
