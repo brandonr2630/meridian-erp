@@ -1,10 +1,10 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-20 · Session 55*
+*Last updated: 2026-10-20 · Session 55 (D0a applied)*
 
 ---
 
-## Session 55 — D0a staff-only hardening (built and tested, NOT applied to prod)
+## Session 55 — D0a staff-only hardening (built, tested, APPLIED to prod 2026-10-20)
 
 **Date:** 2026-10-20 · Spec: `docs/specs/project-portal/phase-d-client-portal.md` (D0)
 
@@ -16,11 +16,19 @@
 
 **Test evidence (2026-10-20):** 9 checks prove the holes exist before; 195 checks after (all 22 tables as client/removed/anon/staff, storage as seven roles, logos, function ACLs and `search_path`, Q-C/Q-R inventory gates); 8 after rollback; idempotent re-apply; re-apply after rollback; mutation check: breaking the migration three ways (permissive staff policy, missing company-prefix check, missing staff check) is caught each time.
 
-**Limits:** the stub is not Supabase (storage.objects is a plain table; auth.uid() reads a setting). **Not applied to prod.** Behavior to be aware of: the Office Admin role (1 active user) lacks `ops:work-orders:read/write`, so that user loses drawing view/upload (they cannot open Work Orders today either); staff are NOT company-scoped on the 22 tables until D0c (restrictive policy only removes non-staff). D0b (edge function that bans removed staff) is still to do. Deploy now excludes `supabase/` along with `docs/specs/` and `scripts/`.
+**Limits:** the stub is not Supabase (storage.objects is a plain table; auth.uid() reads a setting). Behavior to be aware of: the Office Admin role (1 active user) lacked `ops:work-orders:read/write`, so that user lost drawing view/upload (see Applied below); staff are NOT company-scoped on the 22 tables until D0c (restrictive policy only removes non-staff). D0b (edge function that bans removed staff) is still to do. Deploy now excludes `supabase/` along with `docs/specs/` and `scripts/`.
 
 **Security review fixes (same session):** the first draft kept a legacy-key storage fallback that matched `job_drawings.storage_key`; any company member can write that table, so a member could plant a row naming another company's object and read (or, as admin, delete) it. A first fix limited it to non-UUID keys but still trusted client-writable rows. **Final design: no fallback at all.** Drawing access is decided by the key's company prefix alone, and step 0 of the migration aborts (changing nothing) if any existing `job-drawings` object does not follow `<company_id>/<job_id>/...` (live check 2026-10-20: 0 of 1). Covered by 'IDOR' tests (they failed against the fallback) and an abort test; 195 checks pass after, plus rollback and re-apply. **Follow-up (Phase B guard / D0c):** also enforce that `job_drawings.storage_key` starts with `company_id/` on INSERT/UPDATE.
 
-**Before applying to prod:** run `Q-S1` and the drawing atom-coverage query (Phase D spec), confirm the migration role can create policies on `storage.objects` (the existing drawing policies were created that way), then apply, then verify as a real `operations_tech` and `viewer` login (open/save a work order, upload and view a drawing PDF, Job Config).
+**Applied to prod 2026-10-20** (migration `d0a_staff_only_storage`, via Supabase `apply_migration`, single transaction; the migration role could create policies on `storage.objects`). Pre-flight: 0 non-conforming drawing keys, 0 key/company mismatches, all 4 auth users have an active `erp_users` row.
+
+**Live verification (simulated identities in rolled-back transactions, no writes):** the 3 staff with work-order permissions (2 super_admin, 1 operations_tech) see exactly what they saw before (13 jobs, 160 labour entries, 11 employees, 55 config_materials, the 1 drawing); a client-shaped user with no staff row sees 0 everywhere and `is_erp_staff()` is false; anon sees 0 jobs and `next_job_no()` is denied (42501); a client calling `next_job_no()` gets `forbidden`. Inventory gates: Q-R 0, 44 `d0_*` policies on the public tables, 4 new + 2 restrictive storage policies and 0 identity-free permissive storage policies, all 6 definer functions pin `search_path` with no PUBLIC/anon execute, audit index present.
+
+**Office Admin:** role `Office Admin` (company QQL, 1 active user) was granted `ops:work-orders:read` only (before: `finance:ap:read`, `finance:ap:write`, `sales:vendors:write`). Verified: sees the 1 drawing, cannot upload (42501) or delete, still sees 13 jobs. Side effect: that user now sees the Work Orders section. Undo: remove the `ops:work-orders:read` key from that role's `permissions`.
+
+**Rollback:** `supabase/rollbacks/202610200900_d0a_down.sql` (tested).
+
+**Still to do:** (1) real-login check by the owner as `operations_tech` and `viewer` (open/save a work order, upload and view a drawing PDF, Job Config); (2) owner dashboard: turn **Confirm email ON** (currently off; all 4 users already confirmed; sign-ups, anonymous sign-ins and manual linking are off as intended) and confirm Secure email/password change and min password length 12; (3) D0b edge function (ban removed/deactivated staff); (4) D0c per-family scoping; (5) follow-up: enforce `job_drawings.storage_key` starts with `company_id/` on INSERT/UPDATE (Phase B guard or D0c); (6) Phase A. Note: the advisor warning 'anonymous access policies' (lint 0012) lists many tables including untouched ones; it reflects policy shape, not the anonymous sign-in setting, and clears as D0c scopes policies.
 
 ---
 
