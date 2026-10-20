@@ -1621,6 +1621,8 @@ body {
 .profit-indicator.warn    { color:var(--amber); font-weight:600; font-style:normal; }
 .profit-indicator.danger  { color:var(--red);   font-weight:600; font-style:normal; }
 .jc-readonly { pointer-events:none; opacity:.75; }
+/* read-only ROLE (no ops:work-orders:write): the form is inert but the toolbar (back to list, search, print) must stay usable */
+.jc-form-wrap.jc-ro-role .jc-toolbar { pointer-events:auto; }
 .jc-sri { padding:9px 14px; cursor:pointer; border-bottom:1px solid var(--border); transition:background .1s; }
 .jc-sri:hover { background:var(--bg-3); }
 .jc-search-empty { padding:12px 14px; font-size:12px; color:var(--text-3); text-align:center; }
@@ -3261,6 +3263,7 @@ body.light .global-search-results, body.light .split-btn-menu {
             <span class="jc-last-saved" id="jc-last-saved">Not yet saved</span>
           </div>
           <!-- Lock banner -->
+          <div class="jc-lock-banner" id="jc-ro-banner">👁 Read-only access: you can view work orders but not change them.</div>
           <div class="jc-lock-banner" id="jc-lock-banner">
             🔒 This job is locked (Invoiced / Closed). View only.
             <button class="btn btn-outline btn-sm" style="margin-left:8px;" onclick="jcAdminUnlock()">Admin Unlock</button>
@@ -7363,6 +7366,7 @@ let jcConfig = { labour:[], equipment:[], tasks:[], materials:[], consumables:[]
 
 // ── ENTRY POINTS ─────────────────────────────────────────────────
 async function loadJobCards() {
+  jcApplyWriteAccess();
   await jcLoadConfig();
   jcOpenDashboard();
   await jcLoadDashboard();
@@ -7984,6 +7988,7 @@ function jcOpenDashboard() {
   document.getElementById('jc-float-pill')?.classList.remove('show');
 }
 function jcOpenForm() {
+  jcApplyWriteAccess();
   document.getElementById('jc-dashboard').classList.remove('active');
   document.getElementById('jc-form-wrap').classList.add('active');
 }
@@ -8188,7 +8193,7 @@ async function jcTaskSet(id, field, raw) {
     while (cur && hops++ < 100) { if (cur === id) { showToast('That would create a circular dependency.', 'warn'); jcRenderTasks(); return; } cur = jcTasks.find(x => x.id === cur)?.depends_on; }
   }
   try {
-    await sbPatch('job_tasks', id, patch);
+    await sbPatchChecked('job_tasks', id, patch);
     Object.assign(t, patch);
     if (field === 'task_name' || field === 'progress' || patch.end_date !== undefined && field === 'start_date') jcRenderTasks(); else jcRenderSchedGantt();
   } catch (e) { showToast('Failed to save task: ' + (e.message || e), 'error'); jcLoadTasks(); }
@@ -8359,6 +8364,7 @@ async function jcFetchNewJobNo() {
 
 // ── NEW JOB ──────────────────────────────────────────────────────
 async function jcNewJob() {
+  if (jcDenyIfReadOnly()) return;
   if (jcIsDirty) {
     const ok = await showConfirm('You have unsaved changes. Start a new work order anyway?', 'Unsaved Changes', 'Discard & New');
     if (!ok) return;
@@ -8404,6 +8410,7 @@ function jcResetForm() {
 
 // ── SAVE ─────────────────────────────────────────────────────────
 async function jcSaveJob() {
+  if (jcDenyIfReadOnly()) return;
   if (!currentUser) { showToast('Not logged in.', 'warn'); return; }
   try {
     showToast('Saving…', 'info');
@@ -8469,7 +8476,7 @@ async function jcSaveJobData(data, jobId) {
   };
   let savedId = jobId;
   if (savedId) {
-    await sbPatch('jobs', savedId, jobRecord);
+    await sbPatchChecked('jobs', savedId, jobRecord);
   } else {
     const rows = await sbPost('jobs', jobRecord);
     savedId = rows[0].id;
@@ -8682,6 +8689,7 @@ async function jcDeleteJob() {
 
 // ── DUPLICATE ─────────────────────────────────────────────────────
 async function jcDuplicateJob() {
+  if (jcDenyIfReadOnly()) return;
   if (jcIsDirty) {
     const ok = await showConfirm('Duplicate without saving current changes?', 'Unsaved Changes', 'Duplicate Anyway', false);
     if (!ok) return;
@@ -8842,10 +8850,34 @@ async function jcConfirmLockStatus(btn, label) {
   const ok = await showConfirm(`Set status to "${label}"? This will lock the work order.`, `Set Status: ${label}`, `Set ${label}`);
   if (ok) jcSetStatus(btn);
 }
+// D0c-UI:begin — the database now refuses work-order writes without ops:work-orders:write, so the screen says so up front
+const jcIsReadOnlyRole = () => !can('ops:work-orders:write');
+function jcDenyIfReadOnly() {
+  if (!jcIsReadOnlyRole()) return false;
+  showToast('You have read-only access to work orders.', 'warn');
+  return true;
+}
+function jcApplyWriteAccess() {
+  const ro = jcIsReadOnlyRole();
+  document.querySelectorAll('[onclick="jcNewJob()"], [onclick="jcSaveJob()"], [onclick="jcDuplicateJob()"]')
+    .forEach(el => { el.style.display = ro ? 'none' : ''; });
+  document.getElementById('jc-ro-banner')?.classList.toggle('show', ro);
+  document.getElementById('jc-form-wrap')?.classList.toggle('jc-ro-role', ro);
+  if (ro) document.getElementById('jc-form-wrap')?.classList.add('jc-readonly');
+  return ro;
+}
+// PATCH returns the updated rows (Prefer: return=representation). An update the database refuses (RLS) comes back as HTTP 200 with
+// an empty list, which looks like success; treat it as the failure it is.
+async function sbPatchChecked(table, id, body) {
+  const rows = await sbPatch(table, id, body);
+  if (!Array.isArray(rows) || rows.length === 0) throw new Error('The change was not saved: you may not have permission, or the record no longer exists.');
+  return rows;
+}
+// D0c-UI:end
 function jcSetLocked(lock) {
   jcIsLocked = lock;
   document.getElementById('jc-lock-banner')?.classList.toggle('show', lock);
-  if (lock && !jcAdminCostUnlocked) document.getElementById('jc-form-wrap')?.classList.add('jc-readonly');
+  if ((lock && !jcAdminCostUnlocked) || jcIsReadOnlyRole()) document.getElementById('jc-form-wrap')?.classList.add('jc-readonly');
   else document.getElementById('jc-form-wrap')?.classList.remove('jc-readonly');
 }
 function jcSetCategory(cat, btn) {
