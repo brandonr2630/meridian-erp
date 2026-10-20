@@ -989,8 +989,8 @@ DECLARE ops uuid := '11111111-1111-1111-1111-111111111111'; viewr uuid := '22222
 BEGIN
   SELECT count(*)::text INTO n1p FROM job_phases WHERE company_id = 'c1000000-0000-0000-0000-000000000001';
   SELECT count(*)::text INTO n1l FROM job_task_links WHERE company_id = 'c1000000-0000-0000-0000-000000000001';
-  PERFORM t_expect('scope: unqualified UPDATE of phases touches only the caller company rows', t_dml('authenticated', ops, 'UPDATE job_phases SET sort_order = sort_order'), 'rows:' || n1p);
-  PERFORM t_expect('scope: unqualified UPDATE of links touches only the caller company rows', t_dml('authenticated', ops, 'UPDATE job_task_links SET lag_days = lag_days'), 'rows:' || n1l);
+  PERFORM t_expect('scope: unqualified UPDATE of phases touches only the caller company rows', t_dml('authenticated', ops, 'UPDATE job_phases SET sort_order = 5'), 'rows:' || n1p);
+  PERFORM t_expect('scope: unqualified UPDATE of links touches only the caller company rows', t_dml('authenticated', ops, 'UPDATE job_task_links SET lag_days = 2'), 'rows:' || n1l);
   PERFORM t_expect('scope: unqualified UPDATE by a viewer touches nothing (phases)', t_dml('authenticated', viewr, 'UPDATE job_phases SET sort_order = sort_order'), 'rows:0');
   PERFORM t_expect('scope: unqualified UPDATE by a viewer touches nothing (links)', t_dml('authenticated', viewr, 'UPDATE job_task_links SET lag_days = lag_days'), 'rows:0');
   PERFORM t_expect('scope: a phase cannot be moved to another company by an unqualified UPDATE',
