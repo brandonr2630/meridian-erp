@@ -23,6 +23,47 @@
 ---
 
 ## Session 60 — create-erp-user v8 DEPLOYED; company-scoped user-admin functions v9 / v4 DEPLOYED
+---
+
+## Session 63 — Phase A KPI strip + baseline lock UI (NOT applied; needs the SQL migration)
+
+**Date:** 2026-10-20. Branch `feat/phase-a-ui-kpi` (stacked on `feat/phase-a-compute`). One block `// ── SCHEDULE KPI ──` ... `// ── END SCHEDULE KPI ──` above the compute block, one CSS block `/* schedule-kpi:begin */`, and the Schedule card now has `<div id="jc-sched-kpis">` above the bar (legacy `#jc-sched-overall` kept, hidden).
+
+- **Entry point** `jcRenderSchedKpis()` (never throws; the task loader/table agent must call it after every load/edit). Reads `jcTasks`, `jcSchedPhases`, `jcSchedLinks`, `jcCurrentJobId` at call time and the job status / due date from the form (`jcSchedJobCtx()`), so it must also be called when the due date or status changes.
+- **Tiles:** Overall progress (bar + planned marker) and Schedule status pill with "Handover forecast .. · due .. (+N d)", all from `jcSchedCompute`.
+- **Baseline:** caption from max `baseline_locked_at` plus the latest `job_audit_log` baseline row for the name (cached). Button (`ops:work-orders:approve`, not read-only, saved job, a dated task): first lock = confirm dialog, re-baseline = inline mandatory reason. Calls RPC `lock_job_baseline(p_job_id, p_reason)` via `sb('rpc/...')`; a missing function shows "Baseline locking is not available yet".
+- **Not applied / not verified:** the RPC does not exist in prod until the SQL migration leaf lands, so the button cannot be exercised end to end; no real-browser run behind the login (only a static render of the tiles in dark and light themes).
+- **Tests:** `node --test scripts/tests/ui/schedule-kpi.test.mjs` (30) and `node scripts/tests/ui/schedule-kpi-mutate.mjs` (31/31 caught).
+---
+
+## Session 64 — Phase A custom Gantt renderer (UI only; reads the new columns, needs the SQL migration for phases/links)
+
+**Date:** 2026-10-20. Branch `feat/phase-a-ui-gantt` (stacked on `feat/phase-a-compute`). Replaces the frappe-gantt chart in the per-job "Schedule & Tasks" card with a dependency-free renderer in ONE block of `index.html`, `// ── SCHEDULE GANTT RENDERER ──` ... `// ── END SCHEDULE GANTT RENDERER ──`, directly below `// ── END SCHEDULE COMPUTE ──`, plus one CSS block `/* schedule-gantt:begin */ ... end`. The only other edit: `jcRenderSchedGantt()` now just calls `jcRenderJobGantt()` (same name, `#jc-sched-zoom` Day/Week/Month = 28/8/3 px per day). The portfolio Gantt and `jcLoadGanttLib` are untouched. No prod change, no SQL.
+
+- **Pure layout + dumb drawer:** `jcGanttLayout(model, opts)` returns plain data (rows with y, bars x/width, ghost, progress width, diamonds, TODAY x, axis ticks, connector paths); `jcGanttDraw(el, layout, ui)` only draws it with `createElementNS` / `textContent` / `setAttribute` (never innerHTML). `jcRenderJobGantt()` never throws (quiet "could not be drawn").
+- **Reads at call time:** `jcTasks`, `jcSchedPhases`, `jcSchedLinks` (undefined = []), the open job's due date/status from the live form (`#jc-f-due-date`, active `#jc-status-btns` button) with `jcDashData` as fallback. Critical colouring uses `jcSchedCompute().crit`; if compute throws it falls back to the cached `is_critical`. With no `jcSchedLinks` rows it builds links from the legacy `depends_on`.
+- **Behaviour:** phase headers (tint, chevron, derived span, weighted % from `phaseRollups`, thin rollup bar) + implicit Unphased group; ghost bar from baseline (35%, 4 px lower, thinner); milestone diamonds (filled at 100, red outline when past today and incomplete); gold TODAY line above the bars (middle of today's local-date cell, flag in the sticky axis; scrolled into view on open / zoom change); critical-only connectors with a "Show all dependencies" toggle; hover tooltip incl. slip days and "Added after baseline". Collapse state lives in a module Set, reset when the job id changes, kept across redraws together with the scroll position.
+- **Deviations / choices:** the sticky date axis is its own small `<svg>` above the body `<svg>` (sticky cannot live inside one svg); left pane is `position:sticky; left:0` inside one scroll container so horizontal scroll moves only the timeline. Dates outside 1990..2100 count as bad data (row shows "unscheduled"). A task with only one date is "unscheduled". End before start draws the span between and flags it in the tooltip. The month name repeats about every 180 px in the axis so it stays readable when scrolled. Right padding leaves 240 px for a milestone label.
+- **Tests:** `node --test scripts/tests/ui/schedule-gantt.test.mjs` (43 tests: pure layout, fake-DOM drawer incl. XSS, entry point, static checks); `node scripts/tests/ui/schedule-gantt-mutate.mjs` breaks the block 50 ways and must catch all. Looked at in a real browser on a scratch page (outside the repo) at all three zooms; not yet seen inside the live ERP page (needs the migration + login).
+- **Next:** merge after the KPI strip and task-table branches; check the card once the migration is applied (a long job at Month zoom, many phases, narrow windows: the left pane is a fixed 320 px).
+---
+
+## Session 65 — Phase A task table + phases/links data layer (degrades without the migration)
+
+**Date:** 2026-10-20. Branch `feat/phase-a-ui-table` (stacked on `feat/phase-a-compute`). Staff UI leaf of Phase A in `index.html`: the Schedule card's data layer and task table. Block `// ── SCHEDULE TASK TABLE ──` ... `// ── END SCHEDULE TASK TABLE ──` sits directly above `jcLoadTasks()` (CSS: `/* schedule-table:begin */` block next to the `.jc-sched-*` rules); `jcLoadTasks/jcRenderTasks/jcAddTask/jcTaskSet/jcDeleteTask` were rewritten in place. Globals `jcSchedPhases` / `jcSchedLinks` are declared right after `jcTasks`.
+
+- **Degrades gracefully:** `jcLoadTasks` also reads `job_phases` and `job_task_links`; if either errors (tables not migrated yet) the card runs the v1 table (single `depends_on` select, no phase/milestone/weight/client columns, no `phase_id` in inserts, no `is_critical` writes) and shows a quiet notice. Nothing was run against prod.
+- **New columns:** Phase select, Milestone checkbox (sets end = start; weight field disabled), Weight (empty = NULL, placeholder = effective weight via `jcTaskWeight`), Predecessors dropdown (checkbox list; diff against `job_task_links`: adds POSTed first, removals DELETEd by id, first predecessor mirrored into `depends_on`; the DB "dependency cycle" error toasts and reverts), "Client" toggle per task and per phase (needs `ops:work-orders:approve` to enable; after a wording edit the server's row is merged and an "Unpublished by edit: re-publish" badge shows).
+- **Phases bar:** Apply template (only with no phases; ONE array POST, `JC_PHASE_TEMPLATES` default five, sort_order 10..50, `byJobType` empty), + Add phase, inline rename, up/down (rewrites sort_order with gaps of 10), delete (confirm; tasks fall to Unphased). Catalogue picker over `config_tasks` places a task via `categoryToPhase[category]`; unmapped categories are flagged in the picker. There was no existing schedule "add from catalogue" flow, so this picker is new. New tasks join the phase of the last row.
+- **Critical cache:** after load and every edit `jcSchedCompute` runs and `is_critical` is PATCHed for differing rows in at most two `sbPatchWhere` calls (writers only, silent on failure, never retried by itself). A very large diff could exceed URL limits (about 200 ids); not chunked.
+- **updated_at:** `job_tasks`, `job_phases`, `job_task_links` were added to `NO_UPDATED_AT` so the shared helpers stop sending a client `updated_at` (the migration's trigger owns it). Until the migration is applied `job_tasks.updated_at` is therefore no longer bumped by task edits.
+- **Edits to one task are serialised** (`jcSchedSerial`), so a slow earlier PATCH cannot overwrite a later one; Add Task / Apply template ignore double clicks.
+- **Contract with the other leaves:** after every load and edit `jcRenderSchedKpis()` then `jcRenderSchedGantt()` are called, each guarded by `typeof === 'function'`.
+- **Tests:** `node --test scripts/tests/ui/schedule-table.test.mjs` (54) and `node scripts/tests/ui/schedule-table-mutate.mjs` (54/54 mutants caught). `scripts/tests/schedule/compute.test.mjs` gap check relaxed (other leaves add blocks between the compute block and `jcLoadTasks`).
+- **Not verified:** a real browser against a migrated database (no migration exists in prod); the picker/dropdown styling.
+---
+
+## Session 60 — create-erp-user v8 DEPLOYED; company-scoped user-admin functions built (v9 / v4, NOT deployed)
 
 **Date:** 2026-10-20. (1) `create-erp-user` v8 (real Auth error messages, PR #149) deployed to prod with `verify_jwt=false`; probed without credentials: OPTIONS 200, POST without token 401. (2) Closes the parked finding that both user functions authorised with the non-company-scoped `user_has_perm('admin:users')`.
 
