@@ -1544,6 +1544,21 @@ body {
 .jc-sched-overall { font-weight:700; color:var(--text-2); }
 .jc-sched-input { width:100%; min-width:0; }
 .jc-sched-empty { padding:16px; text-align:center; font-size:12px; color:var(--text-3); }
+/* schedule-table:begin */
+.jc-sched-notice { margin:6px 0; padding:6px 10px; font-size:12px; color:var(--text-2); background:var(--bg-3); border:1px solid var(--border); border-radius:var(--radius); }
+.jc-sched-phasebar { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:6px 0 8px; font-size:12px; }
+.jc-phase-chip { display:inline-flex; align-items:center; gap:4px; padding:2px 4px; background:var(--bg-3); border:1px solid var(--border); border-radius:var(--radius); }
+.jc-phase-chip .jc-phase-name { width:110px; padding:2px 6px; }
+.jc-chip-btn { background:transparent; border:0; color:var(--text-2); cursor:pointer; padding:0 3px; font-size:12px; }
+.jc-chip-btn:disabled { opacity:.3; cursor:default; }
+.jc-vis-lbl { display:inline-flex; align-items:center; gap:3px; color:var(--text-3); font-size:11px; }
+.jc-unpub { display:inline-block; margin-left:4px; padding:1px 6px; font-size:10px; font-weight:700; color:var(--amber); background:var(--amber-bg); border:1px solid var(--amber); border-radius:var(--radius); }
+#jc-sched-table.jc-sched-v1 .jc-v2 { display:none; }
+.jc-pred { position:relative; }
+.jc-pred-btn { width:100%; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; background:var(--bg-3); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); padding:4px 8px; font-size:12px; cursor:pointer; }
+.jc-pred-menu { position:fixed; z-index:var(--z-dropdown); min-width:220px; max-height:220px; overflow:auto; padding:4px; background:var(--bg-3); border:1px solid var(--border-2); border-radius:var(--radius); box-shadow:var(--shadow-lg); }
+.jc-pred-menu label { display:flex; align-items:center; gap:6px; padding:3px 6px; font-size:12px; color:var(--text); cursor:pointer; }
+/* schedule-table:end */
 #jc-gantt-chart .bar-progress { display:none; }
 .jc-gantt-main { display:flex; align-items:flex-start; }
 #jc-gantt-chart { flex:1; min-width:0; }
@@ -3392,12 +3407,15 @@ body.light .global-search-results, body.light .split-btn-menu {
                     <option value="Day" selected>Day</option><option value="Week">Week</option><option value="Month">Month</option>
                   </select>
                 </div>
+                <div class="jc-sched-notice" id="jc-sched-notice" style="display:none"></div>
+                <div class="jc-sched-phasebar" id="jc-sched-phasebar" style="display:none"></div>
                 <div class="dyn-table-wrap">
                   <table class="dyn-table" id="jc-sched-table">
                     <thead><tr>
-                      <th style="min-width:200px">Task</th><th style="width:130px">Assignee</th>
+                      <th style="min-width:200px">Task</th><th class="jc-v2" style="width:130px">Phase</th><th style="width:130px">Assignee</th>
                       <th style="width:130px">Start</th><th style="width:130px">End</th>
-                      <th style="width:80px">% Done</th><th style="width:150px">Depends on</th><th style="width:32px"></th>
+                      <th style="width:80px">% Done</th><th class="jc-v2" style="width:70px">Milestone</th><th class="jc-v2" style="width:90px">Weight</th>
+                      <th style="width:170px">Predecessors</th><th class="jc-v2" style="width:110px">Client</th><th style="width:32px"></th>
                     </tr></thead>
                     <tbody id="jc-sched-body"></tbody>
                   </table>
@@ -6159,7 +6177,7 @@ async function sb(path, opts = {}) {
 }
 async function sbGet(table, params = '')        { return sb(`${table}?${params}`); }
 async function sbPost(table, body)              { return sb(table, { method: 'POST', body }); }
-const NO_UPDATED_AT = new Set(['sequence_counters','crm_activities','crm_tasks','crm_team_members','opportunity_team','erp_notifications','erp_users']);
+const NO_UPDATED_AT = new Set(['job_tasks','job_phases','job_task_links','sequence_counters','crm_activities','crm_tasks','crm_team_members','opportunity_team','erp_notifications','erp_users']);
 async function sbPatch(table, id, body)         { const ts = NO_UPDATED_AT.has(table) ? {} : { updated_at: nowISO() }; return sb(`${table}?id=eq.${id}`, { method: 'PATCH', body: { ...body, ...ts } }); }
 async function sbPatchWhere(table, where, body) { const ts = NO_UPDATED_AT.has(table) ? {} : { updated_at: nowISO() }; return sb(`${table}?${where}`, { method: 'PATCH', prefer: 'return=minimal', body: { ...body, ...ts } }); }
 async function sbDelete(table, id)              { return sb(`${table}?id=eq.${id}`, { method: 'DELETE', prefer: 'return=minimal' }); }
@@ -8119,6 +8137,8 @@ async function jcRenderGantt() {
 }
 // ── Per-job schedule: tasks + Gantt (job_tasks table) ────────────
 let jcTasks = [];
+let jcSchedPhases = [];   // job_phases rows of the open job (empty when the Schedule v2 tables are missing)
+let jcSchedLinks = [];    // job_task_links rows (finish-to-start predecessors) of the open job
 let jcSchedGantt = null;
 const jcCanEditTasks = () => can('ops:work-orders:write');
 // ── SCHEDULE COMPUTE (shared) ──
@@ -8310,28 +8330,311 @@ function jcSchedCompute({ tasks, links, phases, job, today } = {}) {
     phaseRollups, forecastEnd: jcSchedYmd(fe), status, slipDays: slip, crit, slackByTask, warnings };
 }
 // ── END SCHEDULE COMPUTE ──
-async function jcLoadTasks() {
-  jcTasks = [];
-  if (jcCurrentJobId) {
-    try { jcTasks = await sbGet('job_tasks', `job_id=eq.${jcCurrentJobId}&order=sort_order.asc,created_at.asc`); }
-    catch (e) { showToast('Could not load tasks: ' + (e.message || e), 'error'); }
+// ── SCHEDULE TASK TABLE ──
+// Phase A (Schedule v2), staff UI: data layer + task table of the per-job Schedule card. Loads phases and predecessor links
+// next to the tasks and DEGRADES to the v1 table (one depends_on select, no phases) when job_phases / job_task_links are
+// missing (migration not applied). Writes go through sbPatchChecked / sbPost / sbDeleteWhere; this code never sends
+// updated_at / created_at (the DB trigger owns them) and never sends baseline_* (a DB guard rejects them).
+// Versioned phase templates (a constant, not a table). categoryToPhase maps config_tasks.category -> a phase NAME.
+const JC_PHASE_TEMPLATES = Object.freeze({
+  version: 1,
+  default: Object.freeze(['Assess', 'Design', 'Make', 'Install', 'Commission']),
+  byJobType: Object.freeze({}),   // jobs.job_type -> [phase names]; keys to be confirmed against live data (spec open question 3)
+  categoryToPhase: Object.freeze({
+    'Engineering': 'Design', 'Mechanical Engineering': 'Design', 'Machining': 'Make', 'Metalwork': 'Make', 'Welding': 'Make',
+    'Coatings': 'Make', 'Mechanical Fitting': 'Install', 'Electrical Motor': 'Install', 'Inspection': 'Commission', 'HSE': 'Assess'
+  })
+});
+const JC_SCHED_NOTICE_V1 = 'Phases, milestones and multiple predecessors are not available yet (schedule update pending). Showing the basic schedule.';
+const JC_SCHED_PUBLISH_TIP = 'Publishing to the client needs approval permission (ops:work-orders:approve).';
+let jcSchedV2 = false, jcSchedNotice = '', jcSchedLoadSeq = 0, jcPredOpen = null, jcPredPos = null, jcSchedInit = false;
+let jcSchedCatalogue = null, jcSchedAdding = false, jcSchedPhaseBusy = false, jcSchedCritBusy = false, jcSchedCritAgain = false;
+const jcSchedUnpub = new Set();     // ids (tasks or phases) the server auto-unpublished after a wording edit
+const jcSchedChains = new Map();    // per-key promise chains: edits to one task / the phase list run strictly in order
+const jcSchedCanPublish = () => can('ops:work-orders:approve');
+const jcSchedOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+
+function jcSchedSerial(key, fn) {
+  const prev = jcSchedChains.get(key) || Promise.resolve();
+  const next = prev.catch(() => {}).then(fn);
+  jcSchedChains.set(key, next);
+  next.catch(() => {}).then(() => { if (jcSchedChains.get(key) === next) jcSchedChains.delete(key); });
+  return next;
+}
+function jcSchedToday() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+// Render hooks of the other schedule leaves (KPI strip, Gantt): KPI first, then Gantt; each only when it exists.
+function jcSchedHooks() {
+  if (typeof jcRenderSchedKpis === 'function') jcRenderSchedKpis();
+  if (typeof jcRenderSchedGantt === 'function') jcRenderSchedGantt();
+}
+function jcSchedPhasesSorted() { return jcSchedPhases.slice().sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0)); }
+function jcSchedPredsOf(taskId) {   // ordered predecessor ids of a task; links to deleted tasks are ignored
+  const have = new Set(jcTasks.map(x => x.id)), out = [];
+  for (const l of jcSchedLinks) if (l.task_id === taskId && have.has(l.predecessor_id) && !out.includes(l.predecessor_id)) out.push(l.predecessor_id);
+  return out;
+}
+// Would "pred precedes task" close a loop? True when `task` is already upstream of `pred` (same rule as the DB trigger).
+function jcSchedWouldCycle(taskId, predId) {
+  if (taskId === predId) return true;
+  const up = new Map();
+  for (const l of jcSchedLinks) { if (!up.has(l.task_id)) up.set(l.task_id, []); up.get(l.task_id).push(l.predecessor_id); }
+  const seen = new Set([predId]), stack = [predId];
+  while (stack.length) {
+    const cur = stack.pop();
+    for (const p of up.get(cur) || []) { if (p === taskId) return true; if (!seen.has(p)) { seen.add(p); stack.push(p); } }
   }
-  jcRenderTasks();
+  return false;
 }
-function jcTaskProgressAvg() {
-  return jcTasks.length ? Math.round(jcTasks.reduce((s, t) => s + (t.progress || 0), 0) / jcTasks.length) : 0;
+function jcSchedRunCompute() {
+  if (typeof jcSchedCompute !== 'function') return null;
+  try {
+    return jcSchedCompute({ tasks: jcTasks, links: jcSchedLinks, phases: jcSchedPhases,
+      job: { due_date: (typeof document !== 'undefined' && document.getElementById('jc-f-due-date')?.value) || null }, today: jcSchedToday() });
+  } catch (e) { return null; }
 }
-function jcRenderTasks() {
+// is_critical is a cache of the computed critical path: rewrite it for rows that differ, in at most two batched PATCHes
+// (one per flag value). Writers only; failures are silent (cosmetic) and never retried by themselves.
+async function jcSchedSyncCritical() {
+  if (!jcSchedV2 || !jcCurrentJobId || jcIsReadOnlyRole() || !jcCanEditTasks()) return;
+  if (jcSchedCritBusy) { jcSchedCritAgain = true; return; }
+  jcSchedCritBusy = true;
+  try {
+    for (let round = 0; round < 3; round++) {
+      jcSchedCritAgain = false;
+      const res = jcSchedRunCompute();
+      if (!res || (res.warnings || []).includes('cycle')) break;
+      const crit = new Set(res.crit), on = [], off = [], jid = jcCurrentJobId;
+      for (const t of jcTasks) { const want = crit.has(t.id); if (!!t.is_critical !== want) (want ? on : off).push(t.id); }
+      for (const [flag, ids] of [[true, on], [false, off]]) {
+        if (!ids.length) continue;
+        try {
+          await sbPatchWhere('job_tasks', `job_id=eq.${jid}&id=in.(${ids.join(',')})`, { is_critical: flag });
+          if (jid === jcCurrentJobId) for (const id of ids) { const t = jcTasks.find(x => x.id === id); if (t) t.is_critical = flag; }
+        } catch (e) { /* cosmetic cache: ignore */ }
+      }
+      if (!jcSchedCritAgain) break;
+    }
+  } finally { jcSchedCritBusy = false; }
+}
+function jcSchedAfterEdit(rerender) {
+  if (rerender) jcRenderTasks(); else jcSchedHooks();
+  jcSchedSyncCritical();
+}
+function jcSchedInitOnce() {
+  if (jcSchedInit || typeof document === 'undefined' || typeof document.addEventListener !== 'function') return;
+  jcSchedInit = true;
+  const inside = e => !!(e && e.target && e.target.closest && e.target.closest('.jc-pred'));
+  document.addEventListener('click', e => { if (jcPredOpen && !inside(e)) { jcPredOpen = null; jcRenderTaskRows(); } });
+  document.addEventListener('scroll', e => { if (jcPredOpen && !inside(e)) { jcPredOpen = null; jcRenderTaskRows(); } }, true);
+}
+
+// ---- predecessors ----
+function jcPredToggle(id, btn) {
+  if (jcPredOpen === id) jcPredOpen = null;
+  else {
+    jcPredOpen = id;
+    const r = btn && btn.getBoundingClientRect ? btn.getBoundingClientRect() : null;
+    jcPredPos = r ? { top: Math.round(r.bottom), left: Math.round(r.left) } : null;
+  }
+  jcRenderTaskRows();
+}
+function jcPredChange(taskId, otherId, on) {
+  if (!jcCanEditTasks()) return;
+  return jcSchedSerial('t:' + taskId, async () => {
+    if (!jcTasks.some(x => x.id === taskId)) return;
+    if (!jcTasks.some(x => x.id === otherId)) { jcRenderTaskRows(); return; }   // the task was deleted while the list was open
+    const cur = jcSchedPredsOf(taskId);
+    await jcSetPredecessors(taskId, on ? (cur.includes(otherId) ? cur : cur.concat(otherId)) : cur.filter(x => x !== otherId));
+  });
+}
+// Diff the wanted predecessor list against the current links: POST new, DELETE removed, mirror the FIRST into depends_on.
+async function jcSetPredecessors(id, wanted) {
+  const t = jcTasks.find(x => x.id === id); if (!t || !jcCanEditTasks()) return false;
+  const have = new Set(jcTasks.map(x => x.id));
+  const valid = [...new Set(wanted || [])].filter(p => p !== id && have.has(p));
+  const cur = jcSchedLinks.filter(l => l.task_id === id && have.has(l.predecessor_id));
+  const curIds = cur.map(l => l.predecessor_id);
+  const add = valid.filter(p => !curIds.includes(p));
+  const drop = cur.filter(l => !valid.includes(l.predecessor_id));
+  if (!add.length && !drop.length) { jcRenderTaskRows(); return true; }
+  if (add.some(p => jcSchedWouldCycle(id, p))) { showToast('That would create a circular dependency.', 'warn'); jcRenderTaskRows(); return false; }
+  let wrote = false;
+  try {
+    let created = [];
+    if (add.length) {   // adds first: a cycle error then leaves everything untouched
+      created = await sbPost('job_task_links', add.map(p => ({ company_id: t.company_id || currentCompany.id, job_id: jcCurrentJobId, task_id: id, predecessor_id: p })));
+      if (!Array.isArray(created) || created.length !== add.length) throw new Error('The predecessor links were not saved.');
+      wrote = true;
+    }
+    if (drop.length) { await sbDeleteWhere('job_task_links', `id=in.(${drop.map(l => l.id).join(',')})`); wrote = true; }
+    const ordered = cur.filter(l => valid.includes(l.predecessor_id)).map(l => l.predecessor_id).concat(add);
+    jcSchedLinks = jcSchedLinks.filter(l => !drop.includes(l)).concat(created);
+    const first = ordered[0] || null;
+    if (first !== (t.depends_on || null)) { await sbPatchChecked('job_tasks', id, { depends_on: first }); t.depends_on = first; }
+  } catch (e) {
+    const msg = String((e && e.message) || e), cyc = /cycle/i.test(msg);
+    showToast(cyc ? 'That would create a circular dependency; the change was reverted.' : 'Failed to save predecessors: ' + msg, cyc ? 'warn' : 'error');
+    if (wrote || !cyc) await jcLoadTasks(); else jcRenderTaskRows();
+    return false;
+  }
+  jcSchedAfterEdit(true);
+  return true;
+}
+
+// ---- phases ----
+async function jcApplyPhaseTemplate() {
+  if (!jcSchedV2 || !jcCurrentJobId || !jcCanEditTasks() || jcSchedPhases.length || jcSchedPhaseBusy) return;
+  jcSchedPhaseBusy = true;
+  const jid = jcCurrentJobId;
+  try {
+    const jt = (typeof document !== 'undefined' && document.getElementById('jc-f-job-type')?.value) || '';
+    const names = (jt && jcSchedOwn(JC_PHASE_TEMPLATES.byJobType, jt) && JC_PHASE_TEMPLATES.byJobType[jt]) || JC_PHASE_TEMPLATES.default;
+    const rows = names.map((name, i) => ({ company_id: currentCompany.id, job_id: jid, sort_order: (i + 1) * 10, name }));
+    const made = await sbPost('job_phases', rows);
+    if (!Array.isArray(made) || made.length !== rows.length) throw new Error('The phases were not created.');
+    if (jid !== jcCurrentJobId) return;
+    jcSchedPhases = made;
+    jcRenderTasks();
+  } catch (e) { showToast('Failed to apply template: ' + (e.message || e), 'error'); }
+  finally { jcSchedPhaseBusy = false; }
+}
+async function jcAddPhase() {
+  if (!jcSchedV2 || !jcCurrentJobId || !jcCanEditTasks() || jcSchedPhaseBusy) return;
+  jcSchedPhaseBusy = true;
+  const jid = jcCurrentJobId;
+  try {
+    const top = jcSchedPhases.reduce((m, p) => Math.max(m, Number(p.sort_order) || 0), 0);
+    const rows = await sbPost('job_phases', { company_id: currentCompany.id, job_id: jid, sort_order: top + 10, name: 'New phase' });
+    if (!rows || !rows[0]) throw new Error('No row returned');
+    if (jid !== jcCurrentJobId) return;
+    jcSchedPhases.push(rows[0]);
+    jcRenderTasks();
+  } catch (e) { showToast('Failed to add phase: ' + (e.message || e), 'error'); }
+  finally { jcSchedPhaseBusy = false; }
+}
+// One PATCH on a phase; merges the server's row (so an auto-unpublish after a rename is visible) and flags the badge.
+function jcPhaseSet(id, patch, wording) {
+  return jcSchedSerial('phases', async () => {
+    const p = jcSchedPhases.find(x => x.id === id); if (!p || !jcSchedV2 || !jcCanEditTasks()) return;
+    try {
+      const rows = await sbPatchChecked('job_phases', id, patch), was = !!p.client_visible;
+      Object.assign(p, patch);
+      const srv = Array.isArray(rows) ? rows.find(r => r && r.id === id) : null;
+      if (srv) Object.assign(p, srv);
+      if (patch.client_visible === true && p.client_visible) jcSchedUnpub.delete(id);
+      if (wording && was && !p.client_visible) { jcSchedUnpub.add(id); showToast('Unpublished by edit: re-publish when ready.', 'warn'); }
+      jcRenderTasks();
+    } catch (e) { showToast('Failed to save phase: ' + (e.message || e), 'error'); await jcLoadTasks(); }
+  });
+}
+function jcPhaseRename(id, raw) {
+  if (!jcCanEditTasks()) return;
+  const name = String(raw == null ? '' : raw).trim().slice(0, 80);
+  if (!name) { showToast('A phase needs a name.', 'warn'); jcRenderTasks(); return; }
+  return jcPhaseSet(id, { name }, true);
+}
+function jcPhaseVisible(id, on) {
+  if (!jcCanEditTasks()) return;
+  const val = on === true || on === 'true';
+  if (val && !jcSchedCanPublish()) { showToast(JC_SCHED_PUBLISH_TIP, 'warn'); jcRenderTasks(); return; }
+  return jcPhaseSet(id, { client_visible: val }, false);
+}
+// Reorder: swap, then rewrite sort_order with gaps of 10 (only rows whose value changes are PATCHed).
+function jcPhaseMove(id, dir) {
+  if (!jcCanEditTasks()) return;
+  return jcSchedSerial('phases', async () => {
+    if (!jcSchedV2) return;
+    const list = jcSchedPhasesSorted(), i = list.findIndex(p => p.id === id), j = i + dir;
+    if (i < 0 || j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    try {
+      for (let k = 0; k < list.length; k++) {
+        const want = (k + 1) * 10;
+        if (Number(list[k].sort_order) !== want) { await sbPatchChecked('job_phases', list[k].id, { sort_order: want }); list[k].sort_order = want; }
+      }
+    } catch (e) { showToast('Failed to reorder phases: ' + (e.message || e), 'error'); await jcLoadTasks(); return; }
+    jcSchedPhases = list;
+    jcRenderTasks();
+  });
+}
+async function jcDeletePhase(id) {
+  if (!jcCanEditTasks() || !jcSchedPhases.some(p => p.id === id)) return;
+  const n = jcTasks.filter(t => t.phase_id === id).length;
+  const ok = await showConfirm(`Delete this phase?${n ? ` Its ${n} task${n === 1 ? '' : 's'} will become Unphased.` : ''}`, 'Delete Phase', 'Delete');
+  if (!ok) return;
+  return jcSchedSerial('phases', async () => {
+    if (!jcSchedPhases.some(p => p.id === id)) return;
+    try {
+      await sbDeleteWhere('job_phases', `id=eq.${id}`);
+      jcSchedPhases = jcSchedPhases.filter(p => p.id !== id);
+      jcTasks.forEach(t => { if (t.phase_id === id) t.phase_id = null; });
+      jcSchedUnpub.delete(id);
+      jcRenderTasks();
+    } catch (e) { showToast('Failed to delete phase: ' + (e.message || e), 'error'); }
+  });
+}
+
+// ---- catalogue (config_tasks) ----
+async function jcSchedEnsureCatalogue() {
+  if (jcSchedCatalogue || !jcCanEditTasks()) return;
+  let rows;
+  try { rows = await sbGet('config_tasks', 'select=task_name,category&status=eq.approved&is_active=eq.true&order=sort_order'); }
+  catch (e) { rows = ((typeof jcConfig !== 'undefined' && jcConfig && jcConfig.tasks) || []).map(n => ({ task_name: n, category: null })); }
+  jcSchedCatalogue = (Array.isArray(rows) ? rows : []).filter(r => r && r.task_name);
+  jcRenderPhaseBar();
+}
+// Phase for a catalogue category: { phaseId, mapped } (mapped = the category has an entry in the template map).
+function jcSchedPhaseForCategory(category) {
+  const map = JC_PHASE_TEMPLATES.categoryToPhase;
+  if (category == null || !jcSchedOwn(map, category)) return { phaseId: null, mapped: false };
+  const want = String(map[category]).toLowerCase(), p = jcSchedPhases.find(x => String(x.name || '').toLowerCase() === want);
+  return { phaseId: p ? p.id : null, mapped: true };
+}
+function jcAddFromCatalogue(idx) {
+  const row = jcSchedCatalogue && jcSchedCatalogue[Number(idx)];
+  if (!row) { jcRenderPhaseBar(); return; }
+  return jcInsertTask({ task_name: String(row.task_name).slice(0, 120), phase_id: jcSchedPhaseForCategory(row.category).phaseId });
+}
+
+// ---- rendering ----
+function jcRenderPhaseBar() {
+  const host = document.getElementById('jc-sched-phasebar'); if (!host) return;
+  if (!jcSchedV2 || !jcCurrentJobId) { host.innerHTML = ''; host.style.display = 'none'; return; }
+  host.style.display = '';
+  const edit = jcCanEditTasks(), dis = edit ? '' : ' disabled', phases = jcSchedPhasesSorted(), canPub = jcSchedCanPublish();
+  let h = '';
+  if (edit && !phases.length) h += '<button type="button" class="btn-add-row" onclick="jcApplyPhaseTemplate()">Apply template</button>';
+  if (edit) h += '<button type="button" class="btn-add-row" onclick="jcAddPhase()">+ Add phase</button>';
+  if (edit && jcSchedCatalogue && jcSchedCatalogue.length) {
+    h += '<select class="jc-dash-filter jc-cat-pick" onchange="jcAddFromCatalogue(this.value)"><option value="">+ From catalogue…</option>' +
+      jcSchedCatalogue.map((r, i) => {
+        const m = jcSchedPhaseForCategory(r.category), ph = m.phaseId ? jcSchedPhases.find(p => p.id === m.phaseId).name : 'Unphased';
+        return `<option value="${i}">${escHTML(r.task_name)} ${m.mapped ? '→ ' + escHTML(ph) : '⚠ unmapped category' + (r.category ? ' (' + escHTML(r.category) + ')' : '')}</option>`;
+      }).join('') + '</select>';
+  }
+  h += phases.map((p, i) => {
+    const id = escHTML(p.id), vis = !!p.client_visible, blocked = !canPub && !vis;
+    return `<span class="jc-phase-chip">` +
+      (edit ? `<button type="button" class="jc-chip-btn" title="Move up"${i === 0 ? ' disabled' : ''} onclick="jcPhaseMove('${id}',-1)">↑</button>` +
+              `<button type="button" class="jc-chip-btn" title="Move down"${i === phases.length - 1 ? ' disabled' : ''} onclick="jcPhaseMove('${id}',1)">↓</button>` : '') +
+      `<input type="text" class="jc-sched-input jc-phase-name" value="${escHTML(p.name)}" maxlength="80"${dis} onchange="jcPhaseRename('${id}',this.value)">` +
+      (edit ? `<label class="jc-vis-lbl" title="${blocked ? escHTML(JC_SCHED_PUBLISH_TIP) : 'Visible to client'}"><input type="checkbox" class="jc-vis"${vis ? ' checked' : ''}${blocked ? ' disabled' : ''} onchange="jcPhaseVisible('${id}',this.checked)"> client</label>` : '') +
+      (jcSchedUnpub.has(p.id) ? '<span class="jc-unpub">Unpublished by edit: re-publish</span>' : '') +
+      (edit ? `<button type="button" class="jc-chip-btn btn-del" title="Delete phase" onclick="jcDeletePhase('${id}')">✕</button>` : '') + '</span>';
+  }).join('');
+  host.innerHTML = h;
+}
+function jcRenderTaskRows() {
   const body = document.getElementById('jc-sched-body'); if (!body) return;
-  const edit = jcCanEditTasks();
-  const addBtn = document.getElementById('jc-sched-add');
-  if (addBtn) addBtn.style.display = edit ? '' : 'none';
-  const ov = document.getElementById('jc-sched-overall');
-  if (ov) ov.textContent = jcTasks.length ? `Overall progress: ${jcTaskProgressAvg()}% · ${jcTasks.length} task${jcTasks.length === 1 ? '' : 's'}` : '';
+  const edit = jcCanEditTasks(), dis = edit ? '' : ' disabled';
   if (!jcTasks.length) {
-    body.innerHTML = `<tr><td colspan="7" class="jc-sched-empty">${jcCurrentJobId ? 'No tasks yet.' : 'Save the job to start planning tasks.'}</td></tr>`;
-  } else {
-    const dis = edit ? '' : ' disabled';
+    body.innerHTML = `<tr><td colspan="11" class="jc-sched-empty">${jcCurrentJobId ? 'No tasks yet.' : 'Save the job to start planning tasks.'}</td></tr>`;
+    return;
+  }
+  if (!jcSchedV2) {   // v1 table: exactly the pre-migration columns
     body.innerHTML = jcTasks.map(t => {
       const id = escHTML(t.id);
       const deps = ['<option value="">—</option>'].concat(jcTasks.filter(o => o.id !== t.id).map(o =>
@@ -8346,56 +8649,178 @@ function jcRenderTasks() {
         <td>${edit ? `<button class="btn-del" title="Delete task" onclick="jcDeleteTask('${id}')">✕</button>` : ''}</td>
       </tr>`;
     }).join('');
+    return;
   }
-  jcRenderSchedGantt();
+  const phases = jcSchedPhasesSorted(), canPub = jcSchedCanPublish(), nameOf = new Map(jcTasks.map(o => [o.id, o.task_name || '(unnamed)']));
+  const predsBy = new Map();
+  for (const l of jcSchedLinks) { if (!nameOf.has(l.predecessor_id)) continue; if (!predsBy.has(l.task_id)) predsBy.set(l.task_id, []); if (!predsBy.get(l.task_id).includes(l.predecessor_id)) predsBy.get(l.task_id).push(l.predecessor_id); }
+  body.innerHTML = jcTasks.map(t => {
+    const id = escHTML(t.id), ms = !!t.is_milestone, vis = !!t.client_visible, blocked = !canPub && !vis;
+    const phaseOpts = '<option value="">— Unphased</option>' + phases.map(p => `<option value="${escHTML(p.id)}"${p.id === t.phase_id ? ' selected' : ''}>${escHTML(p.name)}</option>`).join('');
+    const preds = predsBy.get(t.id) || [], label = preds.length ? preds.map(p => nameOf.get(p)).join(', ') : '—';
+    let menu = '';
+    if (jcPredOpen === t.id) {
+      const items = jcTasks.filter(o => o.id !== t.id).map(o =>
+        `<label><input type="checkbox"${preds.includes(o.id) ? ' checked' : ''}${dis} onchange="jcPredChange('${id}','${escHTML(o.id)}',this.checked)"> ${escHTML(o.task_name || '(unnamed)')}</label>`).join('');
+      const pos = jcPredPos ? ` style="top:${Number(jcPredPos.top) || 0}px;left:${Number(jcPredPos.left) || 0}px"` : '';
+      menu = `<div class="jc-pred-menu"${pos}>${items || '<span class="jc-sched-empty">No other tasks</span>'}</div>`;
+    }
+    const weightCell = ms
+      ? '<input class="jc-sched-input" type="number" disabled placeholder="n/a" title="Milestones carry no weight">'
+      : `<input class="jc-sched-input" type="number" min="0" max="999999.99" step="any" value="${t.weight == null ? '' : escHTML(String(t.weight))}" placeholder="${escHTML(String(jcTaskWeight(false, null, t.start_date, t.end_date)))}" title="Empty = duration in days"${dis} onchange="jcTaskSet('${id}','weight',this.value)">`;
+    const visCell = edit
+      ? `<input type="checkbox" class="jc-vis"${vis ? ' checked' : ''}${blocked ? ` disabled title="${escHTML(JC_SCHED_PUBLISH_TIP)}"` : ' title="Visible to client"'} onchange="jcTaskSet('${id}','client_visible',this.checked)">` +
+        (jcSchedUnpub.has(t.id) ? '<span class="jc-unpub">Unpublished by edit: re-publish</span>' : '')
+      : '';
+    return `<tr>
+        <td><input class="jc-sched-input" value="${escHTML(t.task_name)}" placeholder="Task name" maxlength="120"${dis} onchange="jcTaskSet('${id}','task_name',this.value)"></td>
+        <td class="jc-v2"><select class="jc-sched-input"${dis} onchange="jcTaskSet('${id}','phase_id',this.value)">${phaseOpts}</select></td>
+        <td><input class="jc-sched-input" value="${escHTML(t.assignee || '')}" placeholder="Name" maxlength="80"${dis} onchange="jcTaskSet('${id}','assignee',this.value)"></td>
+        <td><input class="jc-sched-input" type="date" value="${escHTML(t.start_date || '')}"${dis} onchange="jcTaskSet('${id}','start_date',this.value)"></td>
+        <td><input class="jc-sched-input" type="date" value="${escHTML(t.end_date || '')}"${dis} onchange="jcTaskSet('${id}','end_date',this.value)"></td>
+        <td><input class="jc-sched-input" type="number" min="0" max="100" step="5" value="${t.progress || 0}"${dis} onchange="jcTaskSet('${id}','progress',this.value)"></td>
+        <td class="jc-v2"><input type="checkbox" class="jc-ms"${ms ? ' checked' : ''}${dis} title="Milestone (zero duration)" onchange="jcTaskSet('${id}','is_milestone',this.checked)"></td>
+        <td class="jc-v2">${weightCell}</td>
+        <td><div class="jc-pred"><button type="button" class="jc-pred-btn" title="${escHTML(label)}" onclick="jcPredToggle('${id}',this)">${escHTML(label)} ▾</button>${menu}</div></td>
+        <td class="jc-v2">${visCell}</td>
+        <td>${edit ? `<button class="btn-del" title="Delete task" onclick="jcDeleteTask('${id}')">✕</button>` : ''}</td>
+      </tr>`;
+  }).join('');
 }
-async function jcAddTask() {
+// ── END SCHEDULE TASK TABLE ──
+async function jcLoadTasks() {
+  const seq = ++jcSchedLoadSeq, jid = jcCurrentJobId;
+  jcTasks = []; jcSchedPhases = []; jcSchedLinks = []; jcSchedV2 = false; jcSchedNotice = ''; jcPredOpen = null; jcSchedUnpub.clear();
+  if (jid) {
+    let failed = null;
+    const get = async (t, q) => sbGet(t, q);
+    const [tasks, phases, links] = await Promise.all([
+      get('job_tasks', `job_id=eq.${jid}&order=sort_order.asc,created_at.asc`).catch(e => { failed = e; return []; }),
+      get('job_phases', `job_id=eq.${jid}&order=sort_order.asc`).catch(() => null),      // missing table (migration not applied) => null
+      get('job_task_links', `job_id=eq.${jid}&order=created_at.asc`).catch(() => null)
+    ]);
+    if (seq !== jcSchedLoadSeq) return;   // a newer load (another job, or a retry) superseded this one
+    if (failed) showToast('Could not load tasks: ' + (failed.message || failed), 'error');
+    jcTasks = Array.isArray(tasks) ? tasks : [];
+    jcSchedV2 = Array.isArray(phases) && Array.isArray(links);
+    if (jcSchedV2) { jcSchedPhases = phases; jcSchedLinks = links; }
+    else if (!failed) jcSchedNotice = JC_SCHED_NOTICE_V1;
+  }
+  jcRenderTasks();
+  if (jcSchedV2) { jcSchedSyncCritical(); jcSchedEnsureCatalogue(); }
+}
+function jcTaskProgressAvg() {
+  return jcTasks.length ? Math.round(jcTasks.reduce((s, t) => s + (t.progress || 0), 0) / jcTasks.length) : 0;
+}
+function jcRenderTasks() {
+  const body = document.getElementById('jc-sched-body'); if (!body) return;
+  const edit = jcCanEditTasks();
+  const addBtn = document.getElementById('jc-sched-add');
+  if (addBtn) addBtn.style.display = edit ? '' : 'none';
+  const ov = document.getElementById('jc-sched-overall');
+  if (ov) ov.textContent = jcTasks.length ? `Overall progress: ${jcTaskProgressAvg()}% · ${jcTasks.length} task${jcTasks.length === 1 ? '' : 's'}` : '';
+  const tbl = document.getElementById('jc-sched-table');
+  if (tbl) tbl.classList.toggle('jc-sched-v1', !jcSchedV2);
+  const nb = document.getElementById('jc-sched-notice');
+  if (nb) { nb.textContent = jcSchedNotice; nb.style.display = jcSchedNotice ? '' : 'none'; }
+  jcRenderPhaseBar();
+  jcRenderTaskRows();
+  jcSchedInitOnce();
+  jcSchedHooks();
+}
+async function jcAddTask() { return jcInsertTask({}); }
+// Shared insert (Add Task button and the catalogue picker). company_id/job_id as before; no timestamps, no baseline columns.
+async function jcInsertTask(extra) {
   if (!jcCurrentJobId) { showToast('Save the job before adding tasks.', 'warn'); return; }
-  if (!jcCanEditTasks()) return;
-  const today = new Date().toISOString().slice(0, 10);
-  const last  = jcTasks[jcTasks.length - 1];
+  if (!jcCanEditTasks() || jcSchedAdding) return;
+  jcSchedAdding = true;
+  const jid = jcCurrentJobId;
   try {
-    const rows = await sbPost('job_tasks', {
-      job_id: jcCurrentJobId, company_id: currentCompany.id,
+    const today = new Date().toISOString().slice(0, 10);
+    const last  = jcTasks[jcTasks.length - 1];
+    const row = {
+      job_id: jid, company_id: currentCompany.id,
       sort_order: last ? (last.sort_order || 0) + 1 : 0,
       task_name: '', start_date: last?.end_date || today, end_date: last?.end_date || today, progress: 0
-    });
+    };
+    if (jcSchedV2) row.phase_id = extra && extra.phase_id !== undefined ? extra.phase_id : (last ? last.phase_id || null : null);   // new rows join the phase of the row above
+    if (extra && extra.task_name != null) row.task_name = extra.task_name;
+    const rows = await sbPost('job_tasks', row);
     if (!rows || !rows[0]) throw new Error('No row returned');
+    if (jid !== jcCurrentJobId) return;
     jcTasks.push(rows[0]);
     jcRenderTasks();
+    jcSchedSyncCritical();
   } catch (e) { showToast('Failed to add task: ' + (e.message || e), 'error'); }
+  finally { jcSchedAdding = false; }
 }
-async function jcTaskSet(id, field, raw) {
-  const t = jcTasks.find(x => x.id === id); if (!t || !jcCanEditTasks()) return;
-  let val = raw;
-  if (field === 'progress') val = Math.max(0, Math.min(100, Math.round(Number(raw) || 0)));
-  else if (field === 'start_date' || field === 'end_date' || field === 'depends_on' || field === 'assignee') val = raw || null;
-  else if (field === 'task_name') val = String(raw).trim();
-  const patch = { [field]: val };
-  if (field === 'start_date' && val && t.end_date && t.end_date < val) patch.end_date = val;   // moving start past end drags the end along
-  if (field === 'end_date' && val && t.start_date && val < t.start_date) {
-    showToast('End date cannot be before start date.', 'warn');
-    jcRenderTasks(); return;
-  }
-  if (field === 'depends_on' && val) {   // refuse dependency loops
-    let cur = val, hops = 0;
-    while (cur && hops++ < 100) { if (cur === id) { showToast('That would create a circular dependency.', 'warn'); jcRenderTasks(); return; } cur = jcTasks.find(x => x.id === cur)?.depends_on; }
-  }
-  try {
-    await sbPatchChecked('job_tasks', id, patch);
-    Object.assign(t, patch);
-    if (field === 'task_name' || field === 'progress' || patch.end_date !== undefined && field === 'start_date') jcRenderTasks(); else jcRenderSchedGantt();
-  } catch (e) { showToast('Failed to save task: ' + (e.message || e), 'error'); jcLoadTasks(); }
+function jcTaskSet(id, field, raw) {
+  if (!jcCanEditTasks()) return;
+  return jcSchedSerial('t:' + id, async () => {   // one task's edits are applied strictly in the order made
+    const t = jcTasks.find(x => x.id === id); if (!t || !jcCanEditTasks()) return;
+    if (!jcSchedV2 && ['phase_id', 'is_milestone', 'weight', 'client_visible'].includes(field)) return;   // columns do not exist yet
+    if (jcSchedV2 && field === 'depends_on') { await jcSetPredecessors(id, raw ? [raw] : []); return; }
+    let val = raw;
+    if (field === 'progress') val = Math.max(0, Math.min(100, Math.round(Number(raw) || 0)));
+    else if (field === 'start_date' || field === 'end_date' || field === 'depends_on' || field === 'assignee' || field === 'phase_id') val = raw || null;
+    else if (field === 'task_name') val = String(raw).trim();
+    else if (field === 'is_milestone' || field === 'client_visible') val = raw === true || raw === 'true';
+    else if (field === 'weight') {
+      if (raw === '' || raw == null) val = null;
+      else {
+        const n = Number(raw);
+        if (!Number.isFinite(n) || n < 0 || n > 999999.99) { showToast('Weight must be a number from 0 to 999999.99, or empty.', 'warn'); jcRenderTasks(); return; }
+        val = Math.round(n * 100) / 100;
+      }
+    }
+    if (field === 'phase_id' && val && !jcSchedPhases.some(p => p.id === val)) val = null;
+    if (field === 'client_visible' && val && !jcSchedCanPublish()) { showToast(JC_SCHED_PUBLISH_TIP, 'warn'); jcRenderTasks(); return; }
+    const patch = { [field]: val };
+    if (field === 'start_date' && val) {
+      if (t.is_milestone) patch.end_date = val;                              // a milestone has zero duration
+      else if (t.end_date && t.end_date < val) patch.end_date = val;         // moving start past end drags the end along
+    }
+    if (field === 'end_date' && val) {
+      if (t.is_milestone) patch.start_date = val;
+      else if (t.start_date && val < t.start_date) { showToast('End date cannot be before start date.', 'warn'); jcRenderTasks(); return; }
+    }
+    if (field === 'is_milestone' && val) {                                   // becoming a milestone: collapse to a single day
+      if (t.start_date) patch.end_date = t.start_date; else if (t.end_date) patch.start_date = t.end_date;
+    }
+    if (field === 'depends_on' && val) {   // refuse dependency loops
+      let cur = val, hops = 0;
+      while (cur && hops++ < 100) { if (cur === id) { showToast('That would create a circular dependency.', 'warn'); jcRenderTasks(); return; } cur = jcTasks.find(x => x.id === cur)?.depends_on; }
+    }
+    try {
+      const rows = await sbPatchChecked('job_tasks', id, patch), wasVisible = !!t.client_visible;
+      Object.assign(t, patch);
+      const srv = Array.isArray(rows) ? rows.find(r => r && r.id === id) : null;
+      if (srv) Object.assign(t, srv);   // the server's row wins: an auto-unpublish after a wording edit shows up here
+      let unpub = false;
+      if (field === 'client_visible') { if (t.client_visible) jcSchedUnpub.delete(id); }
+      else if (field === 'task_name' && wasVisible && !t.client_visible) { jcSchedUnpub.add(id); unpub = true; showToast('Unpublished by edit: re-publish when ready.', 'warn'); }
+      const rerender = unpub || field === 'task_name' || field === 'progress' || field === 'is_milestone' || field === 'weight' || field === 'phase_id' || field === 'client_visible' ||
+        (field === 'start_date' && patch.end_date !== undefined) || (field === 'end_date' && patch.start_date !== undefined);
+      jcSchedAfterEdit(rerender);
+    } catch (e) { showToast('Failed to save task: ' + (e.message || e), 'error'); jcLoadTasks(); }
+  });
 }
 async function jcDeleteTask(id) {
-  if (!jcCanEditTasks()) return;
+  if (!jcCanEditTasks() || !jcTasks.some(t => t.id === id)) return;
   const ok = await showConfirm('Delete this task?', 'Delete Task', 'Delete');
   if (!ok) return;
-  try {
-    await sbDelete('job_tasks', id);
-    jcTasks = jcTasks.filter(t => t.id !== id).map(t => t.depends_on === id ? { ...t, depends_on: null } : t);
-    jcRenderTasks();
-  } catch (e) { showToast('Failed to delete task: ' + (e.message || e), 'error'); }
+  return jcSchedSerial('t:' + id, async () => {
+    if (!jcTasks.some(t => t.id === id)) return;   // double-click: already gone
+    try {
+      await sbDelete('job_tasks', id);
+      jcTasks = jcTasks.filter(t => t.id !== id).map(t => t.depends_on === id ? { ...t, depends_on: null } : t);
+      jcSchedLinks = jcSchedLinks.filter(l => l.task_id !== id && l.predecessor_id !== id);   // the DB cascades these
+      if (jcPredOpen === id) jcPredOpen = null;
+      jcSchedUnpub.delete(id);
+      jcRenderTasks();
+      jcSchedSyncCritical();
+    } catch (e) { showToast('Failed to delete task: ' + (e.message || e), 'error'); }
+  });
 }
 async function jcRenderSchedGantt() {
   const host = document.getElementById('jc-sched-chart'); if (!host) return;
