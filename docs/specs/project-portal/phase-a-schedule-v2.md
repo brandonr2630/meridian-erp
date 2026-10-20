@@ -193,12 +193,12 @@ CREATE TRIGGER job_tasks_baseline_guard BEFORE INSERT OR UPDATE ON job_tasks
 -- Lock (first time) or re-baseline (reason required). SECURITY DEFINER so it can write job_audit_log.
 CREATE OR REPLACE FUNCTION lock_job_baseline(p_job_id uuid, p_reason text DEFAULT NULL)
 RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
-DECLARE v_job jobs%ROWTYPE; v_first boolean; v_n integer;
+DECLARE v_job_no text; v_first boolean; v_n integer;
 BEGIN
   IF NOT user_has_perm('ops:work-orders:approve') THEN
     RAISE EXCEPTION 'permission denied: ops:work-orders:approve required';
   END IF;
-  SELECT * INTO v_job FROM jobs WHERE id = p_job_id AND company_id IN (SELECT my_company_ids());
+  SELECT j.job_no INTO v_job_no FROM jobs j WHERE j.id = p_job_id AND j.company_id IN (SELECT my_company_ids());
   IF NOT FOUND THEN RAISE EXCEPTION 'job not found'; END IF;
   SELECT NOT EXISTS (SELECT 1 FROM job_tasks WHERE job_id = p_job_id AND baseline_locked_at IS NOT NULL) INTO v_first;
   IF NOT v_first AND coalesce(btrim(p_reason), '') = '' THEN
@@ -210,7 +210,7 @@ BEGIN
   GET DIAGNOSTICS v_n = ROW_COUNT;
   PERFORM set_config('app.baseline_rpc', 'off', true);
   INSERT INTO job_audit_log (job_id, job_no, user_id, username, action_type, description, metadata)
-  VALUES (p_job_id, v_job.job_no, auth.uid(),
+  VALUES (p_job_id, v_job_no, auth.uid(),
           (SELECT u.full_name FROM erp_users u WHERE u.auth_user_id = auth.uid() LIMIT 1),
           CASE WHEN v_first THEN 'baseline_locked' ELSE 'baseline_reset' END,
           CASE WHEN v_first THEN 'Schedule baseline locked' ELSE 'Schedule re-baselined: ' || p_reason END,
@@ -365,7 +365,7 @@ LANGUAGE plpgsql STABLE SET search_path = public, pg_temp AS $$
 DECLARE
   k_late_days constant integer := 5;     -- Open question 2 defaults; keep equal to the JS constants
   k_gap_pts   constant integer := 10;
-  v_job jobs%ROWTYPE;
+  v_jstatus text; v_due date;
   n int := 0; m int := 0; i int; j int; t int; p int; pass int;
   ids uuid[] := '{}'; rem int[] := '{}'; es date[] := '{}'; ef date[] := '{}'; ls date[] := '{}'; lf date[] := '{}';
   endd date[] := '{}'; done boolean[] := '{}'; ms boolean[] := '{}'; sched boolean[] := '{}';
@@ -374,7 +374,7 @@ DECLARE
   v_overall numeric; v_planned numeric; v_has_bl boolean; v_base_end date; v_slip int; v_gap numeric;
   v_late boolean := false; v_late_days int := 0; v_status text; v_dur int; v_prog int;
 BEGIN
-  SELECT * INTO v_job FROM jobs WHERE id = p_job_id;
+  SELECT j.status, j.due_date INTO v_jstatus, v_due FROM jobs j WHERE j.id = p_job_id;
   IF NOT FOUND THEN RETURN; END IF;               -- invisible under RLS or missing: no rows
 
   -- load tasks (milestones: rem 0; done = progress 100)
@@ -428,7 +428,7 @@ BEGIN
   END LOOP;
 
   SELECT max(ef[g.ix]) INTO v_fe FROM generate_subscripts(ef, 1) AS g(ix) WHERE sched[g.ix];
-  v_deadline := coalesce(v_job.due_date, v_fe);
+  v_deadline := coalesce(v_due, v_fe);
 
   -- backward pass (incomplete tasks only)
   FOR i IN 1..n LOOP
@@ -471,13 +471,13 @@ BEGIN
    WHERE w > 0;
 
   SELECT EXISTS (SELECT 1 FROM job_tasks WHERE job_id = p_job_id AND baseline_locked_at IS NOT NULL) INTO v_has_bl;
-  SELECT coalesce(max(baseline_end), v_job.due_date) INTO v_base_end FROM job_tasks WHERE job_id = p_job_id;
+  SELECT coalesce(max(baseline_end), v_due) INTO v_base_end FROM job_tasks WHERE job_id = p_job_id;
   v_slip := CASE WHEN v_fe IS NOT NULL AND v_base_end IS NOT NULL THEN v_fe - v_base_end END;
   v_gap  := CASE WHEN v_has_bl THEN v_overall - v_planned END;
 
   v_status := CASE
-    WHEN v_job.status IN ('Completed', 'Invoiced', 'Closed') THEN 'Complete'
-    WHEN v_job.status = 'On Hold' THEN 'On hold'
+    WHEN v_jstatus IN ('Completed', 'Invoiced', 'Closed') THEN 'Complete'
+    WHEN v_jstatus = 'On Hold' THEN 'On hold'
     WHEN coalesce(v_slip, 0) > k_late_days OR v_late_days > k_late_days THEN 'Late'
     WHEN coalesce(v_slip, 0) BETWEEN 1 AND k_late_days OR coalesce(v_gap, 0) < -k_gap_pts OR v_late THEN 'At risk'
     ELSE 'On track' END;
@@ -583,7 +583,7 @@ Templates are a **versioned constant in `index.html`**, not a new table (a `job_
 - **Publishing (X5).** `job_phases.client_visible` and `job_tasks.client_visible` can be set to true only with `ops:work-orders:approve` (Phase A has no domain atom), enforced by the trigger `job_visibility_guard()` (rules and SQL above), not by the UI. A writer without approve can still unpublish. Editing `name` / `task_name` of a visible row auto-unpublishes it. Because `ops:work-orders:write` holders without approve (none today in the live role set, but possible later) cannot republish, the UI shows an "Unpublished by edit: re-publish" badge.
 - **Function exposure (X13).** `lock_job_baseline` and the helper/status functions are revoked from `PUBLIC, anon` and granted to `authenticated`, with authorization re-checked inside (`lock_job_baseline`) or RLS-scoped (`job_schedule_status` is SECURITY INVOKER). `job_visibility_guard` is trigger-only and revoked from all API roles. The Q-D definer sweep (inventory queries Q-A..Q-E) is re-run after this migration. `job_task_client_visible` is SECURITY INVOKER, revoked from `PUBLIC, anon`, granted to `authenticated`.
 - `user_has_perm` is not company-scoped, which is why every policy pairs it with the `my_company_ids()` test. The RPC re-checks company membership on the job.
-- Cost fields are never touched by this phase; the KPI function reads only `job_tasks`, `job_task_links`, `job_phases` and `jobs.due_date`/`status`.
+- Cost fields are never touched by this phase (no Phase A function does SELECT * or names a cost column; a test greps the function bodies); the KPI function reads only `job_tasks`, `job_task_links`, `job_phases` and `jobs.due_date`/`status`.
 
 ## Staff UI (ERP)
 

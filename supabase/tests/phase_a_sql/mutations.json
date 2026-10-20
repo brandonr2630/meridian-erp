@@ -604,7 +604,9 @@
  {
   "name": "weight: undated task weighs 0",
   "find": "THEN p_end - p_start + 1 ELSE 1 END)::numeric)",
-  "replace": "THEN p_end - p_start + 1 ELSE 0 END)::numeric)"
+  "replace": "THEN p_end - p_start + 1 ELSE 0 END)::numeric)",
+  "equivalent": true,
+  "reason": "the CASE sits inside GREATEST(1, ...), so ELSE 1 and ELSE 0 both yield 1 for an undated task"
  },
  {
   "name": "weight: explicit weight ignored",
@@ -839,7 +841,9 @@
  {
   "name": "job_phases: update WITH CHECK: write atom dropped",
   "find": " ON job_phases FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
-  "replace": " ON job_phases FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()));"
+  "replace": " ON job_phases FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()));",
+  "equivalent": true,
+  "reason": "USING already requires the same user_has_perm(write) for the same user in the same statement, so repeating it in WITH CHECK is redundant"
  },
  {
   "name": "job_phases: update WITH CHECK: company dropped (row can move company)",
@@ -904,7 +908,9 @@
  {
   "name": "job_task_links: update WITH CHECK: write atom dropped",
   "find": " ON job_task_links FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
-  "replace": " ON job_task_links FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()));"
+  "replace": " ON job_task_links FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()));",
+  "equivalent": true,
+  "reason": "USING already requires the same user_has_perm(write) for the same user in the same statement, so repeating it in WITH CHECK is redundant"
  },
  {
   "name": "job_task_links: update WITH CHECK: company dropped (row can move company)",

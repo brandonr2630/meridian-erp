@@ -940,4 +940,71 @@ BEGIN
   PERFORM t_expect('exempt: a postgres session that SET ROLEs to the write-only user is still exempt (session_user postgres)',
     t_dml('authenticated', wrt, 'INSERT INTO job_tasks (company_id, job_id, task_name, client_visible) VALUES (''c1000000-0000-0000-0000-000000000001'',''b1000000-0000-0000-0000-0000000000d1'',''ex-setrole'', true)'), 'rows:1');
 END $$;
+
+-- an overdue incomplete milestone counts even when it has slack (it is not on the longest path)
+DO $$
+DECLARE j text;
+BEGIN
+  j := pg_temp.mkjob('60', 'Open', NULL);
+  PERFORM pg_temp.mktask(j, 1, '2026-03-20', '2026-04-30', 0, false, NULL);
+  PERFORM pg_temp.mktask(j, 2, '2026-03-10', '2026-03-10', 0, true, NULL);
+  PERFORM t_expect('status: overdue milestone with slack still makes the job Late (lateCrit covers every incomplete milestone)', pg_temp.st(j, '2026-03-20'), '1:Late|2026-05-01|null');
+END $$;
+
+-- locked-baseline cases: a milestone never counts in overall/planned; slip is measured against the baseline end, not the due date
+SELECT set_config('request.jwt.claim.sub', '', true);
+DO $$
+DECLARE j text;
+BEGIN
+  j := pg_temp.mkjob('61', 'Open', NULL);
+  PERFORM set_config('app.baseline_rpc', 'on', true);
+  INSERT INTO job_tasks (company_id, job_id, sort_order, task_name, start_date, end_date, baseline_start, baseline_end, baseline_locked_at, progress, is_milestone, weight) VALUES
+   ('c1000000-0000-0000-0000-000000000001', j::uuid, 1, 'work', '2026-01-01', '2026-01-10', '2026-01-01', '2026-01-10', now(), 35, false, NULL),
+   ('c1000000-0000-0000-0000-000000000001', j::uuid, 2, 'handover', '2026-01-20', '2026-01-20', '2026-01-20', '2026-01-20', now(), 100, true, 30);
+  PERFORM set_config('app.baseline_rpc', 'off', true);
+  PERFORM t_expect('status: a heavy-weighted done milestone must not hide a -15 gap (overall 35 vs planned 50) -> At risk', pg_temp.st(j, '2026-01-05'), '1:At risk|2026-01-20|0');
+  j := pg_temp.mkjob('62', 'Open', '2026-03-05');
+  PERFORM set_config('app.baseline_rpc', 'on', true);
+  INSERT INTO job_tasks (company_id, job_id, sort_order, task_name, start_date, end_date, baseline_start, baseline_end, baseline_locked_at, progress) VALUES
+   ('c1000000-0000-0000-0000-000000000001', j::uuid, 1, 'work', '2026-03-01', '2026-03-10', '2026-03-01', '2026-03-11', now(), 0);
+  PERFORM set_config('app.baseline_rpc', 'off', true);
+  PERFORM t_expect('status: slip is forecast minus the BASELINE end (03-11), not the later-set due date (03-05)', pg_temp.st(j, '2026-03-01'), '1:On track|2026-03-11|0');
+END $$;
+
+-- ===== 19. RLS company scoping that SELECT-policy visibility would otherwise mask (unqualified statements) =====
+-- A WHERE clause makes PostgreSQL apply the SELECT policy to the rows too, hiding a missing company test in UPDATE/DELETE
+-- policies. Unqualified statements, and the cycle/integrity trigger switched off for the link policies, test the policies alone.
+SELECT set_config('request.jwt.claim.sub', '', true);
+INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES
+ ('f1000000-0000-0000-0000-00000000000a','c2000000-0000-0000-0000-000000000002','b2000000-0000-0000-0000-0000000000a2',2,'B2');
+INSERT INTO job_task_links (id, company_id, job_id, task_id, predecessor_id) VALUES
+ ('f8000000-0000-0000-0000-0000000000c9','c2000000-0000-0000-0000-000000000002','b2000000-0000-0000-0000-0000000000a2',
+  'f1000000-0000-0000-0000-00000000000a','f1000000-0000-0000-0000-000000000009');
+INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id) VALUES
+ ('c1000000-0000-0000-0000-000000000001','b1000000-0000-0000-0000-0000000000d1','f5000000-0000-0000-0000-0000000000a3','f5000000-0000-0000-0000-0000000000a2');
+ALTER TABLE job_task_links DISABLE TRIGGER job_task_links_no_cycle;
+DO $$
+DECLARE ops uuid := '11111111-1111-1111-1111-111111111111'; viewr uuid := '22222222-2222-2222-2222-222222222222';
+  n1p text; n1l text;
+BEGIN
+  SELECT count(*)::text INTO n1p FROM job_phases WHERE company_id = 'c1000000-0000-0000-0000-000000000001';
+  SELECT count(*)::text INTO n1l FROM job_task_links WHERE company_id = 'c1000000-0000-0000-0000-000000000001';
+  PERFORM t_expect('scope: unqualified UPDATE of phases touches only the caller company rows', t_dml('authenticated', ops, 'UPDATE job_phases SET sort_order = sort_order'), 'rows:' || n1p);
+  PERFORM t_expect('scope: unqualified UPDATE of links touches only the caller company rows', t_dml('authenticated', ops, 'UPDATE job_task_links SET lag_days = lag_days'), 'rows:' || n1l);
+  PERFORM t_expect('scope: unqualified UPDATE by a viewer touches nothing (phases)', t_dml('authenticated', viewr, 'UPDATE job_phases SET sort_order = sort_order'), 'rows:0');
+  PERFORM t_expect('scope: unqualified UPDATE by a viewer touches nothing (links)', t_dml('authenticated', viewr, 'UPDATE job_task_links SET lag_days = lag_days'), 'rows:0');
+  PERFORM t_expect('scope: a phase cannot be moved to another company by an unqualified UPDATE',
+    t_dml('authenticated', ops, 'UPDATE job_phases SET company_id = ''c2000000-0000-0000-0000-000000000002'''), 'err:42501');
+  PERFORM t_expect('scope: a link cannot be moved to another company (trigger off, policy alone)',
+    t_dml('authenticated', ops, 'UPDATE job_task_links SET company_id = ''c2000000-0000-0000-0000-000000000002'''), 'err:42501');
+  PERFORM t_expect('scope: a link cannot be inserted for another company (trigger off, policy alone)',
+    t_dml('authenticated', ops, 'INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id) VALUES (''c2000000-0000-0000-0000-000000000002'',''b2000000-0000-0000-0000-0000000000a2'',''f1000000-0000-0000-0000-000000000009'',''f1000000-0000-0000-0000-00000000000a'')'), 'err:42501');
+  PERFORM t_expect('scope: the other company rows were not touched',
+    (SELECT count(*)::text FROM job_phases WHERE company_id = 'c2000000-0000-0000-0000-000000000002') || (SELECT count(*)::text FROM job_task_links WHERE company_id = 'c2000000-0000-0000-0000-000000000002'), '11');
+  PERFORM t_expect('scope: unqualified DELETE of phases removes only the caller company rows', t_dml('authenticated', ops, 'DELETE FROM job_phases'), 'rows:' || n1p);
+  PERFORM t_expect('scope: ... the other company phase survives', (SELECT count(*)::text FROM job_phases), '1');
+  PERFORM t_expect('scope: unqualified DELETE of links removes only the caller company rows', t_dml('authenticated', ops, 'DELETE FROM job_task_links'), 'rows:' || n1l);
+  PERFORM t_expect('scope: ... the other company link survives', (SELECT count(*)::text FROM job_task_links), '1');
+END $$;
+ALTER TABLE job_task_links ENABLE TRIGGER job_task_links_no_cycle;
 ROLLBACK;

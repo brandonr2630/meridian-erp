@@ -1,6 +1,29 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-20 · Session 59 (D0c applied to prod)*
+*Last updated: 2026-10-21 · Session 61 (Phase A SQL built and tested on throwaway Postgres, NOT applied)*
+
+---
+
+## Session 61 — Phase A (Schedule v2) SQL built and tested on throwaway Postgres, NOT applied
+
+**Date:** 2026-10-21. The desk-checked SQL in `docs/specs/project-portal/phase-a-schedule-v2.md` was executed for the first time on a throwaway Postgres 17 (Docker). Nothing was applied to prod, no Supabase MCP tool was used, `index.html` is untouched. The spec now embeds the executed migration verbatim plus an "Execution notes" section.
+
+| File | What |
+|---|---|
+| `supabase/migrations/202610210600_phase_a_sql.sql` | `job_phases`, `job_task_links`, 8 new `job_tasks` columns, cycle/baseline/publish guards, `lock_job_baseline`, `job_task_client_visible`, `job_task_weight`, `job_task_planned_pct`, `job_schedule_status`, RLS. Idempotent. Name ends `_phase_a_sql` so the shared runner finds it. |
+| `supabase/rollbacks/202610210600_phase_a_sql_down.sql` | The `-- down` block made real; runs twice without error; `depends_on` untouched. |
+| `supabase/tests/phase_a_sql/` | `10_stub_extra` (live `job_tasks`/`job_audit_log`/jobs policy, write-only role, PostgREST-like `authenticator` session), `15_before`, `20_after`, `30_rollback`, `mutations.json`, `run-fixture.sh`, `fixture-sample.json`. |
+| `scripts/tests/schedule/sql-fixture-runner.mjs` | SQL side of the shared fixture (`scripts/tests/schedule/fixture.json`, written by the compute leaf). Prints `SQL FIXTURE PASSED n/n cases`. |
+
+**Results:** `bash supabase/tests/d0c_common/run.sh phase_a_sql`: before 10, after 366 (twice: after the re-apply too), rollback 21, all green. `node supabase/tests/d0c_common/mutate.mjs phase_a_sql`: MUTATION_RESULT. Fixture sample 5/5.
+
+**Spec bugs found by running it (all fixed in the migration and the spec):** (1) `job_schedule_status.v_gap` was `int`, rounding the gap and moving the "gap < -10" boundary; (2) new-table policies lacked `TO authenticated` (anon got 42501 from `my_company_ids()` instead of zero rows); (3) the `depends_on` backfill would abort the whole migration on a legacy cycle, self-reference or cross-job parent (now skipped with a NOTICE); (4) the baseline guard trusted a bare setting (now also needs `current_user` = owner of `lock_job_baseline`, and the RPC switches it off); (5) `lock_job_baseline` and `job_schedule_status` did `SELECT *` from `jobs` (cost columns); now only `job_no`, `status`, `due_date`.
+
+**Traps worth remembering:** `SET ROLE authenticated` inside a postgres session keeps `session_user = postgres`, which the X19 exemption lets through: publish-guard tests must use `t_dml_api` (`SET SESSION AUTHORIZATION authenticator`). BEFORE triggers run before RLS WITH CHECK, so some refusals are 23514/P0001, not 42501. `service_role` over REST is NOT exempt from the publish guard.
+
+**Known limits (not fixed, report only):** `user_has_perm` is not company-scoped (a user with approve in company B and membership in A can lock A's baseline); `job_phases.job_id`/`job_tasks.phase_id` are not checked against the row's company (same as live `job_tasks`); the guard writes an audit row against whatever `job_id` the row carries.
+
+**Next:** (1) owner review of the PR; (2) before applying to prod run read-only pre-flights: legacy `depends_on` cycles/self/cross-job rows (expect NOTICEs), the Q-D SECURITY DEFINER sweep after; (3) apply with `apply_migration`, then verify as simulated identities incl. through the real REST API (publish as write-only role refused); (4) drop the real `fixture.json` into `scripts/tests/schedule/` and run `bash supabase/tests/phase_a_sql/run-fixture.sh`; (5) UI leaf (Phase A UI, shared JS compute) is a separate PR.
 
 ---
 
