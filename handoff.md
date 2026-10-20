@@ -1,10 +1,24 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-20 · Session 56 (D0b built)*
+*Last updated: 2026-10-20 · Session 57 (create-erp-user error fix)*
 
 ---
 
-## Session 56 — D0b erp-user-access edge function (built and tested, NOT deployed)
+## Session 57 — create-erp-user real error messages; repo copy refreshed (deploy pending approval)
+
+**Date:** 2026-10-20. The Create User form showed only "Failed to create auth user" for every failure: Supabase Auth reports its reason in `msg`/`error_code`, but the function read only `message`. Found when creating the throwaway test user (an 11-character password was rejected by the 12-character minimum with no explanation).
+
+| File | What |
+|---|---|
+| `supabase/functions/create-erp-user/errors.ts` | `describeAuthError(body, status)`: uses `msg` > `message` > `error_description` > `error`; clear sentences for `weak_password` (with reasons) and `email_exists`/`user_already_exists`; status normalised; no unrelated fields leak. |
+| `supabase/functions/create-erp-user/index.ts` | Refreshed from the deployed v7 (the repo copy was stale: it checked a dropped `role` column) with ONLY the auth-error path changed (v8). **Not deployed yet** (needs approval; deploy with `verify_jwt=false`). |
+| `supabase/tests/create_user/errors.test.mjs` | 8 tests: `node --test supabase/tests/create_user/errors.test.mjs`; mutation check: ignoring `msg`, dropping the weak-password branch, unchecked status and dropping the email wording are each caught. |
+
+**Finding (not changed, owner decision):** `create-erp-user` authorises with `user_has_perm('admin:users')`, which is NOT company-scoped, and accepts any `role_id` and `company_id` from the request. So any holder of `admin:users` (e.g. a `company_admin`) could create a user in ANY company with ANY role, including `super_admin`. Currently harmless (no active `company_admin` users), but it should be tightened: require `is_company_admin(company_id)` for the target company and only a super admin may assign a role with `admin:companies`. Same non-company-scoped pattern in `update-erp-user`.
+
+---
+
+## Session 56 — D0b erp-user-access edge function (built, tested, DEPLOYED and live-verified 2026-10-20)
 
 **Date:** 2026-10-20 · Spec: Phase D, D0b. Closes the gap that `toggleUserActive`/`removeUser` only flipped `erp_users.is_active` or deleted the row, leaving a working Supabase login.
 
@@ -15,7 +29,7 @@
 | `index.html` | `toggleUserActive`/`removeUser` now call the function via `callUserAccess()`; no direct `is_active` patch or `erp_users` delete remains. The list reloads after every attempt (a partial result may have changed the row). |
 | `supabase/tests/d0b/handler.test.mjs` | 22 unit tests against an in-memory fake of Auth + PostgREST that records call order: `node --test supabase/tests/d0b/handler.test.mjs`. Mutation check: removing the per-company check, the super-admin rule, the self-target rule, the admin gate, or reordering the ban is each caught (one equivalent mutant: skipping the first token check is still caught by the uuid check). |
 
-**Not deployed.** Order matters: deploy the function BEFORE merging (merge deploys the new UI, which calls it). The unit tests use a fake backend; the function has not been exercised against real Supabase Auth yet, so test deactivate/activate on a throwaway staff account after deploying.
+**Deployed 2026-10-20** (`erp-user-access` v1, `verify_jwt=false`; PR #147 merged, UI live). **Live-verified** through a real admin session with a throwaway user: deactivate (row inactive, login banned until 2126, audit row, user then sees 0 jobs), activate (ban cleared, sees 13 jobs again), remove (profile deleted, no orphan role rows, login stays banned, 3 `staff.access.*` audit rows); plus no-change probes (self-target 400, bad action 400, non-uuid 400, unknown user 404, forged token 401). Not exercised live: the 403 path for a non-admin caller (unit-tested) and the FK-retain path of `remove` (unit-tested).
 **Known limits:** admins with `admin:users` can still change `erp_users.is_active` directly through the REST API (not just this function); a ban does not invalidate an already-issued access token (up to 1 hour) but D0a's `is_erp_staff()` cuts data access immediately once `is_active=false`. The repo copy of `create-erp-user` is stale versus the deployed v7 (it checks a dropped `role` column) and should be refreshed from the deployed source.
 
 ---
