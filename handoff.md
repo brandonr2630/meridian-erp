@@ -1,7 +1,18 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-21 · Session 61 (Phase A SQL built and tested on throwaway Postgres, NOT applied)*
+*Last updated: 2026-10-21 · Session 62 (Phase A compute module)*
 
+---
+
+## Session 62 — Phase A compute module + shared fixture (JS side; NOT yet wired into the UI)
+
+**Date:** 2026-10-20. Branch `feat/phase-a-compute`. Adds the one shared, DOM-free compute block to `index.html` (`// ── SCHEDULE COMPUTE (shared) ──` ... `// ── END SCHEDULE COMPUTE ──`, directly above `jcLoadTasks()`): `jcTaskWeight`, `jcPlannedPct`, `jcSchedCompute({tasks, links, phases, job, today})`. Nothing calls it yet; no UI, no migration, no prod change.
+
+- **Mirrors the SQL** `job_task_weight`, `job_task_planned_pct`, `job_schedule_status` in `docs/specs/project-portal/phase-a-schedule-v2.md` line by line (SQL is canonical). Constants `JC_SCHED_LATE_DAYS = 5` / `JC_SCHED_GAP_PTS = 10`, five labels, 2 dp stored values (integer hundredths, half-up), display integer = half-up of the stored 2 dp value, UTC day-number date maths (no `Date`).
+- **Deliberate differences:** a dependency cycle returns `warnings: ['cycle']` instead of raising; null/NaN inputs are coerced (progress 0, weight NULL, lag 0).
+- **Spec vs SQL:** the SQL stores the status gap in an `integer` variable, so `overall - plannedToday` is rounded half away from zero before `< -10` (gap -10.4 is On track, -10.5 is At risk). The prose says `gap < -10` on the numeric value. JS follows the SQL; the fixture pins both cases.
+- **Tests:** `node --test scripts/tests/schedule/compute.test.mjs` (45 hand-derived cases in `scripts/tests/schedule/fixture.json`, shared with the SQL run; plus unit, cycle, determinism, static, constant-mirroring tests). `node scripts/tests/schedule/mutate.mjs` breaks the block 45 ways and must catch every one.
+- **Next:** wire the module (KPI strip, Gantt, portfolio colouring) after the Phase A migration lands; run the same fixture against the SQL functions.
 ---
 
 ## Session 61 — Phase A (Schedule v2) SQL built and tested on throwaway Postgres, NOT applied
