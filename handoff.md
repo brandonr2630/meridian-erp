@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-20 · Session 63 (Phase A KPI strip + baseline lock UI)*
+*Last updated: 2026-10-20 · Session 65 (Phase A UI integration)*
 
 ---
 
@@ -25,6 +25,21 @@
 - **Deviations / choices:** the sticky date axis is its own small `<svg>` above the body `<svg>` (sticky cannot live inside one svg); left pane is `position:sticky; left:0` inside one scroll container so horizontal scroll moves only the timeline. Dates outside 1990..2100 count as bad data (row shows "unscheduled"). A task with only one date is "unscheduled". End before start draws the span between and flags it in the tooltip. The month name repeats about every 180 px in the axis so it stays readable when scrolled. Right padding leaves 240 px for a milestone label.
 - **Tests:** `node --test scripts/tests/ui/schedule-gantt.test.mjs` (43 tests: pure layout, fake-DOM drawer incl. XSS, entry point, static checks); `node scripts/tests/ui/schedule-gantt-mutate.mjs` breaks the block 50 ways and must catch all. Looked at in a real browser on a scratch page (outside the repo) at all three zooms; not yet seen inside the live ERP page (needs the migration + login).
 - **Next:** merge after the KPI strip and task-table branches; check the card once the migration is applied (a long job at Month zoom, many phases, narrow windows: the left pane is a fixed 320 px).
+---
+
+## Session 65 — Phase A task table + phases/links data layer (degrades without the migration)
+
+**Date:** 2026-10-20. Branch `feat/phase-a-ui-table` (stacked on `feat/phase-a-compute`). Staff UI leaf of Phase A in `index.html`: the Schedule card's data layer and task table. Block `// ── SCHEDULE TASK TABLE ──` ... `// ── END SCHEDULE TASK TABLE ──` sits directly above `jcLoadTasks()` (CSS: `/* schedule-table:begin */` block next to the `.jc-sched-*` rules); `jcLoadTasks/jcRenderTasks/jcAddTask/jcTaskSet/jcDeleteTask` were rewritten in place. Globals `jcSchedPhases` / `jcSchedLinks` are declared right after `jcTasks`.
+
+- **Degrades gracefully:** `jcLoadTasks` also reads `job_phases` and `job_task_links`; if either errors (tables not migrated yet) the card runs the v1 table (single `depends_on` select, no phase/milestone/weight/client columns, no `phase_id` in inserts, no `is_critical` writes) and shows a quiet notice. Nothing was run against prod.
+- **New columns:** Phase select, Milestone checkbox (sets end = start; weight field disabled), Weight (empty = NULL, placeholder = effective weight via `jcTaskWeight`), Predecessors dropdown (checkbox list; diff against `job_task_links`: adds POSTed first, removals DELETEd by id, first predecessor mirrored into `depends_on`; the DB "dependency cycle" error toasts and reverts), "Client" toggle per task and per phase (needs `ops:work-orders:approve` to enable; after a wording edit the server's row is merged and an "Unpublished by edit: re-publish" badge shows).
+- **Phases bar:** Apply template (only with no phases; ONE array POST, `JC_PHASE_TEMPLATES` default five, sort_order 10..50, `byJobType` empty), + Add phase, inline rename, up/down (rewrites sort_order with gaps of 10), delete (confirm; tasks fall to Unphased). Catalogue picker over `config_tasks` places a task via `categoryToPhase[category]`; unmapped categories are flagged in the picker. There was no existing schedule "add from catalogue" flow, so this picker is new. New tasks join the phase of the last row.
+- **Critical cache:** after load and every edit `jcSchedCompute` runs and `is_critical` is PATCHed for differing rows in at most two `sbPatchWhere` calls (writers only, silent on failure, never retried by itself). A very large diff could exceed URL limits (about 200 ids); not chunked.
+- **updated_at:** `job_tasks`, `job_phases`, `job_task_links` were added to `NO_UPDATED_AT` so the shared helpers stop sending a client `updated_at` (the migration's trigger owns it). Until the migration is applied `job_tasks.updated_at` is therefore no longer bumped by task edits.
+- **Edits to one task are serialised** (`jcSchedSerial`), so a slow earlier PATCH cannot overwrite a later one; Add Task / Apply template ignore double clicks.
+- **Contract with the other leaves:** after every load and edit `jcRenderSchedKpis()` then `jcRenderSchedGantt()` are called, each guarded by `typeof === 'function'`.
+- **Tests:** `node --test scripts/tests/ui/schedule-table.test.mjs` (54) and `node scripts/tests/ui/schedule-table-mutate.mjs` (54/54 mutants caught). `scripts/tests/schedule/compute.test.mjs` gap check relaxed (other leaves add blocks between the compute block and `jcLoadTasks`).
+- **Not verified:** a real browser against a migrated database (no migration exists in prod); the picker/dropdown styling.
 
 ---
 

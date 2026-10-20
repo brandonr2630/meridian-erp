@@ -163,11 +163,9 @@ test("index.html carries exactly ONE compute implementation", () => {
   assert.equal(html.split("function jcPlannedPct").length - 1, 1);
   assert.equal(html.split(BEGIN).length - 1, 1);
   assert.equal(html.split(END).length - 1, 1);
-  // the Gantt renderer block (Phase A UI) sits directly below the compute block, so measure from whichever block ends last
-  const GEND = "// ── END SCHEDULE GANTT RENDERER ──", last = html.includes(GEND) ? html.indexOf(GEND) : html.indexOf(END);
-  if (html.includes(GEND)) assert.ok(html.indexOf("// ── SCHEDULE GANTT RENDERER ──") - html.indexOf(END) < 60, "Gantt block must sit directly below the compute block");
-  const gap = html.indexOf("async function jcLoadTasks()") - last;
-  assert.ok(gap > 0 && gap < 60, "block must sit directly above jcLoadTasks");
+  const gap = html.indexOf("async function jcLoadTasks()") - html.indexOf(END);
+  assert.ok(gap > 0, "block must sit above jcLoadTasks (other leaves add their own delimited blocks between the two)");
+  assert.ok(!/function (jcSchedCompute|jcTaskWeight|jcPlannedPct)/.test(html.slice(html.indexOf(END) + END.length, html.indexOf("async function jcLoadTasks()"))), "no second compute implementation below the block");
   assert.ok(block.split("\n").length < 400);
 });
 test("block is DOM-free and clock-free", () => {
