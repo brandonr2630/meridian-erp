@@ -1,0 +1,39 @@
+{
+  "cases": [
+    { "name": "exact .5 rounds half-up (62.50 displays 63)", "today": "2026-03-01",
+      "job": { "status": "Open", "due_date": null }, "baselineLocked": false,
+      "tasks": [
+        { "key": "a", "sort_order": 1, "start_date": null, "end_date": null, "progress": 100, "is_milestone": false, "weight": null, "baseline_start": null, "baseline_end": null },
+        { "key": "b", "sort_order": 2, "start_date": null, "end_date": null, "progress": 25, "is_milestone": false, "weight": null, "baseline_start": null, "baseline_end": null }
+      ], "links": [],
+      "expect": { "overall": 62.5, "overallDisplay": 63, "plannedToday": 0, "plannedDisplay": 0, "forecastEnd": null, "status": "On track", "slipDays": null } },
+    { "name": "62.49 displays 62", "today": "2026-03-01",
+      "job": { "status": "Open", "due_date": null }, "baselineLocked": false,
+      "tasks": [
+        { "key": "a", "sort_order": 1, "start_date": null, "end_date": null, "progress": 62, "is_milestone": false, "weight": 51, "baseline_start": null, "baseline_end": null },
+        { "key": "b", "sort_order": 2, "start_date": null, "end_date": null, "progress": 63, "is_milestone": false, "weight": 49, "baseline_start": null, "baseline_end": null }
+      ], "links": [],
+      "expect": { "overall": 62.49, "overallDisplay": 62, "plannedToday": 0, "plannedDisplay": 0, "forecastEnd": null, "status": "On track", "slipDays": null } },
+    { "name": "slip 1 day against the due date is At risk; undated planned is 0, dated planned uses current dates", "today": "2026-03-01",
+      "job": { "status": "Open", "due_date": "2026-03-10" }, "baselineLocked": false,
+      "tasks": [
+        { "key": "a", "sort_order": 1, "start_date": "2026-03-01", "end_date": "2026-03-10", "progress": 0, "is_milestone": false, "weight": null, "baseline_start": null, "baseline_end": null }
+      ], "links": [],
+      "expect": { "overall": 0, "overallDisplay": 0, "plannedToday": 10, "plannedDisplay": 10, "forecastEnd": "2026-03-11", "status": "At risk", "slipDays": 1 } },
+    { "name": "locked baseline, overall 39.995 rounds to 40.00 so gap is exactly -10.00 (On track)", "today": "2026-01-05",
+      "job": { "status": "Open", "due_date": null }, "baselineLocked": true,
+      "tasks": [
+        { "key": "heavy", "sort_order": 1, "start_date": "2026-01-01", "end_date": "2026-01-10", "progress": 40, "is_milestone": false, "weight": 199, "baseline_start": "2026-01-01", "baseline_end": "2026-01-10" },
+        { "key": "light", "sort_order": 2, "start_date": "2026-01-01", "end_date": "2026-01-10", "progress": 39, "is_milestone": false, "weight": 1, "baseline_start": "2026-01-01", "baseline_end": "2026-01-10" }
+      ], "links": [],
+      "expect": { "overall": 40, "overallDisplay": 40, "plannedToday": 50, "plannedDisplay": 50, "forecastEnd": "2026-01-08", "status": "On track", "slipDays": -2 } },
+    { "name": "a milestone carrying an explicit weight is excluded; a diamond with two predecessors waits for the later one", "today": "2026-03-01",
+      "job": { "status": "Open", "due_date": null }, "baselineLocked": false,
+      "tasks": [
+        { "key": "p1", "sort_order": 1, "start_date": "2026-03-01", "end_date": "2026-03-05", "progress": 0, "is_milestone": false, "weight": null, "baseline_start": null, "baseline_end": null },
+        { "key": "p2", "sort_order": 2, "start_date": "2026-03-01", "end_date": "2026-03-10", "progress": 0, "is_milestone": false, "weight": null, "baseline_start": null, "baseline_end": null },
+        { "key": "ms", "sort_order": 3, "start_date": "2026-03-15", "end_date": "2026-03-15", "progress": 0, "is_milestone": true, "weight": 7, "baseline_start": null, "baseline_end": null }
+      ], "links": [ { "task": "ms", "pred": "p1", "lag": 0 }, { "task": "ms", "pred": "p2", "lag": 2 } ],
+      "expect": { "overall": 0, "overallDisplay": 0, "plannedToday": 13.33, "plannedDisplay": 13, "forecastEnd": "2026-03-13", "status": "On track", "slipDays": null } }
+  ]
+}
