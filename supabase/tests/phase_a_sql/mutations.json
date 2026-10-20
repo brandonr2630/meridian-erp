@@ -1,0 +1,935 @@
+[
+ {
+  "name": "phases: colour regex loosened",
+  "find": "colour ~ '^#[0-9a-fA-F]{6}$'",
+  "replace": "colour ~ '^#[0-9a-fA-F]+$$$$'"
+ },
+ {
+  "name": "phases: name may be empty",
+  "find": "char_length(name) BETWEEN 1 AND 80",
+  "replace": "char_length(name) BETWEEN 0 AND 80"
+ },
+ {
+  "name": "phases: name limit raised",
+  "find": "char_length(name) BETWEEN 1 AND 80",
+  "replace": "char_length(name) BETWEEN 1 AND 100"
+ },
+ {
+  "name": "tasks: negative weight allowed",
+  "find": "weight IS NULL OR weight >= 0",
+  "replace": "weight IS NULL OR weight >= -1"
+ },
+ {
+  "name": "tasks: baseline order unchecked",
+  "find": "baseline_end >= baseline_start);",
+  "replace": "baseline_end >= baseline_start OR true);"
+ },
+ {
+  "name": "tasks: milestone start/end unchecked",
+  "find": "OR start_date = end_date);",
+  "replace": "OR true);"
+ },
+ {
+  "name": "links: lag upper bound raised",
+  "find": "CHECK (lag_days BETWEEN -30 AND 365)",
+  "replace": "CHECK (lag_days BETWEEN -30 AND 400)"
+ },
+ {
+  "name": "links: lag lower bound lowered",
+  "find": "CHECK (lag_days BETWEEN -30 AND 365)",
+  "replace": "CHECK (lag_days BETWEEN -40 AND 365)"
+ },
+ {
+  "name": "links: self-link allowed",
+  "find": "CHECK (task_id <> predecessor_id)",
+  "replace": "CHECK (true)"
+ },
+ {
+  "name": "links: duplicate allowed (unique widened)",
+  "find": "CONSTRAINT job_task_links_uniq UNIQUE (task_id, predecessor_id)",
+  "replace": "CONSTRAINT job_task_links_uniq UNIQUE (task_id, predecessor_id, lag_days)"
+ },
+ {
+  "name": "tasks: phase delete cascades to tasks",
+  "find": "phase_id           uuid REFERENCES job_phases(id) ON DELETE SET NULL",
+  "replace": "phase_id           uuid REFERENCES job_phases(id) ON DELETE CASCADE"
+ },
+ {
+  "name": "links: task delete leaves links (no cascade)",
+  "find": "task_id        uuid NOT NULL REFERENCES job_tasks(id) ON DELETE CASCADE",
+  "replace": "task_id        uuid NOT NULL REFERENCES job_tasks(id)"
+ },
+ {
+  "name": "tasks: client_visible defaults to true",
+  "find": "client_visible     boolean NOT NULL DEFAULT false;",
+  "replace": "client_visible     boolean NOT NULL DEFAULT true;"
+ },
+ {
+  "name": "phases: client_visible defaults to true",
+  "find": "client_visible boolean NOT NULL DEFAULT false,",
+  "replace": "client_visible boolean NOT NULL DEFAULT true,"
+ },
+ {
+  "name": "tasks: is_milestone defaults to true",
+  "find": "is_milestone       boolean NOT NULL DEFAULT false",
+  "replace": "is_milestone       boolean NOT NULL DEFAULT true"
+ },
+ {
+  "name": "cycle check disabled",
+  "find": "  IF EXISTS (",
+  "replace": "  IF false AND EXISTS ("
+ },
+ {
+  "name": "cycle check walks upstream instead of downstream",
+  "find": "SELECT l.task_id FROM job_task_links l JOIN down d ON l.predecessor_id = d.id",
+  "replace": "SELECT l.predecessor_id FROM job_task_links l JOIN down d ON l.task_id = d.id"
+ },
+ {
+  "name": "cycle trigger only on INSERT",
+  "find": "CREATE TRIGGER job_task_links_no_cycle BEFORE INSERT OR UPDATE ON job_task_links",
+  "replace": "CREATE TRIGGER job_task_links_no_cycle BEFORE INSERT ON job_task_links"
+ },
+ {
+  "name": "links: same-job/company check disabled",
+  "find": "IF v_tj IS DISTINCT FROM NEW.job_id OR v_pj IS DISTINCT FROM NEW.job_id OR v_tc IS DISTINCT FROM NEW.company_id THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "links: task job check dropped",
+  "find": "IF v_tj IS DISTINCT FROM NEW.job_id OR v_pj IS DISTINCT FROM NEW.job_id OR v_tc IS DISTINCT FROM NEW.company_id THEN",
+  "replace": "IF v_pj IS DISTINCT FROM NEW.job_id OR v_tc IS DISTINCT FROM NEW.company_id THEN"
+ },
+ {
+  "name": "links: predecessor job check dropped",
+  "find": "IF v_tj IS DISTINCT FROM NEW.job_id OR v_pj IS DISTINCT FROM NEW.job_id OR v_tc IS DISTINCT FROM NEW.company_id THEN",
+  "replace": "IF v_tj IS DISTINCT FROM NEW.job_id OR v_tc IS DISTINCT FROM NEW.company_id THEN"
+ },
+ {
+  "name": "links: company check dropped",
+  "find": "IF v_tj IS DISTINCT FROM NEW.job_id OR v_pj IS DISTINCT FROM NEW.job_id OR v_tc IS DISTINCT FROM NEW.company_id THEN",
+  "replace": "IF v_tj IS DISTINCT FROM NEW.job_id OR v_pj IS DISTINCT FROM NEW.job_id THEN"
+ },
+ {
+  "name": "backfill catches the wrong exception (legacy cycle aborts the migration)",
+  "find": "EXCEPTION WHEN check_violation THEN",
+  "replace": "EXCEPTION WHEN unique_violation THEN"
+ },
+ {
+  "name": "self-link early return removed",
+  "find": "  IF NEW.task_id = NEW.predecessor_id THEN RETURN NEW; END IF;      -- the CHECK constraint reports a self-link",
+  "replace": "",
+  "equivalent": true,
+  "reason": "without it the trigger reports the self-link as a cycle with the same SQLSTATE 23514, only the message differs"
+ },
+ {
+  "name": "baseline guard: setting ignored (always open)",
+  "find": "v_ok := current_setting('app.baseline_rpc', true) IS NOT DISTINCT FROM 'on';",
+  "replace": "v_ok := true;"
+ },
+ {
+  "name": "baseline guard: owner check dropped (setting alone opens it)",
+  "find": "v_ok := current_user IS NOT DISTINCT FROM",
+  "replace": "v_ok := true OR current_user IS NOT DISTINCT FROM"
+ },
+ {
+  "name": "baseline guard: INSERT branch disabled",
+  "find": "IF TG_OP = 'INSERT' AND (NEW.baseline_start IS NOT NULL OR NEW.baseline_end IS NOT NULL OR NEW.baseline_locked_at IS NOT NULL) THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "baseline guard: INSERT ignores locked_at",
+  "find": "IF TG_OP = 'INSERT' AND (NEW.baseline_start IS NOT NULL OR NEW.baseline_end IS NOT NULL OR NEW.baseline_locked_at IS NOT NULL) THEN",
+  "replace": "IF TG_OP = 'INSERT' AND (NEW.baseline_start IS NOT NULL OR NEW.baseline_end IS NOT NULL) THEN"
+ },
+ {
+  "name": "baseline guard: INSERT ignores baseline_start",
+  "find": "IF TG_OP = 'INSERT' AND (NEW.baseline_start IS NOT NULL OR NEW.baseline_end IS NOT NULL OR NEW.baseline_locked_at IS NOT NULL) THEN",
+  "replace": "IF TG_OP = 'INSERT' AND (NEW.baseline_end IS NOT NULL OR NEW.baseline_locked_at IS NOT NULL) THEN"
+ },
+ {
+  "name": "baseline guard: INSERT ignores baseline_end",
+  "find": "IF TG_OP = 'INSERT' AND (NEW.baseline_start IS NOT NULL OR NEW.baseline_end IS NOT NULL OR NEW.baseline_locked_at IS NOT NULL) THEN",
+  "replace": "IF TG_OP = 'INSERT' AND (NEW.baseline_start IS NOT NULL OR NEW.baseline_locked_at IS NOT NULL) THEN"
+ },
+ {
+  "name": "baseline guard: UPDATE branch disabled",
+  "find": "ELSIF TG_OP = 'UPDATE' AND (NEW.baseline_start, NEW.baseline_end, NEW.baseline_locked_at) IS DISTINCT FROM (OLD.baseline_start, OLD.baseline_end, OLD.baseline_locked_at) THEN",
+  "replace": "ELSIF false THEN"
+ },
+ {
+  "name": "baseline guard: UPDATE ignores locked_at",
+  "find": "ELSIF TG_OP = 'UPDATE' AND (NEW.baseline_start, NEW.baseline_end, NEW.baseline_locked_at) IS DISTINCT FROM (OLD.baseline_start, OLD.baseline_end, OLD.baseline_locked_at) THEN",
+  "replace": "ELSIF TG_OP = 'UPDATE' AND (NEW.baseline_start, NEW.baseline_end) IS DISTINCT FROM (OLD.baseline_start, OLD.baseline_end) THEN"
+ },
+ {
+  "name": "baseline guard: UPDATE ignores baseline_start",
+  "find": "ELSIF TG_OP = 'UPDATE' AND (NEW.baseline_start, NEW.baseline_end, NEW.baseline_locked_at) IS DISTINCT FROM (OLD.baseline_start, OLD.baseline_end, OLD.baseline_locked_at) THEN",
+  "replace": "ELSIF TG_OP = 'UPDATE' AND (NEW.baseline_end, NEW.baseline_locked_at) IS DISTINCT FROM (OLD.baseline_end, OLD.baseline_locked_at) THEN"
+ },
+ {
+  "name": "baseline guard: UPDATE ignores baseline_end",
+  "find": "ELSIF TG_OP = 'UPDATE' AND (NEW.baseline_start, NEW.baseline_end, NEW.baseline_locked_at) IS DISTINCT FROM (OLD.baseline_start, OLD.baseline_end, OLD.baseline_locked_at) THEN",
+  "replace": "ELSIF TG_OP = 'UPDATE' AND (NEW.baseline_start, NEW.baseline_locked_at) IS DISTINCT FROM (OLD.baseline_start, OLD.baseline_locked_at) THEN"
+ },
+ {
+  "name": "baseline guard trigger: UPDATE only",
+  "find": "CREATE TRIGGER job_tasks_baseline_guard BEFORE INSERT OR UPDATE ON job_tasks",
+  "replace": "CREATE TRIGGER job_tasks_baseline_guard BEFORE UPDATE ON job_tasks"
+ },
+ {
+  "name": "baseline guard trigger: INSERT only",
+  "find": "CREATE TRIGGER job_tasks_baseline_guard BEFORE INSERT OR UPDATE ON job_tasks",
+  "replace": "CREATE TRIGGER job_tasks_baseline_guard BEFORE INSERT ON job_tasks"
+ },
+ {
+  "name": "lock: permission check removed",
+  "find": "IF NOT user_has_perm('ops:work-orders:approve') THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "lock: write atom accepted instead of approve",
+  "find": "IF NOT user_has_perm('ops:work-orders:approve') THEN",
+  "replace": "IF NOT user_has_perm('ops:work-orders:write') THEN"
+ },
+ {
+  "name": "lock: read atom accepted instead of approve",
+  "find": "IF NOT user_has_perm('ops:work-orders:approve') THEN",
+  "replace": "IF NOT user_has_perm('ops:work-orders:read') THEN"
+ },
+ {
+  "name": "lock: company membership dropped",
+  "find": "FROM jobs j WHERE j.id = p_job_id AND j.company_id IN (SELECT my_company_ids());",
+  "replace": "FROM jobs j WHERE j.id = p_job_id;"
+ },
+ {
+  "name": "lock: reason rule removed",
+  "find": "IF NOT v_first AND coalesce(btrim(p_reason), '') = '' THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "lock: blank reason accepted",
+  "find": "IF NOT v_first AND coalesce(btrim(p_reason), '') = '' THEN",
+  "replace": "IF NOT v_first AND coalesce(p_reason, '') = '' THEN"
+ },
+ {
+  "name": "lock: first lock also needs a reason",
+  "find": "IF NOT v_first AND coalesce(btrim(p_reason), '') = '' THEN",
+  "replace": "IF coalesce(btrim(p_reason), '') = '' THEN"
+ },
+ {
+  "name": "lock: always treated as first lock",
+  "find": "SELECT NOT EXISTS (SELECT 1 FROM job_tasks WHERE job_id = p_job_id AND baseline_locked_at IS NOT NULL) INTO v_first;",
+  "replace": "SELECT true INTO v_first;"
+ },
+ {
+  "name": "lock: never treated as first lock",
+  "find": "SELECT NOT EXISTS (SELECT 1 FROM job_tasks WHERE job_id = p_job_id AND baseline_locked_at IS NOT NULL) INTO v_first;",
+  "replace": "SELECT false INTO v_first;"
+ },
+ {
+  "name": "lock: action types swapped",
+  "find": "CASE WHEN v_first THEN 'baseline_locked' ELSE 'baseline_reset' END,",
+  "replace": "CASE WHEN v_first THEN 'baseline_reset' ELSE 'baseline_locked' END,"
+ },
+ {
+  "name": "lock: description loses the reason",
+  "find": "ELSE 'Schedule re-baselined: ' || p_reason END,",
+  "replace": "ELSE 'Schedule re-baselined' END,"
+ },
+ {
+  "name": "lock: audit username dropped",
+  "find": "          (SELECT u.full_name FROM erp_users u WHERE u.auth_user_id = auth.uid() LIMIT 1),",
+  "replace": "          NULL,"
+ },
+ {
+  "name": "lock: audit user_id dropped",
+  "find": "VALUES (p_job_id, v_job_no, auth.uid(),",
+  "replace": "VALUES (p_job_id, v_job_no, NULL,"
+ },
+ {
+  "name": "lock: audit job_no dropped",
+  "find": "VALUES (p_job_id, v_job_no, auth.uid(),",
+  "replace": "VALUES (p_job_id, NULL, auth.uid(),"
+ },
+ {
+  "name": "lock: audit metadata loses the reason",
+  "find": "jsonb_build_object('tasks', v_n, 'reason', p_reason));",
+  "replace": "jsonb_build_object('tasks', v_n));"
+ },
+ {
+  "name": "lock: undated tasks also get locked",
+  "find": "WHERE job_id = p_job_id AND start_date IS NOT NULL AND end_date IS NOT NULL;",
+  "replace": "WHERE job_id = p_job_id;"
+ },
+ {
+  "name": "lock: baseline_end copied from start_date",
+  "find": "baseline_end = end_date, baseline_locked_at = now()",
+  "replace": "baseline_end = start_date, baseline_locked_at = now()"
+ },
+ {
+  "name": "lock: setting never switched on",
+  "find": "PERFORM set_config('app.baseline_rpc', 'on', true);",
+  "replace": "PERFORM set_config('app.baseline_rpc', 'off', true);"
+ },
+ {
+  "name": "lock: setting left on after the RPC",
+  "find": "PERFORM set_config('app.baseline_rpc', 'off', true);",
+  "replace": "PERFORM 1;"
+ },
+ {
+  "name": "lock: row count not returned",
+  "find": "GET DIAGNOSTICS v_n = ROW_COUNT;",
+  "replace": "v_n := 0;"
+ },
+ {
+  "name": "lock: anon keeps EXECUTE",
+  "find": "REVOKE ALL ON FUNCTION lock_job_baseline(uuid, text) FROM PUBLIC, anon;",
+  "replace": "REVOKE ALL ON FUNCTION lock_job_baseline(uuid, text) FROM PUBLIC;"
+ },
+ {
+  "name": "lock: not SECURITY DEFINER",
+  "find": "RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$",
+  "replace": "RETURNS integer LANGUAGE plpgsql SET search_path = public, pg_temp AS $$$$$$$$"
+ },
+ {
+  "name": "lock: search_path not pinned",
+  "find": "RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$",
+  "replace": "RETURNS integer LANGUAGE plpgsql SECURITY DEFINER AS $$$$$$$$"
+ },
+ {
+  "name": "updated_at trigger on job_phases only fires on INSERT",
+  "find": "CREATE TRIGGER job_phases_set_updated_at     BEFORE UPDATE ON job_phases",
+  "replace": "CREATE TRIGGER job_phases_set_updated_at     BEFORE INSERT ON job_phases"
+ },
+ {
+  "name": "updated_at trigger on job_task_links only fires on INSERT",
+  "find": "CREATE TRIGGER job_task_links_set_updated_at BEFORE UPDATE ON job_task_links",
+  "replace": "CREATE TRIGGER job_task_links_set_updated_at BEFORE INSERT ON job_task_links"
+ },
+ {
+  "name": "updated_at trigger on job_tasks only fires on INSERT",
+  "find": "CREATE TRIGGER job_tasks_set_updated_at      BEFORE UPDATE ON job_tasks",
+  "replace": "CREATE TRIGGER job_tasks_set_updated_at      BEFORE INSERT ON job_tasks"
+ },
+ {
+  "name": "guard: publish check never runs",
+  "find": "IF v_pub AND session_user NOT IN ('postgres', 'supabase_admin') THEN",
+  "replace": "IF v_pub AND false THEN"
+ },
+ {
+  "name": "guard: no exemption at all",
+  "find": "IF v_pub AND session_user NOT IN ('postgres', 'supabase_admin') THEN",
+  "replace": "IF v_pub THEN"
+ },
+ {
+  "name": "guard: supabase_admin not exempt",
+  "find": "IF v_pub AND session_user NOT IN ('postgres', 'supabase_admin') THEN",
+  "replace": "IF v_pub AND session_user NOT IN ('postgres') THEN"
+ },
+ {
+  "name": "guard: authenticator exempt",
+  "find": "IF v_pub AND session_user NOT IN ('postgres', 'supabase_admin') THEN",
+  "replace": "IF v_pub AND session_user NOT IN ('postgres', 'supabase_admin', 'authenticator') THEN"
+ },
+ {
+  "name": "guard: exemption keyed on current_user",
+  "find": "IF v_pub AND session_user NOT IN ('postgres', 'supabase_admin') THEN",
+  "replace": "IF v_pub AND current_user NOT IN ('postgres', 'supabase_admin') THEN"
+ },
+ {
+  "name": "guard: exemption keyed on any superuser",
+  "find": "IF v_pub AND session_user NOT IN ('postgres', 'supabase_admin') THEN",
+  "replace": "IF v_pub AND NOT (SELECT rolsuper FROM pg_roles WHERE rolname = session_user) THEN"
+ },
+ {
+  "name": "guard: publish permission always granted",
+  "find": "IF NOT (user_has_perm('ops:work-orders:approve') OR (v_atom IS NOT NULL AND user_has_perm(v_atom))) THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "guard: approve atom ignored",
+  "find": "IF NOT (user_has_perm('ops:work-orders:approve') OR (v_atom IS NOT NULL AND user_has_perm(v_atom))) THEN",
+  "replace": "IF NOT ((v_atom IS NOT NULL AND user_has_perm(v_atom))) THEN"
+ },
+ {
+  "name": "guard: domain atom ignored",
+  "find": "IF NOT (user_has_perm('ops:work-orders:approve') OR (v_atom IS NOT NULL AND user_has_perm(v_atom))) THEN",
+  "replace": "IF NOT (user_has_perm('ops:work-orders:approve')) THEN"
+ },
+ {
+  "name": "guard: write atom accepted for publishing",
+  "find": "IF NOT (user_has_perm('ops:work-orders:approve') OR (v_atom IS NOT NULL AND user_has_perm(v_atom))) THEN",
+  "replace": "IF NOT (user_has_perm('ops:work-orders:write') OR (v_atom IS NOT NULL AND user_has_perm(v_atom))) THEN"
+ },
+ {
+  "name": "guard: any already-visible row counts as publish",
+  "find": "IF NEW.client_visible AND NOT OLD.client_visible THEN",
+  "replace": "IF NEW.client_visible THEN"
+ },
+ {
+  "name": "guard: unpublish branch dead",
+  "find": "ELSIF OLD.client_visible AND NOT NEW.client_visible THEN",
+  "replace": "ELSIF false THEN"
+ },
+ {
+  "name": "guard: wording branch dead",
+  "find": "ELSIF OLD.client_visible AND NEW.client_visible THEN",
+  "replace": "ELSIF false THEN"
+ },
+ {
+  "name": "guard: auto-unpublish does not clear the flag",
+  "find": "IF v_auto THEN NEW.client_visible := false; END IF;",
+  "replace": "NULL;"
+ },
+ {
+  "name": "guard: any column change counts as wording",
+  "find": "(v_new -> c) IS DISTINCT FROM (v_old -> c)",
+  "replace": "(v_new -> c) IS NOT DISTINCT FROM (v_old -> c)"
+ },
+ {
+  "name": "guard: wording check never fires",
+  "find": "IF c <> '' AND (v_new -> c) IS DISTINCT FROM (v_old -> c) THEN v_auto := true; END IF;",
+  "replace": "NULL;"
+ },
+ {
+  "name": "guard: wording list split on semicolon",
+  "find": "string_to_array(coalesce(TG_ARGV[0], ''), ',')",
+  "replace": "string_to_array(coalesce(TG_ARGV[0], ''), ';')"
+ },
+ {
+  "name": "guard: domain atom read from the wrong argument",
+  "find": "v_atom  text   := nullif(TG_ARGV[1], '');",
+  "replace": "v_atom  text   := nullif(TG_ARGV[0], '');"
+ },
+ {
+  "name": "guard: domain atom ignored",
+  "find": "v_atom  text   := nullif(TG_ARGV[1], '');",
+  "replace": "v_atom  text   := NULL;"
+ },
+ {
+  "name": "guard: unpublish not audited",
+  "find": "IF v_pub OR v_unpub OR v_auto THEN",
+  "replace": "IF v_pub OR v_auto THEN"
+ },
+ {
+  "name": "guard: auto-unpublish not audited",
+  "find": "IF v_pub OR v_unpub OR v_auto THEN",
+  "replace": "IF v_pub OR v_unpub THEN"
+ },
+ {
+  "name": "guard: publish not audited",
+  "find": "IF v_pub OR v_unpub OR v_auto THEN",
+  "replace": "IF v_unpub OR v_auto THEN"
+ },
+ {
+  "name": "guard: audit username dropped",
+  "find": "            (SELECT u.full_name FROM erp_users u WHERE u.auth_user_id = auth.uid() LIMIT 1),",
+  "replace": "            NULL,"
+ },
+ {
+  "name": "guard: audit user_id dropped",
+  "find": "VALUES (NEW.job_id, v_jobno, auth.uid(),",
+  "replace": "VALUES (NEW.job_id, v_jobno, NULL,"
+ },
+ {
+  "name": "guard: audit job_no dropped",
+  "find": "VALUES (NEW.job_id, v_jobno, auth.uid(),",
+  "replace": "VALUES (NEW.job_id, NULL, auth.uid(),"
+ },
+ {
+  "name": "guard: audit action_type changed",
+  "find": "'visibility_changed',",
+  "replace": "'visibility_change',"
+ },
+ {
+  "name": "guard: audit table name wrong",
+  "find": "jsonb_build_object('table', TG_TABLE_NAME,",
+  "replace": "jsonb_build_object('table', 'x',"
+ },
+ {
+  "name": "guard: audit row_id dropped",
+  "find": "'row_id', v_new ->> 'id',",
+  "replace": "'row_id', NULL,"
+ },
+ {
+  "name": "guard: audit 'to' inverted",
+  "find": "'to', v_pub,",
+  "replace": "'to', NOT v_pub,"
+ },
+ {
+  "name": "guard: audit 'from' wrong",
+  "find": "'from', (v_auto OR v_unpub),",
+  "replace": "'from', v_unpub,"
+ },
+ {
+  "name": "guard: audit reasons swapped",
+  "find": "WHEN v_auto THEN 'wording_edited' WHEN v_pub THEN 'publish' ELSE 'unpublish' END",
+  "replace": "WHEN v_auto THEN 'wording_edited' WHEN v_pub THEN 'unpublish' ELSE 'publish' END"
+ },
+ {
+  "name": "guard: audit publish description changed",
+  "find": "CASE WHEN v_pub THEN 'Published to client'",
+  "replace": "CASE WHEN v_pub THEN 'Published'"
+ },
+ {
+  "name": "guard: audit wording description changed",
+  "find": "WHEN v_auto THEN 'Auto-unpublished after wording edit'",
+  "replace": "WHEN v_auto THEN 'Auto-unpublished'"
+ },
+ {
+  "name": "guard: still executable by authenticated/anon",
+  "find": "REVOKE ALL ON FUNCTION job_visibility_guard() FROM PUBLIC, anon, authenticated;",
+  "replace": "REVOKE ALL ON FUNCTION job_visibility_guard() FROM PUBLIC;"
+ },
+ {
+  "name": "guard: not SECURITY DEFINER",
+  "find": "CREATE OR REPLACE FUNCTION job_visibility_guard() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$",
+  "replace": "CREATE OR REPLACE FUNCTION job_visibility_guard() RETURNS trigger LANGUAGE plpgsql SET search_path = public, pg_temp AS $$$$$$$$"
+ },
+ {
+  "name": "guard: search_path not pinned",
+  "find": "CREATE OR REPLACE FUNCTION job_visibility_guard() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$",
+  "replace": "CREATE OR REPLACE FUNCTION job_visibility_guard() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$$$$$$$"
+ },
+ {
+  "name": "phases guard: one argument only",
+  "find": "EXECUTE FUNCTION job_visibility_guard('name', '');",
+  "replace": "EXECUTE FUNCTION job_visibility_guard('name');"
+ },
+ {
+  "name": "phases guard: wording list widened to sort_order",
+  "find": "EXECUTE FUNCTION job_visibility_guard('name', '');",
+  "replace": "EXECUTE FUNCTION job_visibility_guard('name,sort_order', '');"
+ },
+ {
+  "name": "phases guard: no wording column",
+  "find": "EXECUTE FUNCTION job_visibility_guard('name', '');",
+  "replace": "EXECUTE FUNCTION job_visibility_guard('', '');"
+ },
+ {
+  "name": "tasks guard: one argument only",
+  "find": "EXECUTE FUNCTION job_visibility_guard('task_name', '');",
+  "replace": "EXECUTE FUNCTION job_visibility_guard('task_name');"
+ },
+ {
+  "name": "tasks guard: wording list widened to assignee",
+  "find": "EXECUTE FUNCTION job_visibility_guard('task_name', '');",
+  "replace": "EXECUTE FUNCTION job_visibility_guard('task_name,assignee', '');"
+ },
+ {
+  "name": "tasks guard: wrong wording column",
+  "find": "EXECUTE FUNCTION job_visibility_guard('task_name', '');",
+  "replace": "EXECUTE FUNCTION job_visibility_guard('assignee', '');"
+ },
+ {
+  "name": "phases guard trigger: UPDATE only",
+  "find": "CREATE TRIGGER job_phases_visibility_guard BEFORE INSERT OR UPDATE ON job_phases",
+  "replace": "CREATE TRIGGER job_phases_visibility_guard BEFORE UPDATE ON job_phases"
+ },
+ {
+  "name": "tasks guard trigger: UPDATE only",
+  "find": "CREATE TRIGGER job_tasks_visibility_guard  BEFORE INSERT OR UPDATE ON job_tasks",
+  "replace": "CREATE TRIGGER job_tasks_visibility_guard  BEFORE UPDATE ON job_tasks"
+ },
+ {
+  "name": "tasks guard trigger: INSERT only",
+  "find": "CREATE TRIGGER job_tasks_visibility_guard  BEFORE INSERT OR UPDATE ON job_tasks",
+  "replace": "CREATE TRIGGER job_tasks_visibility_guard  BEFORE INSERT ON job_tasks"
+ },
+ {
+  "name": "visible: phase ignored",
+  "find": "(SELECT t.client_visible AND (t.phase_id IS NULL OR COALESCE(p.client_visible, false))",
+  "replace": "(SELECT t.client_visible"
+ },
+ {
+  "name": "visible: task without phase is hidden",
+  "find": "(SELECT t.client_visible AND (t.phase_id IS NULL OR COALESCE(p.client_visible, false))",
+  "replace": "(SELECT t.client_visible AND COALESCE(p.client_visible, false)"
+ },
+ {
+  "name": "visible: task flag ignored",
+  "find": "(SELECT t.client_visible AND (t.phase_id IS NULL OR COALESCE(p.client_visible, false))",
+  "replace": "(SELECT (t.phase_id IS NULL OR COALESCE(p.client_visible, false))"
+ },
+ {
+  "name": "visible: phase condition ORed",
+  "find": "(SELECT t.client_visible AND (t.phase_id IS NULL OR COALESCE(p.client_visible, false))",
+  "replace": "(SELECT t.client_visible OR (t.phase_id IS NULL OR COALESCE(p.client_visible, false))"
+ },
+ {
+  "name": "visible: INNER JOIN drops phase-less tasks",
+  "find": "FROM job_tasks t LEFT JOIN job_phases p ON p.id = t.phase_id",
+  "replace": "FROM job_tasks t JOIN job_phases p ON p.id = t.phase_id"
+ },
+ {
+  "name": "visible: unknown id is true",
+  "find": "WHERE t.id = task_id), false)",
+  "replace": "WHERE t.id = task_id), true)"
+ },
+ {
+  "name": "visible: anon keeps EXECUTE",
+  "find": "REVOKE ALL ON FUNCTION job_task_client_visible(uuid) FROM PUBLIC, anon;",
+  "replace": "REVOKE ALL ON FUNCTION job_task_client_visible(uuid) FROM PUBLIC;"
+ },
+ {
+  "name": "weight: anon keeps EXECUTE",
+  "find": "REVOKE ALL ON FUNCTION job_task_weight(boolean, numeric, date, date) FROM PUBLIC, anon;",
+  "replace": "REVOKE ALL ON FUNCTION job_task_weight(boolean, numeric, date, date) FROM PUBLIC;"
+ },
+ {
+  "name": "planned: anon keeps EXECUTE",
+  "find": "REVOKE ALL ON FUNCTION job_task_planned_pct(date, date, date, date, date) FROM PUBLIC, anon;",
+  "replace": "REVOKE ALL ON FUNCTION job_task_planned_pct(date, date, date, date, date) FROM PUBLIC;"
+ },
+ {
+  "name": "status: anon keeps EXECUTE",
+  "find": "REVOKE ALL ON FUNCTION job_schedule_status(uuid, date) FROM PUBLIC, anon;",
+  "replace": "REVOKE ALL ON FUNCTION job_schedule_status(uuid, date) FROM PUBLIC;"
+ },
+ {
+  "name": "weight: milestone with explicit weight counts",
+  "find": "CASE WHEN p_milestone THEN 0::numeric",
+  "replace": "CASE WHEN p_milestone AND p_weight IS NULL THEN 0::numeric"
+ },
+ {
+  "name": "weight: duration floor lowered",
+  "find": "GREATEST(1, CASE WHEN p_start IS NOT NULL AND p_end IS NOT NULL",
+  "replace": "GREATEST(0, CASE WHEN p_start IS NOT NULL AND p_end IS NOT NULL"
+ },
+ {
+  "name": "weight: duration not inclusive",
+  "find": "THEN p_end - p_start + 1 ELSE 1 END)::numeric)",
+  "replace": "THEN p_end - p_start ELSE 1 END)::numeric)"
+ },
+ {
+  "name": "weight: undated task weighs 0",
+  "find": "THEN p_end - p_start + 1 ELSE 1 END)::numeric)",
+  "replace": "THEN p_end - p_start + 1 ELSE 0 END)::numeric)",
+  "equivalent": true,
+  "reason": "the CASE sits inside GREATEST(1, ...), so ELSE 1 and ELSE 0 both yield 1 for an undated task"
+ },
+ {
+  "name": "weight: explicit weight ignored",
+  "find": "ELSE COALESCE(p_weight,",
+  "replace": "ELSE COALESCE(NULL::numeric,"
+ },
+ {
+  "name": "planned: no clamp above 100",
+  "find": "LEAST(1::numeric, GREATEST(0::numeric,",
+  "replace": "LEAST(2::numeric, GREATEST(0::numeric,"
+ },
+ {
+  "name": "planned: no clamp below 0",
+  "find": "LEAST(1::numeric, GREATEST(0::numeric,",
+  "replace": "LEAST(1::numeric, GREATEST(-1::numeric,"
+ },
+ {
+  "name": "planned: first day not counted",
+  "find": "(p_on - COALESCE(p_bstart, p_start) + 1)::numeric",
+  "replace": "(p_on - COALESCE(p_bstart, p_start))::numeric"
+ },
+ {
+  "name": "planned: current dates preferred over baseline",
+  "find": "(p_on - COALESCE(p_bstart, p_start) + 1)::numeric",
+  "replace": "(p_on - COALESCE(p_start, p_bstart) + 1)::numeric"
+ },
+ {
+  "name": "planned: baseline end ignored",
+  "find": "/ GREATEST(1, COALESCE(p_bend, p_end) - COALESCE(p_bstart, p_start) + 1)::numeric)) END",
+  "replace": "/ GREATEST(1, COALESCE(p_end, p_bend) - COALESCE(p_bstart, p_start) + 1)::numeric)) END"
+ },
+ {
+  "name": "planned: no dates plans 100",
+  "find": "THEN 0::numeric\n    ELSE 100 *",
+  "replace": "THEN 100::numeric\n    ELSE 100 *"
+ },
+ {
+  "name": "planned: scale 1 instead of 100",
+  "find": "ELSE 100 * LEAST(",
+  "replace": "ELSE 1 * LEAST("
+ },
+ {
+  "name": "status: late threshold 4",
+  "find": "k_late_days constant integer := 5;",
+  "replace": "k_late_days constant integer := 4;"
+ },
+ {
+  "name": "status: late threshold 6",
+  "find": "k_late_days constant integer := 5;",
+  "replace": "k_late_days constant integer := 6;"
+ },
+ {
+  "name": "status: gap threshold 11",
+  "find": "k_gap_pts   constant integer := 10;",
+  "replace": "k_gap_pts   constant integer := 11;"
+ },
+ {
+  "name": "status: gap threshold 9",
+  "find": "k_gap_pts   constant integer := 10;",
+  "replace": "k_gap_pts   constant integer := 9;"
+ },
+ {
+  "name": "status: gap rounded to integer (spec bug)",
+  "find": "v_slip int; v_gap numeric;",
+  "replace": "v_slip int; v_gap int;"
+ },
+ {
+  "name": "status: overall rounded to 0 dp",
+  "find": "COALESCE(ROUND(SUM(w * progress) / NULLIF(SUM(w), 0), 2), 0)",
+  "replace": "COALESCE(ROUND(SUM(w * progress) / NULLIF(SUM(w), 0), 0), 0)"
+ },
+ {
+  "name": "status: overall not rounded",
+  "find": "COALESCE(ROUND(SUM(w * progress) / NULLIF(SUM(w), 0), 2), 0)",
+  "replace": "COALESCE(SUM(w * progress) / NULLIF(SUM(w), 0), 0)"
+ },
+ {
+  "name": "status: planned rounded to 0 dp",
+  "find": "/ NULLIF(SUM(w), 0), 2), 0)\n    INTO",
+  "replace": "/ NULLIF(SUM(w), 0), 0), 0)\n    INTO"
+ },
+ {
+  "name": "status: gap sign inverted",
+  "find": "v_gap  := CASE WHEN v_has_bl THEN v_overall - v_planned END;",
+  "replace": "v_gap  := CASE WHEN v_has_bl THEN v_planned - v_overall END;"
+ },
+ {
+  "name": "status: gap evaluated without a baseline",
+  "find": "v_gap  := CASE WHEN v_has_bl THEN v_overall - v_planned END;",
+  "replace": "v_gap  := v_overall - v_planned;"
+ },
+ {
+  "name": "status: milestones counted in the weights",
+  "find": "FROM (SELECT job_task_weight(is_milestone, weight, start_date, end_date) AS w, progress,",
+  "replace": "FROM (SELECT job_task_weight(false, weight, start_date, end_date) AS w, progress,"
+ },
+ {
+  "name": "status: Closed is not Complete",
+  "find": "IN ('Completed', 'Invoiced', 'Closed')",
+  "replace": "IN ('Completed', 'Invoiced')"
+ },
+ {
+  "name": "status: Invoiced is not Complete",
+  "find": "IN ('Completed', 'Invoiced', 'Closed')",
+  "replace": "IN ('Completed', 'Closed')"
+ },
+ {
+  "name": "status: On Hold label",
+  "find": "WHEN v_jstatus = 'On Hold' THEN 'On hold'",
+  "replace": "WHEN v_jstatus = 'On Hold' THEN 'On Hold'"
+ },
+ {
+  "name": "status: late overdue rule dropped",
+  "find": "OR v_late_days > k_late_days THEN 'Late'",
+  "replace": "THEN 'Late'"
+ },
+ {
+  "name": "status: slip 1..5 lower bound 0",
+  "find": "coalesce(v_slip, 0) BETWEEN 1 AND k_late_days",
+  "replace": "coalesce(v_slip, 0) BETWEEN 0 AND k_late_days"
+ },
+ {
+  "name": "status: at-risk gap rule dropped",
+  "find": "OR coalesce(v_gap, 0) < -k_gap_pts OR v_late THEN 'At risk'",
+  "replace": "OR v_late THEN 'At risk'"
+ },
+ {
+  "name": "status: at-risk lateCrit rule dropped",
+  "find": "OR coalesce(v_gap, 0) < -k_gap_pts OR v_late THEN 'At risk'",
+  "replace": "OR coalesce(v_gap, 0) < -k_gap_pts THEN 'At risk'"
+ },
+ {
+  "name": "status: invisible job still returns a row",
+  "find": "IF NOT FOUND THEN RETURN; END IF;",
+  "replace": "NULL;"
+ },
+ {
+  "name": "status: slip baseline end ignored",
+  "find": "SELECT coalesce(max(baseline_end), v_due) INTO v_base_end",
+  "replace": "SELECT coalesce(v_due, max(baseline_end)) INTO v_base_end"
+ },
+ {
+  "name": "status: reads a cost column",
+  "find": "SELECT j.status, j.due_date INTO v_jstatus, v_due FROM jobs j WHERE j.id = p_job_id;",
+  "replace": "PERFORM j.quoted_ttd FROM jobs j WHERE j.id = p_job_id; SELECT j.status, j.due_date INTO v_jstatus, v_due FROM jobs j WHERE j.id = p_job_id;"
+ },
+ {
+  "name": "status: remaining work rounded down",
+  "find": "ceil(v_dur * (100 - v_prog) / 100.0)::int",
+  "replace": "floor(v_dur * (100 - v_prog) / 100.0)::int"
+ },
+ {
+  "name": "status: lag ignored in forward pass",
+  "find": "cand := ef[p] + llag[j];",
+  "replace": "cand := ef[p];"
+ },
+ {
+  "name": "status: forward pass keeps the earlier predecessor",
+  "find": "IF cand > es[t] THEN es[t] := cand;",
+  "replace": "IF cand < es[t] THEN es[t] := cand;"
+ },
+ {
+  "name": "status: unstarted tasks start at their own start",
+  "find": "WHEN v_prog = 100 OR v_prog > 0 THEN coalesce(r.start_date, p_today) ELSE p_today END);",
+  "replace": "WHEN v_prog = 100 OR v_prog > 0 THEN coalesce(r.start_date, p_today) ELSE coalesce(r.start_date, p_today) END);"
+ },
+ {
+  "name": "status: critical test ignores slack",
+  "find": "AND ((sched[i] AND (ls[i] - es[i]) <= GREATEST(0, v_minslack)) OR ms[i]) THEN",
+  "replace": "AND (sched[i] OR ms[i]) THEN"
+ },
+ {
+  "name": "status: overdue milestones ignored",
+  "find": "(ls[i] - es[i]) <= GREATEST(0, v_minslack)) OR ms[i]) THEN",
+  "replace": "(ls[i] - es[i]) <= GREATEST(0, v_minslack))) THEN"
+ },
+ {
+  "name": "status: p_today ignored for overdue",
+  "find": "AND endd[i] IS NOT NULL AND endd[i] < p_today",
+  "replace": "AND endd[i] IS NOT NULL AND endd[i] < p_today + 100"
+ },
+ {
+  "name": "phases/links: RLS off on job_phases",
+  "find": "ALTER TABLE job_phases ENABLE ROW LEVEL SECURITY;",
+  "replace": "SELECT 1;"
+ },
+ {
+  "name": "phases/links: RLS off on job_task_links",
+  "find": "ALTER TABLE job_task_links ENABLE ROW LEVEL SECURITY;",
+  "replace": "SELECT 1;"
+ },
+ {
+  "name": "job_phases: select open to everyone",
+  "find": " ON job_phases FOR SELECT TO authenticated USING (company_id IN (SELECT my_company_ids()));",
+  "replace": " ON job_phases FOR SELECT TO authenticated USING (true);"
+ },
+ {
+  "name": "job_phases: select policy not limited to authenticated",
+  "find": " ON job_phases FOR SELECT TO authenticated USING (company_id IN (SELECT my_company_ids()));",
+  "replace": " ON job_phases FOR SELECT USING (company_id IN (SELECT my_company_ids()));"
+ },
+ {
+  "name": "job_phases: insert: write atom dropped",
+  "find": " ON job_phases FOR INSERT TO authenticated WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
+  "replace": " ON job_phases FOR INSERT TO authenticated WITH CHECK (company_id IN (SELECT my_company_ids()));"
+ },
+ {
+  "name": "job_phases: insert: company check dropped",
+  "find": " ON job_phases FOR INSERT TO authenticated WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
+  "replace": " ON job_phases FOR INSERT TO authenticated WITH CHECK (user_has_perm('ops:work-orders:write'));"
+ },
+ {
+  "name": "job_phases: insert: wide open",
+  "find": " ON job_phases FOR INSERT TO authenticated WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
+  "replace": " ON job_phases FOR INSERT TO authenticated WITH CHECK (true);"
+ },
+ {
+  "name": "job_phases: insert: read atom instead of write",
+  "find": " ON job_phases FOR INSERT TO authenticated WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
+  "replace": " ON job_phases FOR INSERT TO authenticated WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:read'));"
+ },
+ {
+  "name": "job_phases: update USING: write atom dropped",
+  "find": " ON job_phases FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
+  "replace": " ON job_phases FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids())) WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));"
+ },
+ {
+  "name": "job_phases: update USING: company dropped",
+  "find": " ON job_phases FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
+  "replace": " ON job_phases FOR UPDATE TO authenticated USING (user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));"
+ },
+ {
+  "name": "job_phases: update WITH CHECK: write atom dropped",
+  "find": " ON job_phases FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
+  "replace": " ON job_phases FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()));",
+  "equivalent": true,
+  "reason": "USING already requires the same user_has_perm(write) for the same user in the same statement, so repeating it in WITH CHECK is redundant"
+ },
+ {
+  "name": "job_phases: update WITH CHECK: company dropped (row can move company)",
+  "find": " ON job_phases FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
+  "replace": " ON job_phases FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (user_has_perm('ops:work-orders:write'));"
+ },
+ {
+  "name": "job_phases: update WITH CHECK: open",
+  "find": " ON job_phases FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
+  "replace": " ON job_phases FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (true);"
+ },
+ {
+  "name": "job_phases: delete: write atom dropped",
+  "find": " ON job_phases FOR DELETE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
+  "replace": " ON job_phases FOR DELETE TO authenticated USING (company_id IN (SELECT my_company_ids()));"
+ },
+ {
+  "name": "job_phases: delete: company dropped",
+  "find": " ON job_phases FOR DELETE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
+  "replace": " ON job_phases FOR DELETE TO authenticated USING (user_has_perm('ops:work-orders:write'));"
+ },
+ {
+  "name": "job_task_links: select open to everyone",
+  "find": " ON job_task_links FOR SELECT TO authenticated USING (company_id IN (SELECT my_company_ids()));",
+  "replace": " ON job_task_links FOR SELECT TO authenticated USING (true);"
+ },
+ {
+  "name": "job_task_links: select policy not limited to authenticated",
+  "find": " ON job_task_links FOR SELECT TO authenticated USING (company_id IN (SELECT my_company_ids()));",
+  "replace": " ON job_task_links FOR SELECT USING (company_id IN (SELECT my_company_ids()));"
+ },
+ {
+  "name": "job_task_links: insert: write atom dropped",
+  "find": " ON job_task_links FOR INSERT TO authenticated WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
+  "replace": " ON job_task_links FOR INSERT TO authenticated WITH CHECK (company_id IN (SELECT my_company_ids()));"
+ },
+ {
+  "name": "job_task_links: insert: company check dropped",
+  "find": " ON job_task_links FOR INSERT TO authenticated WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
+  "replace": " ON job_task_links FOR INSERT TO authenticated WITH CHECK (user_has_perm('ops:work-orders:write'));"
+ },
+ {
+  "name": "job_task_links: insert: wide open",
+  "find": " ON job_task_links FOR INSERT TO authenticated WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
+  "replace": " ON job_task_links FOR INSERT TO authenticated WITH CHECK (true);"
+ },
+ {
+  "name": "job_task_links: insert: read atom instead of write",
+  "find": " ON job_task_links FOR INSERT TO authenticated WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
+  "replace": " ON job_task_links FOR INSERT TO authenticated WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:read'));"
+ },
+ {
+  "name": "job_task_links: update USING: write atom dropped",
+  "find": " ON job_task_links FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
+  "replace": " ON job_task_links FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids())) WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));"
+ },
+ {
+  "name": "job_task_links: update USING: company dropped",
+  "find": " ON job_task_links FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
+  "replace": " ON job_task_links FOR UPDATE TO authenticated USING (user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));"
+ },
+ {
+  "name": "job_task_links: update WITH CHECK: write atom dropped",
+  "find": " ON job_task_links FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
+  "replace": " ON job_task_links FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()));",
+  "equivalent": true,
+  "reason": "USING already requires the same user_has_perm(write) for the same user in the same statement, so repeating it in WITH CHECK is redundant"
+ },
+ {
+  "name": "job_task_links: update WITH CHECK: company dropped (row can move company)",
+  "find": " ON job_task_links FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
+  "replace": " ON job_task_links FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (user_has_perm('ops:work-orders:write'));"
+ },
+ {
+  "name": "job_task_links: update WITH CHECK: open",
+  "find": " ON job_task_links FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
+  "replace": " ON job_task_links FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (true);"
+ },
+ {
+  "name": "job_task_links: delete: write atom dropped",
+  "find": " ON job_task_links FOR DELETE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
+  "replace": " ON job_task_links FOR DELETE TO authenticated USING (company_id IN (SELECT my_company_ids()));"
+ },
+ {
+  "name": "job_task_links: delete: company dropped",
+  "find": " ON job_task_links FOR DELETE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));",
+  "replace": " ON job_task_links FOR DELETE TO authenticated USING (user_has_perm('ops:work-orders:write'));"
+ }
+]

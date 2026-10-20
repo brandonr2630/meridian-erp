@@ -1,6 +1,6 @@
 # Phase A — Schedule v2 and project KPIs
 
-*Status: draft for review (revised after cross-phase review round 2) · 2026-10-19 · depends on `00-overview.md` (decisions D1-D5 and the binding cross-phase decisions X1-X23 in its section 8 apply unchanged)*
+*Status: draft for review (revised after cross-phase review round 2); the SQL below was executed and tested on a throwaway Postgres 17 on 2026-10-21 and is NOT applied to prod · 2026-10-19 · depends on `00-overview.md` (decisions D1-D5 and the binding cross-phase decisions X1-X23 in its section 8 apply unchanged)*
 
 **What this phase owns for the other phases (binding, per section 8 of the overview):** the single progress rule (X1, X20: `job_task_weight`, `job_task_planned_pct`, `jcSchedCompute`), the schedule-status source (X2, X21: `job_schedule_status`), the client-visibility predicate (X22: `job_task_client_visible`) and the shared publish guard (X5, X19: `job_visibility_guard()`). Phases B, C and D reference these by name and must not redefine them. Order (X23): D0a, then A, then B, then C. Phase B is applied after this migration (its visibility triggers call `job_visibility_guard()`), though B may be developed in parallel; Phase C also requires this migration applied first.
 
@@ -42,13 +42,30 @@ Design decisions embedded in the SQL below:
 - **`client_visible`** (default false) on `job_phases` and `job_tasks` per overview rule 3. Nothing reads it in Phase A. Flipping it to true is gated, and editing the client-facing wording of a visible row auto-unpublishes it, by the shared trigger function `job_visibility_guard()` defined below (X5); every change writes a `visibility_changed` row to `job_audit_log`.
 - No `created_by` anywhere (the `created_by` FK inconsistency noted in the overview; matches `job_tasks`). Audit identity goes through `job_audit_log.user_id`, and `username` is populated from `erp_users.full_name`.
 - `updated_at` is maintained by the existing `set_updated_at()` trigger function (X16), attached to `job_phases`, `job_task_links` and (new) `job_tasks`. The UI never sends `updated_at`; any client-set value is overwritten.
-- **Migration file** `supabase/migrations/202610200900_a_schedule_v2.sql` (timestamp is a placeholder; keep the order). Position in the overall order (X16): after D0a (staff-only restrictive policy and storage hardening), before B and C. **Pin order (X23): A, then B, then C.** B is applied after A because B's `*_visibility_guard` triggers call `job_visibility_guard()` defined here (CREATE TRIGGER fails otherwise); B may be developed in parallel. C also requires this migration applied first (its SQL calls `job_task_weight`, `job_task_planned_pct` and `job_task_client_visible`, and reads `weight` and `baseline_*` at CREATE time). Phase A needs none of the owner prerequisite step 0 (pg_cron / pg_net enablement, X23); it has no cron job.
+- **Migration file** `supabase/migrations/202610210600_phase_a_sql.sql` (the final name; the `_phase_a_sql` suffix is what the shared runner `bash supabase/tests/d0c_common/run.sh phase_a_sql` globs for; keep the order). Position in the overall order (X16): after D0a (staff-only restrictive policy and storage hardening), before B and C. **Pin order (X23): A, then B, then C.** B is applied after A because B's `*_visibility_guard` triggers call `job_visibility_guard()` defined here (CREATE TRIGGER fails otherwise); B may be developed in parallel. C also requires this migration applied first (its SQL calls `job_task_weight`, `job_task_planned_pct` and `job_task_client_visible`, and reads `weight` and `baseline_*` at CREATE time). Phase A needs none of the owner prerequisite step 0 (pg_cron / pg_net enablement, X23); it has no cron job.
 
 **Multiple predecessors, recommendation: yes, via a join table.** A single parent cannot express "Install starts when both Fabrication and Painting finish", which is the normal case for a conveyor package and the common reason a critical path comes out wrong. Cost is small: one table, finish-to-start links only, optional `lag_days`. `job_tasks.depends_on` stays for backward compatibility (the existing dependency select and the portfolio frappe arrows): the UI mirrors the *first* predecessor into it, and the migration backfills links from existing `depends_on`. Dependency types other than finish-to-start are out of scope.
 
 ```sql
--- ===== up =====
-CREATE TABLE job_phases (
+-- ===== up =====  (verbatim copy of supabase/migrations/202610210600_phase_a_sql.sql, executed and tested)
+-- Phase A (Schedule v2): phases, multi-predecessor links, milestones, baseline lock, publish guard, canonical progress/status SQL.
+-- Spec: docs/specs/project-portal/phase-a-schedule-v2.md (binding decisions X1-X23 in 00-overview.md section 8).
+-- Order (X23): after D0a/D0c, before Phase B and C. Additive; existing rows keep working; depends_on is untouched.
+-- Idempotent: tables/columns/indexes use IF NOT EXISTS, functions CREATE OR REPLACE, triggers and policies are dropped first.
+-- Rollback: supabase/rollbacks/202610210600_phase_a_sql_down.sql
+-- Built and tested on a throwaway Postgres 17 (bash supabase/tests/d0c_common/run.sh phase_a_sql). NOT applied to prod.
+--
+-- Changes against the desk-checked spec SQL (found while executing it; see the PR body):
+--   * job_schedule_status: v_gap is numeric (spec declared int, which rounded the gap and moved the "gap < -10" boundary).
+--   * new-table policies are TO authenticated (the exact live job_tasks pattern): anon gets no policy instead of a 42501 from my_company_ids().
+--   * baseline guard also requires current_user = owner of lock_job_baseline (the setting alone is not trusted), and
+--     lock_job_baseline switches the setting off again before returning.
+--   * the depends_on backfill skips (with a NOTICE) rows that would form a cycle, point at themselves or at another job,
+--     instead of aborting the whole migration; job_task_links_no_cycle also rejects links across jobs/companies.
+--   * self-link is reported by the CHECK constraint (23514) rather than as a "cycle".
+
+-- ===== job_phases =====
+CREATE TABLE IF NOT EXISTS job_phases (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id  uuid NOT NULL REFERENCES companies(id),
   job_id      uuid NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
@@ -59,25 +76,34 @@ CREATE TABLE job_phases (
   created_at  timestamptz NOT NULL DEFAULT now(),
   updated_at  timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX job_phases_job_idx         ON job_phases (job_id);
-CREATE INDEX job_phases_company_job_idx ON job_phases (company_id, job_id);
+CREATE INDEX IF NOT EXISTS job_phases_job_idx         ON job_phases (job_id);
+CREATE INDEX IF NOT EXISTS job_phases_company_job_idx ON job_phases (company_id, job_id);
 
+-- ===== job_tasks: new columns and constraints =====
 ALTER TABLE job_tasks
-  ADD COLUMN phase_id           uuid REFERENCES job_phases(id) ON DELETE SET NULL,
-  ADD COLUMN is_milestone       boolean NOT NULL DEFAULT false,
-  ADD COLUMN is_critical        boolean NOT NULL DEFAULT false,
-  ADD COLUMN weight             numeric(8,2) CHECK (weight IS NULL OR weight >= 0),
-  ADD COLUMN baseline_start     date,
-  ADD COLUMN baseline_end       date,
-  ADD COLUMN baseline_locked_at timestamptz,
-  ADD COLUMN client_visible     boolean NOT NULL DEFAULT false,
-  ADD CONSTRAINT job_tasks_baseline_chk
-    CHECK (baseline_start IS NULL OR baseline_end IS NULL OR baseline_end >= baseline_start),
-  ADD CONSTRAINT job_tasks_milestone_chk
-    CHECK (NOT is_milestone OR start_date IS NULL OR end_date IS NULL OR start_date = end_date);
-CREATE INDEX job_tasks_phase_idx ON job_tasks (phase_id);
+  ADD COLUMN IF NOT EXISTS phase_id           uuid REFERENCES job_phases(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS is_milestone       boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS is_critical        boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS weight             numeric(8,2) CHECK (weight IS NULL OR weight >= 0),
+  ADD COLUMN IF NOT EXISTS baseline_start     date,
+  ADD COLUMN IF NOT EXISTS baseline_end       date,
+  ADD COLUMN IF NOT EXISTS baseline_locked_at timestamptz,
+  ADD COLUMN IF NOT EXISTS client_visible     boolean NOT NULL DEFAULT false;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'job_tasks_baseline_chk' AND conrelid = 'public.job_tasks'::regclass) THEN
+    ALTER TABLE job_tasks ADD CONSTRAINT job_tasks_baseline_chk
+      CHECK (baseline_start IS NULL OR baseline_end IS NULL OR baseline_end >= baseline_start);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'job_tasks_milestone_chk' AND conrelid = 'public.job_tasks'::regclass) THEN
+    ALTER TABLE job_tasks ADD CONSTRAINT job_tasks_milestone_chk
+      CHECK (NOT is_milestone OR start_date IS NULL OR end_date IS NULL OR start_date = end_date);
+  END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS job_tasks_phase_idx ON job_tasks (phase_id);
 
-CREATE TABLE job_task_links (
+-- ===== job_task_links =====
+CREATE TABLE IF NOT EXISTS job_task_links (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id     uuid NOT NULL REFERENCES companies(id),
   job_id         uuid NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
@@ -89,19 +115,21 @@ CREATE TABLE job_task_links (
   CONSTRAINT job_task_links_distinct CHECK (task_id <> predecessor_id),
   CONSTRAINT job_task_links_uniq UNIQUE (task_id, predecessor_id)
 );
-CREATE INDEX job_task_links_job_idx         ON job_task_links (job_id);
-CREATE INDEX job_task_links_company_job_idx ON job_task_links (company_id, job_id);
-CREATE INDEX job_task_links_pred_idx        ON job_task_links (predecessor_id);
+CREATE INDEX IF NOT EXISTS job_task_links_job_idx         ON job_task_links (job_id);
+CREATE INDEX IF NOT EXISTS job_task_links_company_job_idx ON job_task_links (company_id, job_id);
+CREATE INDEX IF NOT EXISTS job_task_links_pred_idx        ON job_task_links (predecessor_id);
 
--- Backfill: existing single parents become links (idempotent).
-INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id)
-SELECT company_id, job_id, id, depends_on FROM job_tasks WHERE depends_on IS NOT NULL
-ON CONFLICT (task_id, predecessor_id) DO NOTHING;
-
--- Cycle guard: reject a link if the predecessor is already downstream of the task.
+-- Cycle guard: reject a link if the predecessor is already downstream of the task. Also keeps links inside one job/company.
 CREATE OR REPLACE FUNCTION job_task_links_no_cycle() RETURNS trigger
-LANGUAGE plpgsql SET search_path = public AS $$
+LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
+DECLARE v_tj uuid; v_tc uuid; v_pj uuid;
 BEGIN
+  IF NEW.task_id = NEW.predecessor_id THEN RETURN NEW; END IF;      -- the CHECK constraint reports a self-link
+  SELECT t.job_id, t.company_id INTO v_tj, v_tc FROM job_tasks t WHERE t.id = NEW.task_id;
+  SELECT t.job_id INTO v_pj FROM job_tasks t WHERE t.id = NEW.predecessor_id;
+  IF v_tj IS DISTINCT FROM NEW.job_id OR v_pj IS DISTINCT FROM NEW.job_id OR v_tc IS DISTINCT FROM NEW.company_id THEN
+    RAISE EXCEPTION 'link must connect two tasks of its own job and company' USING ERRCODE = 'check_violation';
+  END IF;
   IF EXISTS (
     WITH RECURSIVE down(id) AS (
       SELECT NEW.task_id
@@ -110,39 +138,67 @@ BEGIN
     )
     SELECT 1 FROM down WHERE id = NEW.predecessor_id
   ) THEN
-    RAISE EXCEPTION 'dependency cycle: % cannot depend on %', NEW.task_id, NEW.predecessor_id;
+    RAISE EXCEPTION 'dependency cycle: % cannot depend on %', NEW.task_id, NEW.predecessor_id USING ERRCODE = 'check_violation';
   END IF;
   RETURN NEW;
 END $$;
+DROP TRIGGER IF EXISTS job_task_links_no_cycle ON job_task_links;
 CREATE TRIGGER job_task_links_no_cycle BEFORE INSERT OR UPDATE ON job_task_links
   FOR EACH ROW EXECUTE FUNCTION job_task_links_no_cycle();
 
--- Baseline guard: baseline columns change only inside lock_job_baseline().
-CREATE OR REPLACE FUNCTION job_tasks_baseline_guard() RETURNS trigger
-LANGUAGE plpgsql SET search_path = public AS $$
+-- Backfill: existing single parents become links (idempotent). Legacy data may hold self-references, cross-job parents or
+-- depends_on cycles (v1 allowed them): those rows are skipped with a NOTICE instead of aborting the migration.
+DO $$
+DECLARE r record; v_skip integer := 0;
 BEGIN
-  IF current_setting('app.baseline_rpc', true) IS DISTINCT FROM 'on' THEN
+  FOR r IN SELECT id, company_id, job_id, depends_on FROM job_tasks WHERE depends_on IS NOT NULL ORDER BY id LOOP
+    BEGIN
+      INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id)
+      VALUES (r.company_id, r.job_id, r.id, r.depends_on)
+      ON CONFLICT (task_id, predecessor_id) DO NOTHING;
+    EXCEPTION WHEN check_violation THEN
+      v_skip := v_skip + 1;
+      RAISE NOTICE 'backfill skipped depends_on % -> %: %', r.id, r.depends_on, SQLERRM;
+    END;
+  END LOOP;
+  RAISE NOTICE 'job_task_links backfill: % row(s) skipped', v_skip;
+END $$;
+
+-- ===== Baseline guard: baseline columns change only inside lock_job_baseline() =====
+-- Two conditions must both hold to let a baseline write through: the transaction-local setting app.baseline_rpc = 'on' AND
+-- current_user = the owner of lock_job_baseline() (i.e. we are executing inside that SECURITY DEFINER function, or a
+-- superuser/owner doing a deliberate seed). An API caller (current_user authenticated/anon) can never satisfy the second.
+CREATE OR REPLACE FUNCTION job_tasks_baseline_guard() RETURNS trigger
+LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
+DECLARE v_ok boolean;
+BEGIN
+  v_ok := current_setting('app.baseline_rpc', true) IS NOT DISTINCT FROM 'on';
+  IF v_ok THEN
+    v_ok := current_user IS NOT DISTINCT FROM
+            (SELECT pg_get_userbyid(p.proowner) FROM pg_proc p WHERE p.oid = to_regprocedure('public.lock_job_baseline(uuid,text)'));
+  END IF;
+  IF NOT v_ok THEN
     IF TG_OP = 'INSERT' AND (NEW.baseline_start IS NOT NULL OR NEW.baseline_end IS NOT NULL OR NEW.baseline_locked_at IS NOT NULL) THEN
       RAISE EXCEPTION 'baseline is set only by lock_job_baseline()';
-    ELSIF TG_OP = 'UPDATE' AND (NEW.baseline_start, NEW.baseline_end, NEW.baseline_locked_at)
-          IS DISTINCT FROM (OLD.baseline_start, OLD.baseline_end, OLD.baseline_locked_at) THEN
+    ELSIF TG_OP = 'UPDATE' AND (NEW.baseline_start, NEW.baseline_end, NEW.baseline_locked_at) IS DISTINCT FROM (OLD.baseline_start, OLD.baseline_end, OLD.baseline_locked_at) THEN
       RAISE EXCEPTION 'baseline is set only by lock_job_baseline()';
     END IF;
   END IF;
   RETURN NEW;
 END $$;
+DROP TRIGGER IF EXISTS job_tasks_baseline_guard ON job_tasks;
 CREATE TRIGGER job_tasks_baseline_guard BEFORE INSERT OR UPDATE ON job_tasks
   FOR EACH ROW EXECUTE FUNCTION job_tasks_baseline_guard();
 
 -- Lock (first time) or re-baseline (reason required). SECURITY DEFINER so it can write job_audit_log.
 CREATE OR REPLACE FUNCTION lock_job_baseline(p_job_id uuid, p_reason text DEFAULT NULL)
-RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE v_job jobs%ROWTYPE; v_first boolean; v_n integer;
+RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE v_job_no text; v_first boolean; v_n integer;
 BEGIN
   IF NOT user_has_perm('ops:work-orders:approve') THEN
     RAISE EXCEPTION 'permission denied: ops:work-orders:approve required';
   END IF;
-  SELECT * INTO v_job FROM jobs WHERE id = p_job_id AND company_id IN (SELECT my_company_ids());
+  SELECT j.job_no INTO v_job_no FROM jobs j WHERE j.id = p_job_id AND j.company_id IN (SELECT my_company_ids());
   IF NOT FOUND THEN RAISE EXCEPTION 'job not found'; END IF;
   SELECT NOT EXISTS (SELECT 1 FROM job_tasks WHERE job_id = p_job_id AND baseline_locked_at IS NOT NULL) INTO v_first;
   IF NOT v_first AND coalesce(btrim(p_reason), '') = '' THEN
@@ -152,8 +208,9 @@ BEGIN
   UPDATE job_tasks SET baseline_start = start_date, baseline_end = end_date, baseline_locked_at = now()
    WHERE job_id = p_job_id AND start_date IS NOT NULL AND end_date IS NOT NULL;
   GET DIAGNOSTICS v_n = ROW_COUNT;
+  PERFORM set_config('app.baseline_rpc', 'off', true);
   INSERT INTO job_audit_log (job_id, job_no, user_id, username, action_type, description, metadata)
-  VALUES (p_job_id, v_job.job_no, auth.uid(),
+  VALUES (p_job_id, v_job_no, auth.uid(),
           (SELECT u.full_name FROM erp_users u WHERE u.auth_user_id = auth.uid() LIMIT 1),
           CASE WHEN v_first THEN 'baseline_locked' ELSE 'baseline_reset' END,
           CASE WHEN v_first THEN 'Schedule baseline locked' ELSE 'Schedule re-baselined: ' || p_reason END,
@@ -165,21 +222,24 @@ END $$;
 REVOKE ALL ON FUNCTION lock_job_baseline(uuid, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION lock_job_baseline(uuid, text) TO authenticated;
 
--- ===== updated_at (X16: the existing set_updated_at(), verified live; job_tasks has no triggers today) =====
+-- ===== updated_at (X16: the existing set_updated_at(); job_tasks has no triggers today) =====
+DROP TRIGGER IF EXISTS job_phases_set_updated_at ON job_phases;
 CREATE TRIGGER job_phases_set_updated_at     BEFORE UPDATE ON job_phases
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+DROP TRIGGER IF EXISTS job_task_links_set_updated_at ON job_task_links;
 CREATE TRIGGER job_task_links_set_updated_at BEFORE UPDATE ON job_task_links
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+DROP TRIGGER IF EXISTS job_tasks_set_updated_at ON job_tasks;
 CREATE TRIGGER job_tasks_set_updated_at      BEFORE UPDATE ON job_tasks
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ===== X5 / X19: the shared publish guard. DEFINED HERE; Phases B and C attach it to their tables. =====
 -- CALL CONTRACT (X19, binding on B and C): attach BEFORE INSERT OR UPDATE with EXACTLY TWO trigger arguments:
---   TG_ARGV[0] = comma-separated client-facing WORDING columns of that table (e.g. 'title,body,kind,occurred_on'; '' if none)
---   TG_ARGV[1] = the table's domain atom that may publish besides ops:work-orders:approve ('' if none,
+--   TG_ARGV[0] = comma-separated client-facing WORDING columns of that table (e.g. 'title,body,kind,occurred_on'; empty string if none)
+--   TG_ARGV[1] = the table domain atom that may publish besides ops:work-orders:approve (empty string if none,
 --                e.g. 'quality:docs:issue' for documents)
--- Any other argument count or a comma-less misuse (e.g. ('title','body','kind')) silently changes behaviour: do not.
--- EXEMPTION (X19): direct SQL as session_user 'postgres' or 'supabase_admin' (migrations, backfills, seed scripts)
+-- Any other argument count or a comma-less misuse silently changes behaviour: do not.
+-- EXEMPTION (X19): direct SQL as session_user postgres or supabase_admin (migrations, backfills, seed scripts)
 --   is exempt from rule 1, so such inserts are not silently downgraded or rejected. PostgREST sessions have
 --   session_user = authenticator, so the exemption is unreachable from the API.
 -- Rules:
@@ -187,11 +247,10 @@ CREATE TRIGGER job_tasks_set_updated_at      BEFORE UPDATE ON job_tasks
 --     Setting it to false (unpublish) is always allowed to a writer.
 --  2. If the row is already visible and stays visible but a wording column changed, client_visible is forced
 --     to false (auto-unpublish; the editor must re-publish with the permission in rule 1).
---  3. Every visibility change (publish, unpublish, auto-unpublish) writes a 'visibility_changed' job_audit_log row.
--- SECURITY DEFINER only so it can write job_audit_log whatever the caller's RLS; it is trigger-only (no EXECUTE for API roles).
--- The session_user exemption (see CALL CONTRACT above) is the line `v_pub AND session_user NOT IN (...)` below.
-CREATE OR REPLACE FUNCTION job_visibility_guard() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+--  3. Every visibility change (publish, unpublish, auto-unpublish) writes a visibility_changed job_audit_log row.
+-- SECURITY DEFINER only so it can write job_audit_log whatever the caller RLS; it is trigger-only (no EXECUTE for API roles).
+-- The session_user exemption is the condition v_pub AND session_user NOT IN (...) below.
+CREATE OR REPLACE FUNCTION job_visibility_guard() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 DECLARE
   v_cols  text[] := string_to_array(coalesce(TG_ARGV[0], ''), ',');
   v_atom  text   := nullif(TG_ARGV[1], '');
@@ -242,16 +301,18 @@ END $$;
 REVOKE ALL ON FUNCTION job_visibility_guard() FROM PUBLIC, anon, authenticated;
 
 -- Wording columns: phase name; task name. Dates, progress and flags are NOT wording (they change daily and must not unpublish).
--- Explicit two-argument form (X19): (wording columns, domain atom). Phase A has no domain atom, hence ''.
+-- Explicit two-argument form (X19): (wording columns, domain atom). Phase A has no domain atom, hence the empty string.
+DROP TRIGGER IF EXISTS job_phases_visibility_guard ON job_phases;
 CREATE TRIGGER job_phases_visibility_guard BEFORE INSERT OR UPDATE ON job_phases
   FOR EACH ROW EXECUTE FUNCTION job_visibility_guard('name', '');
+DROP TRIGGER IF EXISTS job_tasks_visibility_guard ON job_tasks;
 CREATE TRIGGER job_tasks_visibility_guard  BEFORE INSERT OR UPDATE ON job_tasks
   FOR EACH ROW EXECUTE FUNCTION job_visibility_guard('task_name', '');
 
 -- ===== X22: the ONE client-visibility predicate for schedule data. =====
 -- A task is client-visible only if task.client_visible AND (task.phase_id IS NULL OR its phase.client_visible).
--- Phase C's job_planned_curve(..., client_only) and Phase D's portal_schedule MUST both use this function,
--- never re-state the predicate. SECURITY INVOKER (RLS-scoped for staff); Phase D's postgres-owned definers call it with owner rights.
+-- Phase C job_planned_curve(..., client_only) and Phase D portal_schedule MUST both use this function,
+-- never re-state the predicate. SECURITY INVOKER (RLS-scoped for staff); Phase D postgres-owned definers call it with owner rights.
 CREATE OR REPLACE FUNCTION job_task_client_visible(task_id uuid) RETURNS boolean
 LANGUAGE sql STABLE SET search_path = public, pg_temp AS $$
   SELECT COALESCE(
@@ -263,7 +324,7 @@ REVOKE ALL ON FUNCTION job_task_client_visible(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION job_task_client_visible(uuid) TO authenticated;
 
 -- ===== X1 / X20: the single progress rule, as two IMMUTABLE helpers. They are the ONE SQL implementation:
--- Phase C's job_progress_calc and job_planned_pct_on MUST CALL job_task_weight and job_task_planned_pct (never re-derive the formula).
+-- Phase C job_progress_calc and job_planned_pct_on MUST CALL job_task_weight and job_task_planned_pct (never re-derive the formula).
 -- Both return unrounded numerics; SQL consumers round to 2 dp (X20), UIs round half-up to an integer. =====
 -- Weight = COALESCE(weight, duration_days); duration = end - start + 1, min 1; undated task = 1; milestones always 0 (excluded).
 CREATE OR REPLACE FUNCTION job_task_weight(p_milestone boolean, p_weight numeric, p_start date, p_end date)
@@ -288,10 +349,10 @@ GRANT EXECUTE ON FUNCTION job_task_weight(boolean, numeric, date, date) TO authe
 GRANT EXECUTE ON FUNCTION job_task_planned_pct(date, date, date, date, date) TO authenticated;
 
 -- ===== X2: the canonical schedule status. JS jcSchedCompute mirrors this line by line. =====
--- SECURITY INVOKER on purpose: it reads job_tasks / job_task_links / jobs under the caller's RLS, so a caller with no
--- company membership (e.g. a client JWT) gets zero rows. Phase C's definer snapshot function (and the nightly cron)
--- call it with the owner's rights. Phase D never calls it: it reads the values C stores (X2).
--- Labels (X21), exactly five: 'On track' | 'At risk' | 'Late' | 'Complete' | 'On hold'. It ALWAYS returns one row for a visible
+-- SECURITY INVOKER on purpose: it reads job_tasks / job_task_links / jobs under the caller RLS, so a caller with no
+-- company membership (e.g. a client JWT) gets zero rows. Phase C definer snapshot function (and the nightly cron)
+-- call it with the owner rights. Phase D never calls it: it reads the values C stores (X2).
+-- Labels (X21), exactly five: On track | At risk | Late | Complete | On hold. It ALWAYS returns one row for a visible
 -- job and status is never NULL. forecast_end is NULL when nothing is scheduled;
 -- slip_days = forecast_end - (max baseline_end, else jobs.due_date), NULL if either side is missing (may be negative).
 -- Consumers must handle NULL forecast_end / slip_days; Phase D shows planned handover NULL when slip_days is NULL (never forecast).
@@ -304,16 +365,16 @@ LANGUAGE plpgsql STABLE SET search_path = public, pg_temp AS $$
 DECLARE
   k_late_days constant integer := 5;     -- Open question 2 defaults; keep equal to the JS constants
   k_gap_pts   constant integer := 10;
-  v_job jobs%ROWTYPE;
+  v_jstatus text; v_due date;
   n int := 0; m int := 0; i int; j int; t int; p int; pass int;
   ids uuid[] := '{}'; rem int[] := '{}'; es date[] := '{}'; ef date[] := '{}'; ls date[] := '{}'; lf date[] := '{}';
   endd date[] := '{}'; done boolean[] := '{}'; ms boolean[] := '{}'; sched boolean[] := '{}';
   lt int[] := '{}'; lp int[] := '{}'; llag int[] := '{}';
   r record; v_changed boolean; cand date; v_deadline date; v_fe date; v_minslack int;
-  v_overall numeric; v_planned numeric; v_has_bl boolean; v_base_end date; v_slip int; v_gap int;
+  v_overall numeric; v_planned numeric; v_has_bl boolean; v_base_end date; v_slip int; v_gap numeric;
   v_late boolean := false; v_late_days int := 0; v_status text; v_dur int; v_prog int;
 BEGIN
-  SELECT * INTO v_job FROM jobs WHERE id = p_job_id;
+  SELECT j.status, j.due_date INTO v_jstatus, v_due FROM jobs j WHERE j.id = p_job_id;
   IF NOT FOUND THEN RETURN; END IF;               -- invisible under RLS or missing: no rows
 
   -- load tasks (milestones: rem 0; done = progress 100)
@@ -367,7 +428,7 @@ BEGIN
   END LOOP;
 
   SELECT max(ef[g.ix]) INTO v_fe FROM generate_subscripts(ef, 1) AS g(ix) WHERE sched[g.ix];
-  v_deadline := coalesce(v_job.due_date, v_fe);
+  v_deadline := coalesce(v_due, v_fe);
 
   -- backward pass (incomplete tasks only)
   FOR i IN 1..n LOOP
@@ -392,7 +453,7 @@ BEGIN
   SELECT min(ls[g.ix] - es[g.ix]) INTO v_minslack FROM generate_subscripts(ls, 1) AS g(ix)
    WHERE sched[g.ix] AND NOT done[g.ix];
   FOR i IN 1..n LOOP
-    -- "late critical": an incomplete critical task, or incomplete milestone, whose end_date is already past
+    -- late critical: an incomplete critical task, or incomplete milestone, whose end_date is already past
     IF NOT done[i] AND endd[i] IS NOT NULL AND endd[i] < p_today
        AND ((sched[i] AND (ls[i] - es[i]) <= GREATEST(0, v_minslack)) OR ms[i]) THEN
       v_late := true; v_late_days := GREATEST(v_late_days, p_today - endd[i]);
@@ -410,13 +471,13 @@ BEGIN
    WHERE w > 0;
 
   SELECT EXISTS (SELECT 1 FROM job_tasks WHERE job_id = p_job_id AND baseline_locked_at IS NOT NULL) INTO v_has_bl;
-  SELECT coalesce(max(baseline_end), v_job.due_date) INTO v_base_end FROM job_tasks WHERE job_id = p_job_id;
+  SELECT coalesce(max(baseline_end), v_due) INTO v_base_end FROM job_tasks WHERE job_id = p_job_id;
   v_slip := CASE WHEN v_fe IS NOT NULL AND v_base_end IS NOT NULL THEN v_fe - v_base_end END;
   v_gap  := CASE WHEN v_has_bl THEN v_overall - v_planned END;
 
   v_status := CASE
-    WHEN v_job.status IN ('Completed', 'Invoiced', 'Closed') THEN 'Complete'
-    WHEN v_job.status = 'On Hold' THEN 'On hold'
+    WHEN v_jstatus IN ('Completed', 'Invoiced', 'Closed') THEN 'Complete'
+    WHEN v_jstatus = 'On Hold' THEN 'On hold'
     WHEN coalesce(v_slip, 0) > k_late_days OR v_late_days > k_late_days THEN 'Late'
     WHEN coalesce(v_slip, 0) BETWEEN 1 AND k_late_days OR coalesce(v_gap, 0) < -k_gap_pts OR v_late THEN 'At risk'
     ELSE 'On track' END;
@@ -427,45 +488,75 @@ END $$;
 REVOKE ALL ON FUNCTION job_schedule_status(uuid, date) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION job_schedule_status(uuid, date) TO authenticated;
 
--- ===== RLS (exact pattern of job_tasks) =====
+-- ===== RLS (exact pattern of job_tasks: TO authenticated, company membership, writes need ops:work-orders:write) =====
 ALTER TABLE job_phases ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "job_phases members read" ON job_phases FOR SELECT
-  USING (company_id IN (SELECT my_company_ids()));
-CREATE POLICY "job_phases writers insert" ON job_phases FOR INSERT
-  WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));
-CREATE POLICY "job_phases writers update" ON job_phases FOR UPDATE
-  USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'))
-  WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));
-CREATE POLICY "job_phases writers delete" ON job_phases FOR DELETE
-  USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));
+DROP POLICY IF EXISTS "job_phases members read" ON job_phases;
+CREATE POLICY "job_phases members read" ON job_phases FOR SELECT TO authenticated USING (company_id IN (SELECT my_company_ids()));
+DROP POLICY IF EXISTS "job_phases writers insert" ON job_phases;
+CREATE POLICY "job_phases writers insert" ON job_phases FOR INSERT TO authenticated WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));
+DROP POLICY IF EXISTS "job_phases writers update" ON job_phases;
+CREATE POLICY "job_phases writers update" ON job_phases FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));
+DROP POLICY IF EXISTS "job_phases writers delete" ON job_phases;
+CREATE POLICY "job_phases writers delete" ON job_phases FOR DELETE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));
 
 ALTER TABLE job_task_links ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "job_task_links members read" ON job_task_links FOR SELECT
-  USING (company_id IN (SELECT my_company_ids()));
-CREATE POLICY "job_task_links writers insert" ON job_task_links FOR INSERT
-  WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));
-CREATE POLICY "job_task_links writers update" ON job_task_links FOR UPDATE
-  USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'))
-  WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));
-CREATE POLICY "job_task_links writers delete" ON job_task_links FOR DELETE
-  USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));
-
--- ===== down (reversible; run in this order) =====
--- (Phases C and D objects that call these functions must be rolled back first.)
--- DROP FUNCTION job_schedule_status(uuid, date);  DROP FUNCTION job_task_client_visible(uuid);
--- DROP FUNCTION job_task_planned_pct(date, date, date, date, date);  DROP FUNCTION job_task_weight(boolean, numeric, date, date);
--- DROP TRIGGER job_tasks_visibility_guard ON job_tasks;  DROP TRIGGER job_phases_visibility_guard ON job_phases;
--- DROP FUNCTION job_visibility_guard();   -- only after B/C/D triggers that use it are dropped
--- DROP TRIGGER job_tasks_set_updated_at ON job_tasks;  (the two other set_updated_at triggers go with their tables; set_updated_at() itself stays)
--- DROP FUNCTION lock_job_baseline(uuid, text);
--- DROP TRIGGER job_tasks_baseline_guard ON job_tasks;  DROP FUNCTION job_tasks_baseline_guard();
--- DROP TABLE job_task_links;  DROP FUNCTION job_task_links_no_cycle();
--- ALTER TABLE job_tasks DROP CONSTRAINT job_tasks_baseline_chk, DROP CONSTRAINT job_tasks_milestone_chk,
---   DROP COLUMN phase_id, DROP COLUMN is_milestone, DROP COLUMN is_critical, DROP COLUMN weight,
---   DROP COLUMN baseline_start, DROP COLUMN baseline_end, DROP COLUMN baseline_locked_at, DROP COLUMN client_visible;
--- DROP TABLE job_phases;
--- Note: depends_on is untouched, so the v1 schedule keeps working after a rollback. Audit rows stay (append-only).
+DROP POLICY IF EXISTS "job_task_links members read" ON job_task_links;
+CREATE POLICY "job_task_links members read" ON job_task_links FOR SELECT TO authenticated USING (company_id IN (SELECT my_company_ids()));
+DROP POLICY IF EXISTS "job_task_links writers insert" ON job_task_links;
+CREATE POLICY "job_task_links writers insert" ON job_task_links FOR INSERT TO authenticated WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));
+DROP POLICY IF EXISTS "job_task_links writers update" ON job_task_links;
+CREATE POLICY "job_task_links writers update" ON job_task_links FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));
+DROP POLICY IF EXISTS "job_task_links writers delete" ON job_task_links;
+CREATE POLICY "job_task_links writers delete" ON job_task_links FOR DELETE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));
 ```
+
+```sql
+-- ===== down =====  (verbatim copy of supabase/rollbacks/202610210600_phase_a_sql_down.sql; run in this order, harmless twice)
+-- Rollback of 202610210600_phase_a_sql.sql (Phase A, Schedule v2). Run in this order; harmless if run twice.
+-- Phase B/C/D objects that call these functions or attach job_visibility_guard() must be rolled back first
+-- (the DROP FUNCTION below fails on purpose, without CASCADE, while any such dependent exists).
+-- depends_on is untouched, so the v1 schedule keeps working afterwards. job_audit_log rows stay (append-only).
+DROP FUNCTION IF EXISTS job_schedule_status(uuid, date);
+DROP FUNCTION IF EXISTS job_task_client_visible(uuid);
+DROP FUNCTION IF EXISTS job_task_planned_pct(date, date, date, date, date);
+DROP FUNCTION IF EXISTS job_task_weight(boolean, numeric, date, date);
+DROP TRIGGER IF EXISTS job_tasks_visibility_guard ON job_tasks;
+DROP TRIGGER IF EXISTS job_phases_visibility_guard ON job_phases;
+DROP FUNCTION IF EXISTS job_visibility_guard();
+DROP TRIGGER IF EXISTS job_tasks_set_updated_at ON job_tasks;
+DROP FUNCTION IF EXISTS lock_job_baseline(uuid, text);
+DROP TRIGGER IF EXISTS job_tasks_baseline_guard ON job_tasks;
+DROP FUNCTION IF EXISTS job_tasks_baseline_guard();
+DROP TABLE IF EXISTS job_task_links;
+DROP FUNCTION IF EXISTS job_task_links_no_cycle();
+ALTER TABLE job_tasks
+  DROP CONSTRAINT IF EXISTS job_tasks_baseline_chk,
+  DROP CONSTRAINT IF EXISTS job_tasks_milestone_chk,
+  DROP COLUMN IF EXISTS phase_id,
+  DROP COLUMN IF EXISTS is_milestone,
+  DROP COLUMN IF EXISTS is_critical,
+  DROP COLUMN IF EXISTS weight,
+  DROP COLUMN IF EXISTS baseline_start,
+  DROP COLUMN IF EXISTS baseline_end,
+  DROP COLUMN IF EXISTS baseline_locked_at,
+  DROP COLUMN IF EXISTS client_visible;
+DROP TABLE IF EXISTS job_phases;
+```
+
+### Execution notes (SQL run on a throwaway Postgres 17, 2026-10-21)
+
+The SQL above is the executed migration, not the desk-checked draft. What running it changed (behaviour is as specified unless stated):
+
+1. **`job_schedule_status` gap type.** `v_gap` was declared `int`, which silently rounded the 2 dp gap and moved the `gap < -10` boundary (a gap of -10.01 became -10 and read On track). It is `numeric` now; the precision cases (overall 39.995 -> 40.00, gap -10.00 On track; 39.99 -> gap -10.01 At risk; planned 33.33 kept to 2 dp) pin it.
+2. **Policies are `TO authenticated`**, the exact live `job_tasks` pattern. Without it the policies applied to `anon` too, so an anon query died with 42501 inside `my_company_ids()` instead of returning zero rows.
+3. **Baseline guard is stricter, same behaviour for the RPC.** The transaction-local setting `app.baseline_rpc` alone is not trusted: the guard also requires `current_user` to be the owner of `lock_job_baseline` (true only inside that SECURITY DEFINER function or an owner/superuser seed). `lock_job_baseline` also switches the setting off before returning. A caller that sets the setting itself still cannot write baselines.
+4. **Backfill cannot abort the migration.** v1 allowed a task to depend on itself, on a task of another job, or to form a `depends_on` cycle; the plain `INSERT ... SELECT` would fail on the cycle trigger. The backfill now skips such rows with a NOTICE (the chain rows are kept, `depends_on` is untouched).
+5. **`job_task_links_no_cycle` also keeps a link inside one job and company** (task and predecessor must belong to the link's own job and company; otherwise 23514). A self-link is reported by the CHECK (23514), not as a cycle. Cycle and integrity failures use SQLSTATE 23514 (`check_violation`).
+6. **Trigger order vs RLS.** BEFORE triggers run before the RLS WITH CHECK, so an INSERT by a user who cannot see the tasks fails with 23514 (integrity) and a refused publish by a non-approver fails with P0001 (guard) rather than 42501. Both are refusals; a client that has no `erp_users` row cannot create anything.
+7. **Test-harness trap for the X19 exemption.** `SET ROLE authenticated` inside a postgres session keeps `session_user = postgres`, so the guard exempts it. The publish-guard tests must run through a login role that is a member of `authenticated` (`SET SESSION AUTHORIZATION authenticator` then `SET ROLE`), which `supabase/tests/phase_a_sql/10_stub_extra.sql` provides as `t_dml_api`. The real PostgREST path is still to be confirmed after the migration is applied (the Test plan publish-guard case run through the REST API).
+8. **`service_role` over the REST API is not exempt** (session_user is `authenticator`, `auth.uid()` is NULL), so an edge function that inserts a row with `client_visible = true` through PostgREST is refused. Use direct SQL (session_user postgres) or set the flag in a second step as an approver.
+
+Run: `bash supabase/tests/d0c_common/run.sh phase_a_sql` (before / apply / re-apply / after / rollback / re-apply), `node supabase/tests/d0c_common/mutate.mjs phase_a_sql` (mutation check) and `bash supabase/tests/phase_a_sql/run-fixture.sh [fixture.json]` (shared JSON fixture against SQL, see `scripts/tests/schedule/sql-fixture-runner.mjs`).
 
 ### Phase templates and ordering
 
@@ -492,7 +583,7 @@ Templates are a **versioned constant in `index.html`**, not a new table (a `job_
 - **Publishing (X5).** `job_phases.client_visible` and `job_tasks.client_visible` can be set to true only with `ops:work-orders:approve` (Phase A has no domain atom), enforced by the trigger `job_visibility_guard()` (rules and SQL above), not by the UI. A writer without approve can still unpublish. Editing `name` / `task_name` of a visible row auto-unpublishes it. Because `ops:work-orders:write` holders without approve (none today in the live role set, but possible later) cannot republish, the UI shows an "Unpublished by edit: re-publish" badge.
 - **Function exposure (X13).** `lock_job_baseline` and the helper/status functions are revoked from `PUBLIC, anon` and granted to `authenticated`, with authorization re-checked inside (`lock_job_baseline`) or RLS-scoped (`job_schedule_status` is SECURITY INVOKER). `job_visibility_guard` is trigger-only and revoked from all API roles. The Q-D definer sweep (inventory queries Q-A..Q-E) is re-run after this migration. `job_task_client_visible` is SECURITY INVOKER, revoked from `PUBLIC, anon`, granted to `authenticated`.
 - `user_has_perm` is not company-scoped, which is why every policy pairs it with the `my_company_ids()` test. The RPC re-checks company membership on the job.
-- Cost fields are never touched by this phase; the KPI function reads only `job_tasks`, `job_task_links`, `job_phases` and `jobs.due_date`/`status`.
+- Cost fields are never touched by this phase (no Phase A function does SELECT * or names a cost column; a test greps the function bodies); the KPI function reads only `job_tasks`, `job_task_links`, `job_phases` and `jobs.due_date`/`status`.
 
 ## Staff UI (ERP)
 
@@ -580,7 +671,7 @@ None in this phase, and nothing is exposed. Explanation: Phase D reads schedule 
 
 ## Migration and rollout
 
-0. **Order (X16, X23).** Apply `supabase/migrations/202610200900_a_schedule_v2.sql` after D0a and before Phase B's and Phase C's migrations (strict order D0a, A, B, C; B may be developed in parallel but is applied after A). No owner prerequisite step 0 (pg_cron / pg_net) is needed for A. Run the Q-D SECURITY DEFINER sweep (inventory queries Q-A..Q-E) after applying it.
+0. **Order (X16, X23).** Apply `supabase/migrations/202610210600_phase_a_sql.sql` after D0a and before Phase B's and Phase C's migrations (strict order D0a, A, B, C; B may be developed in parallel but is applied after A). No owner prerequisite step 0 (pg_cron / pg_net) is needed for A. Run the Q-D SECURITY DEFINER sweep (inventory queries Q-A..Q-E) after applying it.
 1. Ship the migration (additive; existing rows keep working). The ERP v1 schedule reads only old columns, so the migration can go out before the UI. (The new `job_tasks_set_updated_at` and visibility triggers are the only behaviour change to existing writes: `updated_at` is now server-set, and no existing row is visible so the guard is inert until someone publishes.)
 2. Deploy the UI behind the existing `index.html` release: renderer, KPI strip, table fields. Old `depends_on` stays populated, so frappe on the portfolio view is unaffected.
 3. Optional one-time "Apply template" per job (manual, never automatic). No bulk data change on existing jobs.
@@ -613,7 +704,7 @@ None in this phase, and nothing is exposed. Explanation: Phase D reads schedule 
 - **Read exposure**: SELECT is company-wide (same as today), so finance/sales roles can read schedule rows through the REST API even though the UI hides the screen. Matches `job_tasks`; tightening belongs to a repo-wide decision.
 - **Two implementations (SQL and JS) of one rule**: drift is the main risk. Mitigations: SQL is canonical, JS mirrors it, one shared fixture runs both (Test plan), constants are mirrored in a comment on both sides, and Phase C calls the SQL helpers instead of copying them.
 - **Guard definer and exemption**: `job_visibility_guard()` is SECURITY DEFINER and exempts `session_user IN ('postgres','supabase_admin')` for migrations and backfills. PostgREST connects as `authenticator`, so the exemption is unreachable from the API; confirm with the Test plan publish-guard case run through the REST API, not the SQL editor.
-- **Baseline trigger vs RPC**: the guard uses a transaction-local setting; any future function writing baselines must set it deliberately. Documented in the migration comment.
+- **Baseline trigger vs RPC**: the guard needs the transaction-local setting AND `current_user` = owner of `lock_job_baseline`; any future function writing baselines must be SECURITY DEFINER under the same owner and set the setting deliberately (and switch it off again). Documented in the migration comment.
 
 ## Open questions
 
