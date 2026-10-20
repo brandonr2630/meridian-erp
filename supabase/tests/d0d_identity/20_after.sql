@@ -242,6 +242,9 @@ BEGIN
   PERFORM t_expect('ucr: company_admin cannot delete', t_dmlm(A, cadm, format('DELETE FROM erp_user_company_roles WHERE user_id=%L', U01)), 'rows:0');
   PERFORM t_expect('ucr: super admin cannot delete via REST either (no policy)', t_dmlm(A, sup, format('DELETE FROM erp_user_company_roles WHERE user_id=%L', U01)), 'rows:0');
   PERFORM t_expect('ucr: dual cannot delete', t_dmlm(A, dual, 'DELETE FROM erp_user_company_roles'), 'rows:0');
+  -- statements without a WHERE clause are not filtered by the SELECT policy, so USING alone must scope them
+  PERFORM t_expect('ucr: mass update by company_admin touches only C1 rows that are not self/super (7)', t_dmlm(A, cadm, 'UPDATE erp_user_company_roles SET permission_overrides=''{}'''), 'rows:7');
+  PERFORM t_expect('ucr: mass update by plain staff touches nothing', t_dmlm(A, viewr, 'UPDATE erp_user_company_roles SET permission_overrides=''{}'''), 'rows:0');
   PERFORM t_expect('ucr: all 16 rows still there', (SELECT count(*)::text FROM erp_user_company_roles), '16');
   PERFORM t_expect('ucr: no role changed during the refusal run', (SELECT count(*)::text FROM erp_user_company_roles WHERE permission_overrides <> '{}'::jsonb), '0');
   PERFORM t_expect('ucr: nobody became super (is_super_admin for ops/cadm/offc/viewr)', (SELECT count(*)::text FROM erp_user_company_roles u JOIN erp_roles r ON r.id=u.role_id WHERE r.permissions ? 'admin:companies' AND u.user_id NOT IN (U04::uuid, U08::uuid)), '0');
@@ -483,6 +486,10 @@ BEGIN
   PERFORM t_denym('roles: company_admin cannot create it either', t_dmlm(A, cadm, format(INSR, 'Sneaky', '{"admin:companies":true,"ops:work-orders:read":true}', C1, U03)), 'only a super admin');
   PERFORM t_denym('roles: Office Admin cannot edit a custom role to add admin:companies', t_dmlm(A, offc, format(UPDR, 'C1 Custom', '{"admin:companies":true,"ops:work-orders:read":true}', R1)), 'only a super admin');
   PERFORM t_denym('roles: company_admin cannot edit a custom role to add admin:companies', t_dmlm(A, cadm, format(UPDR, 'C1 Custom', '{"admin:companies":true}', R1)), 'only a super admin');
+  PERFORM t_denym('roles: admin:companies with a garbage value refused (would make live (x->>k)::boolean raise)', t_dmlm(A, offc, format(INSR, 'Sneaky', '{"admin:companies":"abc"}', C1, U05)), 'only a super admin');
+  PERFORM t_denym('roles: admin:companies=null refused', t_dmlm(A, offc, format(INSR, 'Sneaky', '{"admin:companies":null}', C1, U05)), 'only a super admin');
+  PERFORM t_denym('roles: admin:companies garbage added by update refused', t_dmlm(A, cadm, format(UPDR, 'C1 Custom', '{"admin:companies":"abc"}', R1)), 'only a super admin');
+  PERFORM t_denym('roles: role id is immutable', t_dmlm(A, cadm, format('UPDATE erp_roles SET id=gen_random_uuid() WHERE id=%L', R1)), 'cannot be changed');
   PERFORM t_denym('roles: nested/array permissions refused (not an object)', t_dmlm(A, cadm, format(UPDR, 'C1 Custom', '[]', R1)), 'JSON object');
   PERFORM t_denym('roles: scalar permissions refused', t_dmlm(A, cadm, format(UPDR, 'C1 Custom', '"x"', R1)), 'JSON object');
   -- ceiling rule
@@ -517,6 +524,9 @@ BEGIN
   PERFORM t_deny('roles: client-like cannot create', t_dmlm(A, clnt, format(INSR, 'X', '{}', C1, U06)));
   PERFORM t_expect('roles: anon cannot edit', t_dmlm('anon', NULL, format(UPDR, 'x', '{}', R1)), 'rows:0');
   PERFORM t_deny('roles: anon cannot create', t_dmlm('anon', NULL, format(INSR, 'X', '{}', C1, U06)));
+  INSERT INTO erp_roles (id, name, company_id, is_system, permissions) VALUES ('a0000000-0000-0000-0000-0000000000f4', 'C1 System', C1::uuid, true, '{"ops:work-orders:read":true}');
+  PERFORM t_expect('roles: a company-owned SYSTEM role is not editable', t_dmlm(A, cadm, format(UPDR, 'renamed', '{"ops:work-orders:read":true}', 'a0000000-0000-0000-0000-0000000000f4')), 'rows:0');
+  PERFORM t_expect('roles: a company-owned SYSTEM role is not deletable', t_dmlm(A, cadm, 'DELETE FROM erp_roles WHERE id=''a0000000-0000-0000-0000-0000000000f4'''), 'rows:0');
   -- a super role that already exists (created by the platform) cannot be edited, deleted or assigned by a company admin
   INSERT INTO erp_roles (id, name, company_id, permissions) VALUES (RX::uuid, 'SuperCustom', C1::uuid, '{"admin:companies":true,"ops:work-orders:read":true}');
   PERFORM t_denym('roles: company_admin cannot rename an existing super role', t_dmlm(A, cadm, format(UPDR, 'renamed', '{"admin:companies":true,"ops:work-orders:read":true}', RX)), 'only a super admin');
@@ -557,6 +567,7 @@ BEGIN
   PERFORM t_expect('ok: company_admin creates a role with admin:users + admin:roles (it holds both)', t_dmlm(A, cadm, format(INSR, 'Delegates', '{"admin:users":true,"admin:roles":true}', C1, U03)), 'rows:1');
   PERFORM t_expect('ok: string-true of a HELD atom is fine', t_dmlm(A, cadm, format(INSR, 'StrTrue', '{"finance:ap:read":"true"}', C1, U03)), 'rows:1');
   PERFORM t_expect('ok: Office Admin creates a role within its own atoms', t_dmlm(A, offc, format(INSR, 'AP Clerk', '{"finance:ap:read":true,"ops:work-orders:read":true}', C1, U05)), 'rows:1');
+  PERFORM t_expect('ok: admin:companies=false is not a grant', t_dmlm(A, offc, format(INSR, 'ExplicitFalse', '{"admin:companies":false,"ops:work-orders:read":true}', C1, U05)), 'rows:1');
   PERFORM t_expect('ok: unheld atom with value false is not a grant', t_dmlm(A, offc, format(INSR, 'NoBank', '{"finance:bank:read":false,"finance:ap:write":true}', C1, U05)), 'rows:1');
   PERFORM t_expect('ok: Role Manager edit (add held atom)', t_dmlm(A, cadm, format(UPDR, 'C1 Custom 2', '{"ops:work-orders:read":true,"ops:work-orders:write":true}', R1)), 'rows:1');
   PERFORM t_expect('ok: edit that removes atoms', t_dmlm(A, cadm, format(UPDR, 'C1 Custom 2', '{}', R1)), 'rows:1');
@@ -622,5 +633,59 @@ BEGIN
   PERFORM t_deny('spoof: trigger functions are not callable by authenticated', t_dmlm(A, cadm, 'SELECT public.d0d_users_guard()'));
   PERFORM t_deny('spoof: anon cannot call the helpers', t_dmlm('anon', NULL, 'SELECT public.d0d_my_erp_user_id()'));
   PERFORM t_expect('spoof: none of it changed anything', (SELECT count(*)::text FROM pg_trigger WHERE tgname LIKE 'd0d\_%' AND tgenabled='O'), '3');
+END $$;
+ROLLBACK;
+-- ═══ edge identities: deactivated admin, settings-only admin, overrides-only admin, super without company ═══
+BEGIN;
+DO $$
+DECLARE
+  ops uuid := '11111111-1111-1111-1111-111111111111'; viewr uuid := '22222222-2222-2222-2222-222222222222';
+  cadm uuid := '33333333-3333-3333-3333-333333333333'; sup uuid := '44444444-4444-4444-4444-444444444444';
+  offc uuid := '55555555-5555-5555-5555-555555555555'; gone uuid := '66666666-6666-6666-6666-666666666666';
+  ops2 uuid := '77777777-7777-7777-7777-777777777777'; sup2 uuid := 'aaaa0008-0000-0000-0000-000000000008';
+  cadm2 uuid := '10101010-1010-1010-1010-101010101010'; mixed uuid := '11111111-aaaa-1111-1111-111111111111';
+  sp1 uuid := 'aaaa0011-0000-0000-0000-000000000011'; sp2 uuid := 'aaaa0012-0000-0000-0000-000000000012';
+  dual uuid := 'aaaa0013-0000-0000-0000-000000000013'; clnt uuid := 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+  C1 text := 'c1000000-0000-0000-0000-000000000001'; C2 text := 'c2000000-0000-0000-0000-000000000002';
+  U01 text := 'e0000000-0000-0000-0000-000000000001'; U02 text := 'e0000000-0000-0000-0000-000000000002'; U03 text := 'e0000000-0000-0000-0000-000000000003';
+  U04 text := 'e0000000-0000-0000-0000-000000000004'; U05 text := 'e0000000-0000-0000-0000-000000000005'; U06 text := 'e0000000-0000-0000-0000-000000000006';
+  U07 text := 'e0000000-0000-0000-0000-000000000007'; U08 text := 'e0000000-0000-0000-0000-000000000008'; U09 text := 'e0000000-0000-0000-0000-000000000009';
+  U10 text := 'e0000000-0000-0000-0000-000000000010'; U11 text := 'e0000000-0000-0000-0000-000000000011'; U12 text := 'e0000000-0000-0000-0000-000000000012';
+  U13 text := 'e0000000-0000-0000-0000-000000000013';
+  RO text := 'a0000000-0000-0000-0000-000000000001'; RV text := 'a0000000-0000-0000-0000-000000000002'; RA text := 'a0000000-0000-0000-0000-000000000003';
+  RS text := 'a0000000-0000-0000-0000-000000000004'; RF text := 'a0000000-0000-0000-0000-000000000005'; R1 text := 'a0000000-0000-0000-0000-000000000006';
+  R2 text := 'a0000000-0000-0000-0000-000000000007'; RD text := 'a0000000-0000-0000-0000-000000000008'; RB text := 'a0000000-0000-0000-0000-000000000009';
+  A text := 'authenticated';
+  UPD text := 'UPDATE erp_user_company_roles SET role_id=%L WHERE user_id=%L AND company_id=%L';
+  INS text := 'INSERT INTO erp_user_company_roles (user_id, company_id, role_id, permission_overrides) VALUES (%L,%L,%L,''{}'')';
+  INSU text := 'INSERT INTO erp_users (auth_user_id, full_name, email, is_active, company_id) VALUES (%L,%L,%L,true,%L)';
+  RSET text := 'a0000000-0000-0000-0000-0000000000f3';
+BEGIN
+  -- a super admin cannot create a profile without a company either
+  PERFORM t_deny('edge: super cannot insert a profile without a company', t_dmlm(A, sup, format(INSU, 'dddddddd-dddd-dddd-dddd-dddddddd0009', 'x', 'x9@t.test', NULL)));
+  -- settings-only admin: is_company_admin() would count it, d0d_can_admin_users must not
+  INSERT INTO erp_roles (id, name, company_id, permissions) VALUES (RSET::uuid, 'Settings Only', C1::uuid, '{"admin:settings":true,"ops:work-orders:read":true}');
+  UPDATE erp_user_company_roles SET role_id = RSET::uuid WHERE user_id = U11::uuid AND company_id = C1::uuid;
+  PERFORM t_expect('edge: settings-only holder is_company_admin (legacy helper) is true', t_count(A, sp1, 'SELECT 1 WHERE public.is_company_admin('''||C1||''')'), 'n:1');
+  PERFORM t_expect('edge: ... but d0d_can_admin_users is false', t_count(A, sp1, 'SELECT 1 WHERE public.d0d_can_admin_users('''||C1||''')'), 'n:0');
+  PERFORM t_expect('edge: settings-only holder cannot re-role a colleague', t_dmlm(A, sp1, format(UPD, RV, U01, C1)), 'rows:0');
+  PERFORM t_deny('edge: settings-only holder cannot create a profile', t_dmlm(A, sp1, format(INSU, 'dddddddd-dddd-dddd-dddd-dddddddd0008', 'x', 'x8@t.test', C1)));
+  PERFORM t_expect('edge: settings-only holder cannot see colleague assignments', t_count(A, sp1, 'SELECT 1 FROM erp_user_company_roles'), 'n:1');
+  -- admin:users granted only through permission_overrides does not count (roles only)
+  UPDATE erp_user_company_roles SET permission_overrides = '{"admin:users":true}' WHERE user_id = U02::uuid AND company_id = C1::uuid;
+  PERFORM t_expect('edge: overrides-only admin:users is not admin (reads)', t_count(A, viewr, 'SELECT 1 FROM erp_user_company_roles'), 'n:1');
+  PERFORM t_expect('edge: overrides-only admin:users cannot re-role', t_dmlm(A, viewr, format(UPD, RV, U01, C1)), 'rows:0');
+  PERFORM t_deny('edge: overrides-only admin:users cannot insert assignments', t_dmlm(A, viewr, format(INS, U07, C1, RO)));
+  -- a deactivated company admin loses every power at once
+  UPDATE erp_users SET is_active = false WHERE id = U03::uuid;
+  PERFORM t_expect('edge: deactivated admin cannot re-role', t_dmlm(A, cadm, format(UPD, RV, U01, C1)), 'rows:0');
+  PERFORM t_deny('edge: deactivated admin cannot insert assignments', t_dmlm(A, cadm, format(INS, U07, C1, RO)));
+  PERFORM t_deny('edge: deactivated admin cannot insert profiles', t_dmlm(A, cadm, format(INSU, 'dddddddd-dddd-dddd-dddd-dddddddd0007', 'x', 'x7@t.test', C1)));
+  PERFORM t_expect('edge: deactivated admin cannot rename a colleague', t_dmlm(A, cadm, format('UPDATE erp_users SET full_name=%L WHERE id=%L', 'x', U01)), 'rows:0');
+  PERFORM t_deny('edge: deactivated admin cannot create a role', t_dmlm(A, cadm, format('INSERT INTO erp_roles (name, permissions, company_id) VALUES (%L,%L,%L)', 'x', '{"ops:work-orders:read":true}', C1)));
+  PERFORM t_expect('edge: deactivated admin cannot read roles or assignments', t_count(A, cadm, 'SELECT 1 FROM erp_roles') || ':' || t_count(A, cadm, 'SELECT 1 FROM erp_user_company_roles'), 'n:0:n:0');
+  -- deactivated holder of an admin:roles role cannot edit roles
+  UPDATE erp_users SET is_active = false WHERE id = U05::uuid;
+  PERFORM t_expect('edge: deactivated Office Admin cannot edit a role', t_dmlm(A, offc, format('UPDATE erp_roles SET name=%L WHERE id=%L', 'x', R1)), 'rows:0');
 END $$;
 ROLLBACK;

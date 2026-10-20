@@ -25,7 +25,7 @@
 --                    admins: full_name / is_active / company_id (to a company they administer); email and auth_user_id are super-only;
 --                    nobody but a super changes their OWN is_active / company_id; non-supers cannot touch a super admin's row).
 --   d0d_roles_guard  BEFORE INSERT OR UPDATE on erp_roles  admin:companies only via super; ceiling rule (a non-super may only newly
---                    grant atoms they themselves hold in the role's company); company_id / is_system immutable for non-super.
+--                    grant atoms they themselves hold in the role's company); id / company_id / is_system immutable for non-super.
 -- Idempotent. Rollback: supabase/rollbacks/202610211000_d0d_identity_down.sql
 
 -- == 1. helpers ==============================================================================================================
@@ -226,11 +226,15 @@ BEGIN
   IF NEW.permissions IS NOT NULL AND jsonb_typeof(NEW.permissions) <> 'object' THEN
     RAISE EXCEPTION 'erp_roles: permissions must be a JSON object' USING ERRCODE = '42501';
   END IF;
-  IF public.d0d_atom_true(NEW.permissions, 'admin:companies') OR (TG_OP = 'UPDATE' AND public.d0d_atom_true(OLD.permissions, 'admin:companies')) THEN
+  -- admin:companies may only be absent or exactly false for a non-super: any other value (true, "true", 1, garbage that would make the live
+  -- (x->>k)::boolean helpers raise) is refused, and an existing super role cannot be touched at all.
+  IF public.d0d_atom_true(NEW.permissions, 'admin:companies')
+     OR (NEW.permissions ? 'admin:companies' AND NEW.permissions -> 'admin:companies' IS DISTINCT FROM 'false'::jsonb)
+     OR (TG_OP = 'UPDATE' AND public.d0d_atom_true(OLD.permissions, 'admin:companies')) THEN
     RAISE EXCEPTION 'erp_roles: only a super admin can create or change a role carrying admin:companies' USING ERRCODE = '42501';
   END IF;
-  IF TG_OP = 'UPDATE' AND (NEW.company_id IS DISTINCT FROM OLD.company_id OR NEW.is_system IS DISTINCT FROM OLD.is_system) THEN
-    RAISE EXCEPTION 'erp_roles: company_id and is_system cannot be changed' USING ERRCODE = '42501';
+  IF TG_OP = 'UPDATE' AND (NEW.id IS DISTINCT FROM OLD.id OR NEW.company_id IS DISTINCT FROM OLD.company_id OR NEW.is_system IS DISTINCT FROM OLD.is_system) THEN
+    RAISE EXCEPTION 'erp_roles: id, company_id and is_system cannot be changed' USING ERRCODE = '42501';
   END IF;
   -- ceiling rule: you can only newly grant atoms you hold yourself, through a role assigned in the role's company
   IF NEW.permissions IS NOT NULL THEN

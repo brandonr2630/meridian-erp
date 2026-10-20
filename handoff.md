@@ -1,9 +1,20 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-21 · Session 65 (Phase A UI integration)*
+*Last updated: 2026-10-21 · Session 67 (D0d identity-table RLS built, NOT applied)*
 
 ---
 
+## Session 67 — D0d identity-table RLS built and tested on throwaway Postgres (NOT applied)
+
+**Date:** 2026-10-21. Branch `feat/d0d-role-escalation`. Files: `supabase/migrations/202610211000_d0d_identity.sql`, `supabase/rollbacks/202610211000_d0d_identity_down.sql`, `supabase/tests/d0d_identity/` (`10_stub_extra.sql`, `15_before.sql`, `20_after.sql`, `30_rollback.sql`, `mutations.json`, `live_verify.sql` + `live_verify_stub.sql`). Nothing was applied to prod and `index.html` is untouched.
+
+- **Holes closed:** (1) any `admin:users` holder in ANY company could assign any role (incl. super_admin) to anyone incl. self and rewrite role/overrides of any row in a company they only belong to; (2) any active staff member could INSERT an `erp_users` row for an arbitrary `auth_user_id` (a client login becomes "staff"), edit colleagues' profile, or change own `is_active`/`company_id`; (3) a company admin with `admin:roles` could create/edit a custom role carrying `admin:companies` and assign it; any login (incl. a future client) could read all roles.
+- **Design:** helpers `d0d_can_admin_users(cid)` (super OR `admin:users` through a role assigned IN that company), `d0d_my_erp_user_id`, `d0d_actor_has_atom`, `d0d_role_assignable`, `d0d_overrides_ok`, `d0d_role_is_super`, `d0d_user_is_super`, `d0d_atom_true` (same truthiness as the live `(x->>k)::boolean`, never raises). Policies `TO authenticated`; ucr gets RESTRICTIVE `d0_no_anon` + `d0_staff_only`, `erp_users` and `erp_roles` get `d0_no_anon` only (login must read own row); `roles_select` = `is_erp_staff()`. No DELETE policy on ucr. Triggers `d0d_ucr_guard`, `d0d_users_guard`, `d0d_roles_guard` (SECURITY INVOKER, bypass for `current_user` in postgres/service_role/supabase_admin).
+- **Deviations/additions:** ceiling rule on role edits (a non-super may only newly grant atoms it holds in the role's company); a non-super cannot touch a super admin's profile/assignment/role; `admin:companies` may only be absent or exactly `false` for non-supers (garbage values would make the live helpers raise); role id/company_id/is_system immutable; roles_delete refuses super-carrying roles for non-supers; overrides may not carry `admin:companies`.
+- **Tests:** `bash supabase/tests/d0c_common/run.sh d0d_identity` -> before 20 / after 373 / rollback 15, re-apply 373. `node supabase/tests/d0c_common/mutate.mjs d0d_identity` -> 77/77 caught, 10 documented equivalents. `live_verify.sql` (rolled-back DO block, 70 checks) passes on the stub populated with the four real users.
+- **To apply:** run the migration in the SQL editor, then `live_verify.sql`, expect `FAILS: 0` in the error text; roll back with the down script if any real-user check fails. Audit any SECURITY DEFINER function that writes these three tables first (they run as the owner and skip the guard triggers by design).
+- **Known residuals:** company admins can still INSERT `erp_users` rows for their own company (needed by the spec; the edge function is the real path, so dropping that INSERT policy is the obvious next step); a user's `is_active` is global, so an admin of a shared user's home company can deactivate them everywhere; assignments are not capped by the assigner's atoms (only role edits are).
+---
 ## Session 63 — Phase A KPI strip + baseline lock UI (NOT applied; needs the SQL migration)
 
 **Date:** 2026-10-20. Branch `feat/phase-a-ui-kpi` (stacked on `feat/phase-a-compute`). One block `// ── SCHEDULE KPI ──` ... `// ── END SCHEDULE KPI ──` above the compute block, one CSS block `/* schedule-kpi:begin */`, and the Schedule card now has `<div id="jc-sched-kpis">` above the bar (legacy `#jc-sched-overall` kept, hidden).
