@@ -1,6 +1,36 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-21 · Session 67 (D0d applied to prod)*
+*Last updated: 2026-10-21 · Session 68 (wrap-up)*
+
+---
+
+## Session 68 — Wrap-up and where things stand (2026-10-21)
+
+**Done this stretch (all merged to master, all applied/deployed as noted):**
+- D0 hardening chain COMPLETE on prod: D0a (staff-only + storage), D0b (`erp-user-access` function), D0c (all five families), D0d (identity-table RLS, `d0d_identity`). Legacy open policies 0; 88 `d0c_` policies; client-like logins and `anon` see nothing.
+- Edge functions deployed (`verify_jwt=false`): `create-erp-user` v9, `update-erp-user` v4 (company-scoped authorisation, real Auth error messages, 12-character minimum), `erp-user-access` v1.
+- Phase A live: migration `phase_a_schedule_v2` applied; UI (KPI strip, baseline lock, custom Gantt, task table with phases/milestones/weights/predecessors/publish toggle) deployed; the shared progress/status rule exists once in SQL and once in JS and a 45-case hand-derived fixture passes on both.
+- Bug fix #165: closing a modal opened from the work-order form no longer reloads the Work Orders list (deleting a schedule phase used to drop the open job).
+
+**Owner checks still open (only the owner can do these; Claude cannot log in):**
+1. Live ERP, as yourself: open User Management, Edit Permissions and the Role Manager; confirm they load and save after D0d (REST call shapes were verified at SQL level only; if anything fails, run `supabase/rollbacks/202610211000_d0d_identity_down.sql`).
+2. Live ERP: Create User and Edit User with a throwaway account (new function versions); try an 11-character password to see the real error.
+3. Live ERP: a work order's Schedule card: Apply template, add tasks, a milestone and a predecessor, Lock baseline; check the KPI tiles and the Gantt.
+4. Real viewer / Office Admin login: Work Orders shows "Read-only access" and no Save buttons.
+5. Optional Supabase dashboard settings: "Require current password when updating"; leaked-password protection needs the Pro plan.
+
+**Known limits (not fixed, by design or deferred):**
+- `user_has_perm()` is not company-scoped (a role holding an atom in one company applies across the user's companies); D0d's helpers are company-scoped but the older D0c policies still use it.
+- A holder of `admin:users` can create a user with a fresh email through `create-erp-user` and assign any non-super role in their company: `admin:users` means every non-super atom in that company. Assignments are not capped by the assigner's own atoms (only role edits are).
+- Office Admin can rename approved cost items (RLS cannot restrict columns); `employees` PII is readable by all Work Orders/AP readers; commercial job columns are visible to read roles.
+- A refused job delete (no delete right) can look successful in the UI (`jcDeleteJob`).
+- `job_drawings.storage_key` prefix = `company_id` is not enforced yet (Phase B guard).
+- The publish-refusal for a write-only role (no `ops:work-orders:approve`) could not be tested live (no such role; SQL editor sessions are exempt); it is covered by the throwaway-Postgres suite.
+- Security advisors that remain: `set_updated_at` mutable search_path (minor) and the intended SECURITY DEFINER-helper lints (RLS helpers, `lock_job_baseline`).
+
+**Next on the roadmap (not started; needs owner go-ahead):** Phase B (quality: ITP, hold points, NCRs), then Phase C (progress updates, S-curve, snapshots), then Phase D (client portal; D0 prerequisites are done). Method that worked: spec review, parallel agents per leaf in their own worktrees, every SQL change proven on throwaway Postgres (`bash supabase/tests/d0c_common/run.sh <family>`), mutation checks, an independent attack review for security SQL, apply to prod one family at a time with simulated-identity verification in a rolled-back transaction.
+
+**Housekeeping:** many local worktrees remain under `.worktrees/` (d0a/d0b/d0c-*, phase-a-*, authz-tighten, d0d, fix-phase-delete, handoff-*, spec-project-portal); all their branches are merged, so they can be removed with `git worktree remove` when convenient.
 
 ---
 
