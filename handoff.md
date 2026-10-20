@@ -1,7 +1,28 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-21 · Session 65 (Phase A UI integration)*
+*Last updated: 2026-10-21 · Session 66 (Phase A applied to prod)*
 
+---
+
+## Session 66 — Phase A migration APPLIED to prod (2026-10-21)
+
+**Date:** 2026-10-21, owner go-ahead. Migration `202610210600_phase_a_sql.sql` (PR #162) applied as `phase_a_schedule_v2`. Pre-flight (read-only): `job_tasks` had 0 rows, no triggers, 4 permissive policies, the 12 live columns the tests assumed; none of the new tables/functions existed; legacy `depends_on` data clean (0 self, cross-job, dangling, cycles). The Phase A UI (PR #163) went live earlier in fallback mode and now picks up phases, links, milestones, weights, KPI strip, baseline lock.
+
+**Applied:** tables `job_phases`, `job_task_links` (RLS on, 4 policies each `TO authenticated`); 8 new `job_tasks` columns + 2 check constraints; 7 triggers (cycle guard, baseline guard, `set_updated_at` x3, visibility guard x2 with exactly 2 args); functions `lock_job_baseline` (definer, authenticated only), `job_visibility_guard` (trigger-only, no API EXECUTE), `job_task_client_visible`, `job_task_weight`, `job_task_planned_pct`, `job_schedule_status` (invoker; `anon` cannot execute any of them).
+
+**Verified live as simulated identities in one rolled-back transaction (49 checks, all as expected):** Vikash (operations_tech) created phase/tasks/milestone/link, a legacy-columns-only insert still works, milestone start<>end, cycle, self-link, bad colour and negative weight refused (23514), direct baseline write refused, `lock_job_baseline` locked 3 tasks, a re-baseline without reason refused and with reason worked, 2 audit rows with `username` = Vikash Rambaran, publish then rename auto-unpublished with audit reasons `publish`,`wording_edited`, stale `updated_at` in the body was overwritten, deleting a phase left tasks unphased. Office Admin: reads phases/links/status, cannot insert (RLS 42501), update touched 0 rows, cannot lock. Brandon (super admin): lock/re-baseline ok. A signed-in user with no company membership (client-like): 0 phases/tasks/links, 0 status rows, lock and insert refused. `anon`: 0 rows, status and lock denied. `authenticated` cannot call `job_visibility_guard()`. Post-check: tasks 0, phases 0, links 0, no leftover audit rows, jobs 13, open permissive policies 0, `d0c_` policies 88.
+
+**Not verifiable live:** the publish-refusal for a write-only role without `ops:work-orders:approve` (no such live role; the migration-session exemption `session_user = postgres` applies in the SQL editor): covered by the throwaway-Postgres suite (381 asserts, 181/181 mutants).
+
+**Advisors:** only new line is `lock_job_baseline` being executable by `authenticated` as SECURITY DEFINER (intended; the permission and company checks are inside). Trigger functions `job_task_links_no_cycle` / `job_tasks_baseline_guard` keep the default EXECUTE grant (they cannot be called outside a trigger).
+
+**Rollback:** `supabase/rollbacks/202610210600_phase_a_sql_down.sql`.
+
+**Still to do:** (1) owner check in the live ERP: open a work order, Apply template, add tasks/milestone/predecessor, lock baseline; (2) D0d (role-escalation RLS on `erp_user_company_roles` / `erp_users`, with a function for the Edit Permissions modal); (3) Phase B, C, then D.
+
+---
+
+## Session 60 — create-erp-user v8 DEPLOYED; company-scoped user-admin functions v9 / v4 DEPLOYED
 ---
 
 ## Session 63 — Phase A KPI strip + baseline lock UI (NOT applied; needs the SQL migration)
@@ -53,7 +74,7 @@
 | `update-erp-user/handler.ts` (+ `index.ts`, `errors.ts`) | Super admin may change anyone; otherwise the caller must administer EVERY company the target belongs to and the target must not be a super admin; callers with no admin rights get 403 before any lookup (no existence oracle); 12 character minimum (was 8); the real Auth reason is reported (it read `message`, GoTrue sends `msg`); `staff.credentials.update` audit row names fields only. Source is now in the repo (it was not before). |
 | `supabase/tests/authz/` | 39 tests against an in-memory Auth/PostgREST fake (`node --test supabase/tests/authz/create.test.mjs supabase/tests/authz/update.test.mjs`) and `mutate.mjs` (25 deliberate breakages, all caught). |
 
-**NOT deployed.** Deploying changes live behaviour of Create User and Edit User, so it waits for approval (`verify_jwt=false`, deploy folder contents of each function incl. `authz.ts` and `errors.ts`). After deploy, test with a throwaway user as an admin.
+**DEPLOYED 2026-10-21 with owner approval** (create-erp-user v9, update-erp-user v4, `verify_jwt=false`; probed without credentials: OPTIONS 200, no token 401, forged token 401). Not yet exercised as a real admin: test Create User and Edit User with a throwaway account. (Original note: deploying changes live behaviour of Create User and Edit User, so it waited for approval (`verify_jwt=false`, deploy folder contents of each function incl. `authz.ts` and `errors.ts`). After deploy, test with a throwaway user as an admin.
 
 **Finding (separate, bigger, NOT fixed):** the same escalation exists at the database level, so tightening the functions alone does not close it. `erp_user_company_roles` INSERT/UPDATE policies (`ucr_insert`, `ucr_update`) allow any holder of `admin:users` (not company-scoped) to assign or change ANY role, including `super_admin`, for rows in their companies; `erp_users` UPDATE (`rls_erp_users_update`) lets ANY staff member in a company edit every profile in it (name, `is_active`, `company_id`). The ERP's Edit Permissions modal writes `erp_user_company_roles` directly. Fix = a D0d migration (role-assignment policies requiring a company-scoped admin and forbidding `admin:companies` roles unless super admin; restrict `erp_users` updates) plus routing the modal through a function. Needs its own tests and approval.
 ---
