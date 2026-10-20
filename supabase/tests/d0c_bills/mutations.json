@@ -1,0 +1,101 @@
+[
+ {
+  "name": "events SELECT drops the company scope",
+  "find": "  USING (\n    (SELECT public.user_has_perm('finance:ap:read'))\n    AND bill_id IN (SELECT b.id FROM public.bills b WHERE b.company_id IN (SELECT public.my_company_ids()))\n  );",
+  "replace": "  USING (\n    (SELECT public.user_has_perm('finance:ap:read'))\n  );"
+ },
+ {
+  "name": "events SELECT drops the AP read atom",
+  "find": "  USING (\n    (SELECT public.user_has_perm('finance:ap:read'))\n    AND bill_id IN",
+  "replace": "  USING (\n    true\n    AND bill_id IN"
+ },
+ {
+  "name": "events SELECT atom replaced by write atom",
+  "find": "  USING (\n    (SELECT public.user_has_perm('finance:ap:read'))\n    AND bill_id IN",
+  "replace": "  USING (\n    (SELECT public.user_has_perm('finance:ap:write'))\n    AND bill_id IN"
+ },
+ {
+  "name": "events INSERT drops the admin atom",
+  "find": "    ((SELECT public.user_has_perm('admin:users')) OR (SELECT public.user_has_perm('admin:settings')))\n    AND edited_by = (SELECT auth.uid())",
+  "replace": "    true\n    AND edited_by = (SELECT auth.uid())"
+ },
+ {
+  "name": "events INSERT admin atom swapped for AP write",
+  "find": "    ((SELECT public.user_has_perm('admin:users')) OR (SELECT public.user_has_perm('admin:settings')))\n    AND edited_by = (SELECT auth.uid())",
+  "replace": "    (SELECT public.user_has_perm('finance:ap:write'))\n    AND edited_by = (SELECT auth.uid())"
+ },
+ {
+  "name": "events INSERT only admin:users (drops admin:settings)",
+  "find": "    ((SELECT public.user_has_perm('admin:users')) OR (SELECT public.user_has_perm('admin:settings')))\n    AND edited_by = (SELECT auth.uid())",
+  "replace": "    (SELECT public.user_has_perm('admin:users'))\n    AND edited_by = (SELECT auth.uid())"
+ },
+ {
+  "name": "events INSERT drops the edited_by = caller check",
+  "find": "    AND edited_by = (SELECT auth.uid())\n",
+  "replace": "\n"
+ },
+ {
+  "name": "events INSERT drops the company check",
+  "find": "    AND edited_by = (SELECT auth.uid())\n    AND bill_id IN (SELECT b.id FROM public.bills b WHERE b.company_id IN (SELECT public.my_company_ids()))\n  );",
+  "replace": "    AND edited_by = (SELECT auth.uid())\n  );"
+ },
+ {
+  "name": "archive SELECT drops the company scope",
+  "find": "    AND edit_event_id IN (\n      SELECT e.id FROM public.bill_edit_events e\n      WHERE e.bill_id IN (SELECT b.id FROM public.bills b WHERE b.company_id IN (SELECT public.my_company_ids()))\n    )\n  );\n\nCREATE POLICY d0c_bill_lines_archive_insert",
+  "replace": "  );\n\nCREATE POLICY d0c_bill_lines_archive_insert"
+ },
+ {
+  "name": "archive SELECT drops the AP read atom",
+  "find": "  USING (\n    (SELECT public.user_has_perm('finance:ap:read'))\n    AND edit_event_id IN",
+  "replace": "  USING (\n    true\n    AND edit_event_id IN",
+  "equivalent": true,
+  "reason": "the archive SELECT sub-select reads bill_edit_events under the caller's RLS, and that table's SELECT policy already requires finance:ap:read; the atom on the archive policy is defence in depth. Behaviour is covered by the archive select assertions for operations_tech, sales_rep and ops C2."
+ },
+ {
+  "name": "archive INSERT drops the admin atom",
+  "find": "    ((SELECT public.user_has_perm('admin:users')) OR (SELECT public.user_has_perm('admin:settings')))\n    AND edit_event_id IN",
+  "replace": "    true\n    AND edit_event_id IN"
+ },
+ {
+  "name": "archive INSERT drops the parent-event company check",
+  "find": "      WHERE e.edited_by = (SELECT auth.uid())\n        AND e.bill_id IN (SELECT b.id FROM public.bills b WHERE b.company_id IN (SELECT public.my_company_ids()))\n",
+  "replace": "      WHERE e.edited_by = (SELECT auth.uid())\n",
+  "equivalent": true,
+  "reason": "the sub-select on bill_edit_events runs under the caller's RLS, whose SELECT policy already restricts to the caller's companies; the explicit bill check is defence in depth. Behaviour is asserted by 'archive insert: C1 admin into own event on a C2 bill denied' and the cross-company insert denials."
+ },
+ {
+  "name": "archive INSERT drops the parent-event authorship check",
+  "find": "      WHERE e.edited_by = (SELECT auth.uid())\n        AND e.bill_id IN",
+  "replace": "      WHERE true\n        AND e.bill_id IN"
+ },
+ {
+  "name": "archive INSERT drops the parent-event link entirely",
+  "find": "    AND edit_event_id IN (\n      SELECT e.id FROM public.bill_edit_events e\n      WHERE e.edited_by = (SELECT auth.uid())\n        AND e.bill_id IN (SELECT b.id FROM public.bills b WHERE b.company_id IN (SELECT public.my_company_ids()))\n    )\n  );",
+  "replace": "  );"
+ },
+ {
+  "name": "adds a permissive UPDATE on the archive (re-pointing possible)",
+  "find": "-- UPDATE: none. DELETE: none. (archive rows are immutable history)",
+  "replace": "CREATE POLICY d0c_bill_lines_archive_update ON public.bill_lines_archive FOR UPDATE TO authenticated USING ((SELECT public.user_has_perm('admin:users'))) WITH CHECK ((SELECT public.user_has_perm('admin:users')));"
+ },
+ {
+  "name": "adds a permissive DELETE on the archive",
+  "find": "-- UPDATE: none. DELETE: none. (archive rows are immutable history)",
+  "replace": "CREATE POLICY d0c_bill_lines_archive_delete ON public.bill_lines_archive FOR DELETE TO authenticated USING ((SELECT public.user_has_perm('admin:users')));"
+ },
+ {
+  "name": "adds a permissive UPDATE on the events",
+  "find": "-- UPDATE: none. DELETE: none. (append-only audit history)",
+  "replace": "CREATE POLICY d0c_bill_edit_events_update ON public.bill_edit_events FOR UPDATE TO authenticated USING ((SELECT public.user_has_perm('admin:users'))) WITH CHECK ((SELECT public.user_has_perm('admin:users')));"
+ },
+ {
+  "name": "adds a permissive DELETE on the events",
+  "find": "-- UPDATE: none. DELETE: none. (append-only audit history)",
+  "replace": "CREATE POLICY d0c_bill_edit_events_delete ON public.bill_edit_events FOR DELETE TO authenticated USING ((SELECT public.user_has_perm('admin:users')));"
+ },
+ {
+  "name": "legacy policy not dropped on events",
+  "find": "DROP POLICY IF EXISTS \"authenticated users full access\" ON public.bill_edit_events;",
+  "replace": ""
+ }
+]
