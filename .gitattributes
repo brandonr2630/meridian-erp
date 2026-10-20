@@ -1,0 +1,3 @@
+
+supabase/tests/d0a/run.sh text eol=lf
+supabase/tests/d0a/*.sql text eol=lf
