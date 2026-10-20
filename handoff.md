@@ -1,6 +1,22 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-20 · Session 55 (D0a applied)*
+*Last updated: 2026-10-20 · Session 56 (D0b built)*
+
+---
+
+## Session 56 — D0b erp-user-access edge function (built and tested, NOT deployed)
+
+**Date:** 2026-10-20 · Spec: Phase D, D0b. Closes the gap that `toggleUserActive`/`removeUser` only flipped `erp_users.is_active` or deleted the row, leaving a working Supabase login.
+
+| File | What |
+|---|---|
+| `supabase/functions/erp-user-access/handler.ts` | `POST {auth_user_id, action: deactivate\|activate\|remove}`. Verifies the caller's token with Supabase Auth (`/auth/v1/user`), then authorises with the caller's own token: super admin, or `is_company_admin` for EVERY company the target belongs to; only a super admin may act on a super admin; no self-targeting. Effects after authorisation only: deactivate = row then ban; activate = unban then row; remove = ban then delete (if CRM/drawing/role records still reference the profile the delete fails with 23503, so the profile is kept inactive and `removed:false` is returned). Writes a `staff.access.*` row to `job_audit_log`. Non-admins get 403 even for unknown targets (no existence oracle). |
+| `supabase/functions/erp-user-access/index.ts` | Deno entry. **Deploy with `verify_jwt=false`** (like the other ERP functions): the CORS preflight has no Authorization header. CORS allows only `https://erp.terranresources.com` (env `ALLOWED_ORIGINS`). |
+| `index.html` | `toggleUserActive`/`removeUser` now call the function via `callUserAccess()`; no direct `is_active` patch or `erp_users` delete remains. The list reloads after every attempt (a partial result may have changed the row). |
+| `supabase/tests/d0b/handler.test.mjs` | 22 unit tests against an in-memory fake of Auth + PostgREST that records call order: `node --test supabase/tests/d0b/handler.test.mjs`. Mutation check: removing the per-company check, the super-admin rule, the self-target rule, the admin gate, or reordering the ban is each caught (one equivalent mutant: skipping the first token check is still caught by the uuid check). |
+
+**Not deployed.** Order matters: deploy the function BEFORE merging (merge deploys the new UI, which calls it). The unit tests use a fake backend; the function has not been exercised against real Supabase Auth yet, so test deactivate/activate on a throwaway staff account after deploying.
+**Known limits:** admins with `admin:users` can still change `erp_users.is_active` directly through the REST API (not just this function); a ban does not invalidate an already-issued access token (up to 1 hour) but D0a's `is_erp_staff()` cuts data access immediately once `is_active=false`. The repo copy of `create-erp-user` is stale versus the deployed v7 (it checks a dropped `role` column) and should be refreshed from the deployed source.
 
 ---
 
