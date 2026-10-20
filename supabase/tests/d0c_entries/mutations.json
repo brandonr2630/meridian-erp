@@ -1,0 +1,74 @@
+[
+ {
+  "name": "select: company scope dropped",
+  "find": "FOR SELECT TO authenticated USING (%s AND %s)",
+  "replace": "FOR SELECT TO authenticated USING (%s AND (%s OR true))"
+ },
+ {
+  "name": "select: permission atom dropped",
+  "find": "FOR SELECT TO authenticated USING (%s AND %s)",
+  "replace": "FOR SELECT TO authenticated USING ((%s OR true) AND %s)"
+ },
+ {
+  "name": "select: read atom replaced by write-only",
+  "find": "((SELECT public.user_has_perm(''ops:work-orders:read'')) OR (SELECT public.user_has_perm(''ops:work-orders:write'')))",
+  "replace": "((SELECT public.user_has_perm(''ops:work-orders:write'')))"
+ },
+ {
+  "name": "insert: write atom dropped",
+  "find": "FOR INSERT TO authenticated WITH CHECK (%s AND %s)",
+  "replace": "FOR INSERT TO authenticated WITH CHECK ((%s OR true) AND %s)"
+ },
+ {
+  "name": "insert: company check dropped",
+  "find": "FOR INSERT TO authenticated WITH CHECK (%s AND %s)",
+  "replace": "FOR INSERT TO authenticated WITH CHECK (%s AND (%s OR true))"
+ },
+ {
+  "name": "update: USING write atom dropped",
+  "find": "FOR UPDATE TO authenticated USING (%s AND %s) WITH CHECK (%s AND %s)",
+  "replace": "FOR UPDATE TO authenticated USING ((%s OR true) AND %s) WITH CHECK (%s AND %s)"
+ },
+ {
+  "name": "update: USING company check dropped",
+  "find": "FOR UPDATE TO authenticated USING (%s AND %s) WITH CHECK (%s AND %s)",
+  "replace": "FOR UPDATE TO authenticated USING (%s AND (%s OR true)) WITH CHECK (%s AND %s)"
+ },
+ {
+  "name": "update: WITH CHECK company dropped (re-point to other company)",
+  "find": "FOR UPDATE TO authenticated USING (%s AND %s) WITH CHECK (%s AND %s)",
+  "replace": "FOR UPDATE TO authenticated USING (%s AND %s) WITH CHECK (%s AND (%s OR true))"
+ },
+ {
+  "name": "update: WITH CHECK write atom dropped",
+  "find": "FOR UPDATE TO authenticated USING (%s AND %s) WITH CHECK (%s AND %s)",
+  "replace": "FOR UPDATE TO authenticated USING (%s AND %s) WITH CHECK ((%s OR true) AND %s)",
+  "equivalent": true,
+  "reason": "The UPDATE policy USING clause carries the same user-level atom (not row-level), so a caller lacking the atom never reaches WITH CHECK; dropping it from WITH CHECK changes nothing observable."
+ },
+ {
+  "name": "delete: write atom dropped",
+  "find": "FOR DELETE TO authenticated USING (%s AND %s)",
+  "replace": "FOR DELETE TO authenticated USING ((%s OR true) AND %s)"
+ },
+ {
+  "name": "delete: company check dropped",
+  "find": "FOR DELETE TO authenticated USING (%s AND %s)",
+  "replace": "FOR DELETE TO authenticated USING (%s AND (%s OR true))"
+ },
+ {
+  "name": "legacy open policy not dropped",
+  "find": "EXECUTE format('DROP POLICY IF EXISTS \"authenticated users full access\" ON public.%I', t);",
+  "replace": "NULL;"
+ },
+ {
+  "name": "last table left out of the loop",
+  "find": "'hardware_entries','tooling_entries','subcontractor_entries'];",
+  "replace": "'hardware_entries','tooling_entries'];"
+ },
+ {
+  "name": "policies granted to public instead of authenticated (select)",
+  "find": "FOR SELECT TO authenticated USING",
+  "replace": "FOR SELECT TO public USING"
+ }
+]
