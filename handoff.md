@@ -14,6 +14,10 @@
 | `supabase/functions/create-erp-user/index.ts` | Refreshed from the deployed v7 (the repo copy was stale: it checked a dropped `role` column) with ONLY the auth-error path changed (v8). **Not deployed yet** (needs approval; deploy with `verify_jwt=false`). |
 | `supabase/tests/create_user/errors.test.mjs` | 8 tests: `node --test supabase/tests/create_user/errors.test.mjs`; mutation check: ignoring `msg`, dropping the weak-password branch, unchecked status and dropping the email wording are each caught. |
 
+**Also in this PR:** the ERP's three client-side password checks (create user, edit user, first-login forced change) now require **12 characters** to match the Supabase minimum (they said 8, so 8-11 character passwords passed the form and were then rejected by Auth). `update-erp-user` has the same wrong-error-field bug as `create-erp-user` (its source is not in the repo; refresh from the deployed version and apply `describeAuthError` in a follow-up).
+
+**Supabase Auth settings confirmed from dashboard screenshots 2026-10-20:** sign-ups OFF, anonymous sign-ins OFF, manual linking OFF, **Confirm email ON**, Secure email change ON, Secure password change ON, **minimum password length 12**, 'Require current password when updating' OFF (optional; if turned on, retest the forced first-login password change). Leaked-password protection and session time-boxing need the Pro plan.
+
 **Finding (not changed, owner decision):** `create-erp-user` authorises with `user_has_perm('admin:users')`, which is NOT company-scoped, and accepts any `role_id` and `company_id` from the request. So any holder of `admin:users` (e.g. a `company_admin`) could create a user in ANY company with ANY role, including `super_admin`. Currently harmless (no active `company_admin` users), but it should be tightened: require `is_company_admin(company_id)` for the target company and only a super admin may assign a role with `admin:companies`. Same non-company-scoped pattern in `update-erp-user`.
 
 ---

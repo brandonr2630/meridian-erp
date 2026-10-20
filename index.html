@@ -3761,7 +3761,7 @@ body.light .global-search-results, body.light .split-btn-menu {
       </div>
       <div class="field-group">
         <label class="field-label">Temporary Password *</label>
-        <input type="password" id="um-password" class="field-input" placeholder="Min. 8 characters">
+        <input type="password" id="um-password" class="field-input" placeholder="Min. 12 characters">
         <div style="font-size:11px;color:var(--text-3);margin-top:4px;">User will be prompted to change this on first login.</div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -3805,7 +3805,7 @@ body.light .global-search-results, body.light .split-btn-menu {
       <div class="field-group">
         <label class="field-label">New Password</label>
         <input type="password" id="eu-password" class="field-input" placeholder="Leave blank to keep current">
-        <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Minimum 8 characters. Blank = no change.</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Minimum 12 characters. Blank = no change.</div>
       </div>
       <div class="field-group">
         <label class="field-label">Company</label>
@@ -6268,7 +6268,7 @@ async function doChangePassword() {
   const errEl  = document.getElementById('cpw-error');
   const btn    = document.getElementById('cpw-btn');
   errEl.textContent = '';
-  if (newPw.length < 8)      { errEl.textContent = 'Password must be at least 8 characters.'; return; }
+  if (newPw.length < 12)     { errEl.textContent = 'Password must be at least 12 characters.'; return; }
   if (newPw !== confPw)      { errEl.textContent = 'Passwords do not match.'; return; }
   btn.textContent = 'Saving…'; btn.disabled = true;
   try {
@@ -7140,7 +7140,7 @@ async function saveEditUser() {
   errEl.textContent = '';
   if (!name)                              { errEl.textContent = 'Name is required.'; return; }
   if (!email)                             { errEl.textContent = 'Email is required.'; return; }
-  if (password && password.length < 8)   { errEl.textContent = 'Password must be at least 8 characters.'; return; }
+  if (password && password.length < 12)  { errEl.textContent = 'Password must be at least 12 characters.'; return; }
 
   saveBtn.textContent = 'Saving…'; saveBtn.disabled = true;
 
@@ -7275,7 +7275,7 @@ async function saveNewUser() {
 
   errEl.textContent = '';
   if (!name || !email || !password) { errEl.textContent = 'Name, email and password are required.'; return; }
-  if (password.length < 8)          { errEl.textContent = 'Password must be at least 8 characters.'; return; }
+  if (password.length < 12)         { errEl.textContent = 'Password must be at least 12 characters.'; return; }
   if (!role_id)                      { errEl.textContent = 'Select a role.'; return; }
 
   saveBtn.textContent = 'Creating…'; saveBtn.disabled = true;
