@@ -16,7 +16,6 @@
 | `scripts/tests/ui/work-orders-readonly.test.mjs` | 13 tests (`node --test scripts/tests/ui/work-orders-readonly.test.mjs`); 10/10 deliberate breakages caught. Also verified in a real browser DOM (modified page served locally) by simulating a read-only and a writer `_perms`. |
 
 **Not covered:** job DELETE (`jcDeleteJob`) still uses `sbDelete` with `return=minimal`, so a refused delete would look successful; it is already admin-gated in the UI and is touched by the D0c audit PR, so left alone here. Other modules (AP bills, invoices) have the same "denied update looks like success" shape but are out of scope.
-*Last updated: 2026-10-20 · Session 57 (create-erp-user error fix)*
 
 ---
 
