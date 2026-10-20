@@ -1,0 +1,1939 @@
+{
+ "cases": [
+  {
+   "name": "single chain A>B>C",
+   "today": "2026-03-10",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "A",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-10",
+     "progress": 50,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "B",
+     "sort_order": 20,
+     "start_date": "2026-03-11",
+     "end_date": "2026-03-20",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "C",
+     "sort_order": 30,
+     "start_date": "2026-03-21",
+     "end_date": "2026-03-25",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [
+    {
+     "task": "B",
+     "pred": "A",
+     "lag": 0
+    },
+    {
+     "task": "C",
+     "pred": "B",
+     "lag": 0
+    }
+   ],
+   "notes": "Weights = durations 10,10,5 (sum 25). overall=(10*50)/25=20.00. Planned on 03-10 (no baseline, current dates): A (10-1+1)/10=100%, B (10-11+1)=0 -> 0, C 0 -> 10*100/25=40.00. Forward: A started so es=03-01, rem=ceil(10*50/100)=5, ef=03-06; B es=today 03-10 (A.ef 03-06 not later), ef=03-20; C es=max(03-10, B.ef 03-20)=03-20, ef=03-25. forecast=03-25. No due date, no baseline => slip NULL; nothing overdue; gap n/a => On track.",
+   "expect": {
+    "overall": 20.0,
+    "overallDisplay": 20,
+    "plannedToday": 40.0,
+    "plannedDisplay": 40,
+    "forecastEnd": "2026-03-25",
+    "status": "On track",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "diamond: D waits for the later of B and C",
+   "today": "2026-03-01",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "A",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-02",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "B",
+     "sort_order": 20,
+     "start_date": "2026-03-03",
+     "end_date": "2026-03-06",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "C",
+     "sort_order": 30,
+     "start_date": "2026-03-03",
+     "end_date": "2026-03-10",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "D",
+     "sort_order": 40,
+     "start_date": "2026-03-11",
+     "end_date": "2026-03-13",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [
+    {
+     "task": "B",
+     "pred": "A",
+     "lag": 0
+    },
+    {
+     "task": "C",
+     "pred": "A",
+     "lag": 0
+    },
+    {
+     "task": "D",
+     "pred": "B",
+     "lag": 0
+    },
+    {
+     "task": "D",
+     "pred": "C",
+     "lag": 0
+    }
+   ],
+   "notes": "Durations A2 B4 C8 D3 (sum 17), all progress 0 => overall 0.00. Planned 03-01: A (1-1+1)/2=50%, others start later => 0; 2*50/17=5.882 -> 5.88, display 6. Forward (today 03-01): A ef 03-03; B es 03-03 ef 03-07; C es 03-03 ef 03-11; D es=max(B.ef 03-07, C.ef 03-11)=03-11, ef=03-14. forecast 03-14. No due/baseline: slip NULL. Nothing overdue => On track.",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 5.88,
+    "plannedDisplay": 6,
+    "forecastEnd": "2026-03-14",
+    "status": "On track",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "zero-weight milestone excluded from the maths",
+   "today": "2026-03-10",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "T1",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-10",
+     "progress": 100,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "M",
+     "sort_order": 20,
+     "start_date": "2026-03-10",
+     "end_date": "2026-03-10",
+     "progress": 0,
+     "is_milestone": true,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [
+    {
+     "task": "M",
+     "pred": "T1",
+     "lag": 0
+    }
+   ],
+   "notes": "Milestone weight 0, so only T1 counts (w=10): overall=100.00; planned T1 (10-1+1)/10=100% => 100.00. Forward: T1 done keeps ef=end 03-10; M (rem 0) es=today 03-10, cand=T1.ef+0=03-10 not later, ef=03-10. forecast 03-10. M end 03-10 is not before today => not overdue. On track.",
+   "expect": {
+    "overall": 100.0,
+    "overallDisplay": 100,
+    "plannedToday": 100.0,
+    "plannedDisplay": 100,
+    "forecastEnd": "2026-03-10",
+    "status": "On track",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "milestone with explicit weight 50 is still excluded",
+   "today": "2026-03-02",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "T1",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-04",
+     "progress": 50,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "M",
+     "sort_order": 20,
+     "start_date": "2026-03-04",
+     "end_date": "2026-03-04",
+     "progress": 100,
+     "is_milestone": true,
+     "weight": 50,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [],
+   "notes": "Only T1 (dur 4) weighs: overall=50.00. Planned on 03-02: (2-1+1)/4=50% => 50.00 (if M counted with 50 it would be 96.3). Forward: T1 started es=03-01 rem=ceil(4*50/100)=2 ef=03-03; M done ef=end 03-04. forecast 03-04. On track.",
+   "expect": {
+    "overall": 50.0,
+    "overallDisplay": 50,
+    "plannedToday": 50.0,
+    "plannedDisplay": 50,
+    "forecastEnd": "2026-03-04",
+    "status": "On track",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "NULL weight = duration vs explicit weight 8",
+   "today": "2026-03-05",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "T1",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-10",
+     "progress": 100,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "T2",
+     "sort_order": 20,
+     "start_date": "2026-03-11",
+     "end_date": "2026-03-12",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": 8,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [],
+   "notes": "T1 weight NULL => dur 10; T2 explicit 8 (its duration is 2). Sum 18. overall=(10*100+8*0)/18=55.555 -> 55.56, display 56. Planned 03-05: T1 (5-1+1)/10=50%, T2 0 => 10*50/18=27.777 -> 27.78, display 28. Forward: T1 done ef 03-10; T2 es=today 03-05 rem 2 ef 03-07. forecast=max=03-10. T2 slack=(03-10-2)-03-05=3 = min slack, so it is the flagged path but nothing is overdue => On track.",
+   "expect": {
+    "overall": 55.56,
+    "overallDisplay": 56,
+    "plannedToday": 27.78,
+    "plannedDisplay": 28,
+    "forecastEnd": "2026-03-10",
+    "status": "On track",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "undated task weighs 1 and plans 0",
+   "today": "2026-03-02",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "T1",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-04",
+     "progress": 100,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "U",
+     "sort_order": 20,
+     "start_date": null,
+     "end_date": null,
+     "progress": 50,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [],
+   "notes": "T1 dur 4 w4; undated U w1 (sum 5). overall=(4*100+1*50)/5=90.00. Planned 03-02: T1 (2-1+1)/4=50%, U (no dates) 0 => 4*50/5=40.00. U has no dates and no links so it is not scheduled; T1 done ef 03-04. forecast 03-04. On track.",
+   "expect": {
+    "overall": 90.0,
+    "overallDisplay": 90,
+    "plannedToday": 40.0,
+    "plannedDisplay": 40,
+    "forecastEnd": "2026-03-04",
+    "status": "On track",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "task added after baseline plans from current dates",
+   "today": "2026-03-05",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": true,
+   "tasks": [
+    {
+     "key": "T1",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-10",
+     "progress": 50,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": "2026-03-01",
+     "baseline_end": "2026-03-10"
+    },
+    {
+     "key": "T2",
+     "sort_order": 20,
+     "start_date": "2026-03-04",
+     "end_date": "2026-03-08",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [],
+   "notes": "Baseline locked. T1 w10 (baseline 03-01..03-10), T2 w5 (added later: no baseline dates, current 03-04..03-08). Sum 15. overall=10*50/15=33.333 -> 33.33, display 33. Planned 03-05: T1 (5-1+1)/10=50%; T2 uses current dates (5-4+1)/5=40% => (10*50+5*40)/15=46.666 -> 46.67, display 47. gap=33.33-46.67=-13.34 -> integer -13 < -10. Forward: T1 es 03-01 rem 5 ef 03-06; T2 es today 03-05 rem 5 ef 03-10; forecast 03-10; baseline max end 03-10 => slip 0. Nothing overdue. Slip 0 but gap -13 => At risk.",
+   "expect": {
+    "overall": 33.33,
+    "overallDisplay": 33,
+    "plannedToday": 46.67,
+    "plannedDisplay": 47,
+    "forecastEnd": "2026-03-10",
+    "status": "At risk",
+    "slipDays": 0
+   }
+  },
+  {
+   "name": "rounding: 62.50 displays 63",
+   "today": "2026-03-01",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "A",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-01",
+     "progress": 62,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "B",
+     "sort_order": 20,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-01",
+     "progress": 63,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [],
+   "notes": "Both dur 1 => w1 each. overall=(62+63)/2=62.50 exactly, display half-up 63. Planned 03-01: (1-1+1)/1=100% both => 100.00. Forward: A rem=max(1,ceil(1*38/100))=1, es=03-01 (started) ef=03-02; B rem=1 ef 03-02. forecast 03-02. No due/baseline. On track.",
+   "expect": {
+    "overall": 62.5,
+    "overallDisplay": 63,
+    "plannedToday": 100.0,
+    "plannedDisplay": 100,
+    "forecastEnd": "2026-03-02",
+    "status": "On track",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "rounding: 62.49 displays 62",
+   "today": "2026-03-01",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "A",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-01",
+     "progress": 62,
+     "is_milestone": false,
+     "weight": 51,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "B",
+     "sort_order": 20,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-01",
+     "progress": 63,
+     "is_milestone": false,
+     "weight": 49,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [],
+   "notes": "Explicit weights 51 and 49 (sum 100). overall=(51*62+49*63)/100=(3162+3087)/100=62.49 exactly, display 62. Planned 100.00 (both 1-day tasks on their day). Forward ef 03-02 for both. forecast 03-02. On track.",
+   "expect": {
+    "overall": 62.49,
+    "overallDisplay": 62,
+    "plannedToday": 100.0,
+    "plannedDisplay": 100,
+    "forecastEnd": "2026-03-02",
+    "status": "On track",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "rounding: raw 62.496 stores 62.50 and displays 63",
+   "today": "2026-03-01",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "A",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-01",
+     "progress": 62,
+     "is_milestone": false,
+     "weight": 504,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "B",
+     "sort_order": 20,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-01",
+     "progress": 63,
+     "is_milestone": false,
+     "weight": 496,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [],
+   "notes": "Weights 504/496 (sum 1000). overall=(504*62+496*63)/1000=(31248+31248)/1000=62.496. Stored 2 dp = 62.50; the integer shown is half-up of the stored value = 63 (X20: every UI shows the stored value; rounding the raw 62.496 would give 62). Planned 100.00. forecast 03-02. On track.",
+   "expect": {
+    "overall": 62.5,
+    "overallDisplay": 63,
+    "plannedToday": 100.0,
+    "plannedDisplay": 100,
+    "forecastEnd": "2026-03-02",
+    "status": "On track",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "rounding: planned 3.125 is a 2 dp tie and stores 3.13",
+   "today": "2026-03-01",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "T",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-04-01",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [],
+   "notes": "Task 03-01..04-01 is 32 days (31 in March + 1), w32, progress 0. Planned 03-01: (1-1+1)/32 = 1/32 = 3.125% exactly, a tie at 2 dp: SQL ROUND(numeric,2) is half-up => 3.13 (a naive float round can give 3.12), display 3. overall 0.00. Forward: es=today 03-01, rem 32, ef=03-01+32=04-02. forecast 04-02. No due/baseline => slip NULL; On track.",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 3.13,
+    "plannedDisplay": 3,
+    "forecastEnd": "2026-04-02",
+    "status": "On track",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "undated successor in a link takes part (dur 1, starts after its predecessor)",
+   "today": "2026-03-01",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "B",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-03",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "U",
+     "sort_order": 20,
+     "start_date": null,
+     "end_date": null,
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [
+    {
+     "task": "U",
+     "pred": "B",
+     "lag": 0
+    }
+   ],
+   "notes": "B 03-01..03-03 (w3), U undated (w1), link U after B, today 03-01. overall 0. Planned: B (1)/3=33.33%, U 0 => 3*33.33/4=25.00. Forward: B es 03-01 ef 03-04; U is linked so it is scheduled: dur 1, es=today 03-01, then B.ef 03-04 => es 03-04, ef 03-05. forecast 03-05 (03-04 if U were ignored). Nothing overdue; slip NULL => On track.",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 25.0,
+    "plannedDisplay": 25,
+    "forecastEnd": "2026-03-05",
+    "status": "On track",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "lag 2 keeps the predecessor critical: A overdue 7 days -> Late",
+   "today": "2026-03-10",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "A",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-03",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "B",
+     "sort_order": 20,
+     "start_date": "2026-03-04",
+     "end_date": "2026-03-07",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [
+    {
+     "task": "B",
+     "pred": "A",
+     "lag": 2
+    }
+   ],
+   "notes": "A w3, B w4, link B after A with lag 2, today 03-10, no due. overall 0; planned both windows past => 100.00. Forward: A es 03-10 ef 03-13; B es=A.ef+2=03-15 ef=03-19; forecast 03-19. Backward (deadline 03-19): B ls=03-15; A lf=ls[B]-2=03-13, ls=03-10 => slack 0 for both, so A is critical. A end 03-03 is 7 days overdue > 5 => Late (B end 03-07 is only 3 overdue).",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 100.0,
+    "plannedDisplay": 100,
+    "forecastEnd": "2026-03-19",
+    "status": "Late",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "all complete, no due date: forecast is the actual end",
+   "today": "2026-03-20",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "T1",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-05",
+     "progress": 100,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "T2",
+     "sort_order": 20,
+     "start_date": "2026-03-06",
+     "end_date": "2026-03-10",
+     "progress": 100,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [
+    {
+     "task": "T2",
+     "pred": "T1",
+     "lag": 0
+    }
+   ],
+   "notes": "Both done: overall 100.00. Planned 03-20: both fully past => 100.00. Done tasks keep ef=actual end (T1 03-05, T2 03-10) and are not moved by the T2>T1 link. forecast=max=03-10. No due, no baseline => slip NULL. Nothing overdue => On track.",
+   "expect": {
+    "overall": 100.0,
+    "overallDisplay": 100,
+    "plannedToday": 100.0,
+    "plannedDisplay": 100,
+    "forecastEnd": "2026-03-10",
+    "status": "On track",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "all complete with due date 03-08: slip +2 is At risk",
+   "today": "2026-03-20",
+   "job": {
+    "status": "In Progress",
+    "due_date": "2026-03-08"
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "T1",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-05",
+     "progress": 100,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "T2",
+     "sort_order": 20,
+     "start_date": "2026-03-06",
+     "end_date": "2026-03-10",
+     "progress": 100,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [
+    {
+     "task": "T2",
+     "pred": "T1",
+     "lag": 0
+    }
+   ],
+   "notes": "As the previous case but job due 03-08: forecast 03-10 (actual end), slip=03-10-03-08=+2 which is within 1..5 => At risk (job status itself is still In Progress). overall/planned 100.00.",
+   "expect": {
+    "overall": 100.0,
+    "overallDisplay": 100,
+    "plannedToday": 100.0,
+    "plannedDisplay": 100,
+    "forecastEnd": "2026-03-10",
+    "status": "At risk",
+    "slipDays": 2
+   }
+  },
+  {
+   "name": "no tasks at all",
+   "today": "2026-03-10",
+   "job": {
+    "status": "In Progress",
+    "due_date": "2026-03-15"
+   },
+   "baselineLocked": false,
+   "tasks": [],
+   "links": [],
+   "notes": "No tasks: SUM(w)=0 so overall and planned are 0.00. Nothing scheduled => forecast NULL, slip NULL. Status falls through to On track (due date alone cannot make it late without a forecast).",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 0.0,
+    "plannedDisplay": 0,
+    "forecastEnd": null,
+    "status": "On track",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "due date earlier than forecast: whole chain critical, slip 3",
+   "today": "2026-03-01",
+   "job": {
+    "status": "In Progress",
+    "due_date": "2026-03-08"
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "A",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-05",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "B",
+     "sort_order": 20,
+     "start_date": "2026-03-06",
+     "end_date": "2026-03-10",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [
+    {
+     "task": "B",
+     "pred": "A",
+     "lag": 0
+    }
+   ],
+   "notes": "w5,w5. overall 0. Planned 03-01: A (1)/5=20%, B 0 => 5*20/10=10.00. Forward: A es 03-01 ef 03-06; B es 03-06 ef 03-11. forecast 03-11. due 03-08 => slip=03-11-03-08=3 => At risk (1..5). Backward from deadline 03-08: B ls=03-03, A ls=03-03-5=02-26; slack both -3 (<=0) => both critical. Nothing overdue.",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 10.0,
+    "plannedDisplay": 10,
+    "forecastEnd": "2026-03-11",
+    "status": "At risk",
+    "slipDays": 3
+   }
+  },
+  {
+   "name": "due date later than forecast: min-slack path flagged, slip -13",
+   "today": "2026-03-01",
+   "job": {
+    "status": "In Progress",
+    "due_date": "2026-03-20"
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "A",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-03",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "B",
+     "sort_order": 20,
+     "start_date": "2026-03-04",
+     "end_date": "2026-03-06",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "C",
+     "sort_order": 30,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-02",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [
+    {
+     "task": "B",
+     "pred": "A",
+     "lag": 0
+    }
+   ],
+   "notes": "w3,w3,w2 (sum 8), progress 0 => overall 0. Planned 03-01: A 1/3 (33.33%), B 0, C 1/2 (50%): (3*33.33+2*50)/8=200/8=25.00. Forward: A ef 03-04, B es 03-04 ef 03-07, C ef 03-03; forecast 03-07. due 03-20 => slip=03-07-03-20=-13 => On track. Backward: slack A=B=13, C=17; min slack 13>0 so the min-slack path A,B is critical (C is not).",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 25.0,
+    "plannedDisplay": 25,
+    "forecastEnd": "2026-03-07",
+    "status": "On track",
+    "slipDays": -13
+   }
+  },
+  {
+   "name": "lag +2 days between A and B",
+   "today": "2026-03-01",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "A",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-03",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "B",
+     "sort_order": 20,
+     "start_date": "2026-03-04",
+     "end_date": "2026-03-07",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [
+    {
+     "task": "B",
+     "pred": "A",
+     "lag": 2
+    }
+   ],
+   "notes": "w3,w4 (sum 7), progress 0 => overall 0. Planned 03-01: A 1/3 => 100/7=14.285 -> 14.29, B 0. Forward: A es 03-01 ef 03-04 (dur 3); B dur 4: B es=A.ef 03-04 +2 = 03-06, ef=03-10; forecast = max(A.ef 03-04, B.ef) = 03-10. No due/baseline => slip NULL; On track.",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 14.29,
+    "plannedDisplay": 14,
+    "forecastEnd": "2026-03-10",
+    "status": "On track",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "lag -2 days between A and B",
+   "today": "2026-03-01",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "A",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-03",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "B",
+     "sort_order": 20,
+     "start_date": "2026-03-04",
+     "end_date": "2026-03-07",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [
+    {
+     "task": "B",
+     "pred": "A",
+     "lag": -2
+    }
+   ],
+   "notes": "w3,w4 (sum 7), progress 0 => overall 0. Planned 03-01: A 1/3 => 100/7=14.285 -> 14.29, B 0. Forward: A es 03-01 ef 03-04 (dur 3); B dur 4: B es=03-04-2=03-02 (later than today 03-01), ef=03-06; forecast = max(A.ef 03-04, B.ef) = 03-06. No due/baseline => slip NULL; On track.",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 14.29,
+    "plannedDisplay": 14,
+    "forecastEnd": "2026-03-06",
+    "status": "On track",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "lag -5 days between A and B",
+   "today": "2026-03-01",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "A",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-03",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "B",
+     "sort_order": 20,
+     "start_date": "2026-03-04",
+     "end_date": "2026-03-07",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [
+    {
+     "task": "B",
+     "pred": "A",
+     "lag": -5
+    }
+   ],
+   "notes": "w3,w4 (sum 7), progress 0 => overall 0. Planned 03-01: A 1/3 => 100/7=14.285 -> 14.29, B 0. Forward: A es 03-01 ef 03-04 (dur 3); B dur 4: 03-04-5=02-27 is before today so B stays at es=03-01, ef=03-05; forecast = max(A.ef 03-04, B.ef) = 03-05. No due/baseline => slip NULL; On track.",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 14.29,
+    "plannedDisplay": 14,
+    "forecastEnd": "2026-03-05",
+    "status": "On track",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "status boundary: slip 0 -> On track",
+   "today": "2026-03-01",
+   "job": {
+    "status": "In Progress",
+    "due_date": "2026-03-06"
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "T",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-05",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [],
+   "notes": "Single task w5, progress 0, today 03-01: es=today 03-01, rem 5, ef=03-06; forecast 03-06. due 2026-03-06 => slip=03-06-due=0. Thresholds: slip>5 Late, 1..5 At risk, else On track => On track. overall 0.00; planned (1-1+1)/5=20.00. Task end 03-05 is not before today, nothing overdue.",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 20.0,
+    "plannedDisplay": 20,
+    "forecastEnd": "2026-03-06",
+    "status": "On track",
+    "slipDays": 0
+   }
+  },
+  {
+   "name": "status boundary: slip 1 -> At risk",
+   "today": "2026-03-01",
+   "job": {
+    "status": "In Progress",
+    "due_date": "2026-03-05"
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "T",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-05",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [],
+   "notes": "Single task w5, progress 0, today 03-01: es=today 03-01, rem 5, ef=03-06; forecast 03-06. due 2026-03-05 => slip=03-06-due=1. Thresholds: slip>5 Late, 1..5 At risk, else On track => At risk. overall 0.00; planned (1-1+1)/5=20.00. Task end 03-05 is not before today, nothing overdue.",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 20.0,
+    "plannedDisplay": 20,
+    "forecastEnd": "2026-03-06",
+    "status": "At risk",
+    "slipDays": 1
+   }
+  },
+  {
+   "name": "status boundary: slip 5 -> At risk",
+   "today": "2026-03-01",
+   "job": {
+    "status": "In Progress",
+    "due_date": "2026-03-01"
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "T",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-05",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [],
+   "notes": "Single task w5, progress 0, today 03-01: es=today 03-01, rem 5, ef=03-06; forecast 03-06. due 2026-03-01 => slip=03-06-due=5. Thresholds: slip>5 Late, 1..5 At risk, else On track => At risk. overall 0.00; planned (1-1+1)/5=20.00. Task end 03-05 is not before today, nothing overdue.",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 20.0,
+    "plannedDisplay": 20,
+    "forecastEnd": "2026-03-06",
+    "status": "At risk",
+    "slipDays": 5
+   }
+  },
+  {
+   "name": "status boundary: slip 6 -> Late",
+   "today": "2026-03-01",
+   "job": {
+    "status": "In Progress",
+    "due_date": "2026-02-28"
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "T",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-05",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [],
+   "notes": "Single task w5, progress 0, today 03-01: es=today 03-01, rem 5, ef=03-06; forecast 03-06. due 2026-02-28 => slip=03-06-due=6. Thresholds: slip>5 Late, 1..5 At risk, else On track => Late. overall 0.00; planned (1-1+1)/5=20.00. Task end 03-05 is not before today, nothing overdue.",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 20.0,
+    "plannedDisplay": 20,
+    "forecastEnd": "2026-03-06",
+    "status": "Late",
+    "slipDays": 6
+   }
+  },
+  {
+   "name": "status boundary: slip -4 -> On track",
+   "today": "2026-03-01",
+   "job": {
+    "status": "In Progress",
+    "due_date": "2026-03-10"
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "T",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-05",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [],
+   "notes": "Single task w5, progress 0, today 03-01: es=today 03-01, rem 5, ef=03-06; forecast 03-06. due 2026-03-10 => slip=03-06-due=-4. Thresholds: slip>5 Late, 1..5 At risk, else On track => On track. overall 0.00; planned (1-1+1)/5=20.00. Task end 03-05 is not before today, nothing overdue.",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 20.0,
+    "plannedDisplay": 20,
+    "forecastEnd": "2026-03-06",
+    "status": "On track",
+    "slipDays": -4
+   }
+  },
+  {
+   "name": "status boundary: gap -10 -> On track",
+   "today": "2026-03-06",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": true,
+   "tasks": [
+    {
+     "key": "T",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-10",
+     "progress": 50,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": "2026-03-01",
+     "baseline_end": "2026-03-10"
+    }
+   ],
+   "links": [],
+   "notes": "Baseline locked, today 03-06. w10. overall 50.00; planned (6-1+1)/10=60.00; gap=-10, not below -10 => no gap risk. Forward: es 03-01 rem=ceil(10*50/100)=5 ef=03-06; forecast 03-06; baseline end 03-10 => slip -4. Not overdue => On track.",
+   "expect": {
+    "overall": 50.0,
+    "overallDisplay": 50,
+    "plannedToday": 60.0,
+    "plannedDisplay": 60,
+    "forecastEnd": "2026-03-06",
+    "status": "On track",
+    "slipDays": -4
+   }
+  },
+  {
+   "name": "status boundary: gap -11 -> At risk",
+   "today": "2026-03-06",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": true,
+   "tasks": [
+    {
+     "key": "T",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-10",
+     "progress": 49,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": "2026-03-01",
+     "baseline_end": "2026-03-10"
+    }
+   ],
+   "links": [],
+   "notes": "As gap -10 but progress 49: gap=49-60=-11 < -10 => At risk. Forward: rem=ceil(10*51/100)=ceil(5.1)=6, ef=03-07; slip=03-07-03-10=-3 (not a slip risk).",
+   "expect": {
+    "overall": 49.0,
+    "overallDisplay": 49,
+    "plannedToday": 60.0,
+    "plannedDisplay": 60,
+    "forecastEnd": "2026-03-07",
+    "status": "At risk",
+    "slipDays": -3
+   }
+  },
+  {
+   "name": "status boundary: gap -10.40 (2 dp, no integer rounding) -> At risk",
+   "today": "2026-03-06",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": true,
+   "tasks": [
+    {
+     "key": "T1",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-10",
+     "progress": 49,
+     "is_milestone": false,
+     "weight": 2,
+     "baseline_start": "2026-03-01",
+     "baseline_end": "2026-03-10"
+    },
+    {
+     "key": "T2",
+     "sort_order": 20,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-10",
+     "progress": 50,
+     "is_milestone": false,
+     "weight": 3,
+     "baseline_start": "2026-03-01",
+     "baseline_end": "2026-03-10"
+    }
+   ],
+   "links": [],
+   "notes": "Weights 2,3. overall=(2*49+3*50)/5=49.60 (display 50); planned 60.00 (both 60%). gap=49.60-60.00=-10.40, computed on the 2 dp values (X20) and NOT rounded to an integer (the spec SQL declared v_gap int, a bug found by running it; fixed to numeric), so -10.40 < -10 gives At risk.",
+   "expect": {
+    "overall": 49.6,
+    "overallDisplay": 50,
+    "plannedToday": 60.0,
+    "plannedDisplay": 60,
+    "forecastEnd": "2026-03-07",
+    "status": "At risk",
+    "slipDays": -3
+   }
+  },
+  {
+   "name": "status boundary: gap -10.50 (2 dp) -> At risk",
+   "today": "2026-03-06",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": true,
+   "tasks": [
+    {
+     "key": "T1",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-10",
+     "progress": 49,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": "2026-03-01",
+     "baseline_end": "2026-03-10"
+    },
+    {
+     "key": "T2",
+     "sort_order": 20,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-10",
+     "progress": 50,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": "2026-03-01",
+     "baseline_end": "2026-03-10"
+    }
+   ],
+   "links": [],
+   "notes": "Equal weights (dur 10 each). overall=(49+50)/2=49.50 (display half-up 50); planned 60.00; gap=-10.50 -> integer -11 (round half away from zero) < -10 => At risk. Forward: T1 ef 03-07, T2 ef 03-06; forecast 03-07; slip -3.",
+   "expect": {
+    "overall": 49.5,
+    "overallDisplay": 50,
+    "plannedToday": 60.0,
+    "plannedDisplay": 60,
+    "forecastEnd": "2026-03-07",
+    "status": "At risk",
+    "slipDays": -3
+   }
+  },
+  {
+   "name": "overdue critical task by exactly 5 days -> At risk",
+   "today": "2026-03-10",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "T",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-05",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [],
+   "notes": "Single task w5 progress 0, end 03-05, today 03-10: overdue=5 days. es=today, ef=today+5=03-15, forecast 03-15, no due so deadline=forecast, slack 0 => critical, so lateCrit with 5 days overdue (Late only when > 5). No due/baseline => slip NULL. Overall 0; planned: window long past => 100.00. Status At risk.",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 100.0,
+    "plannedDisplay": 100,
+    "forecastEnd": "2026-03-15",
+    "status": "At risk",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "overdue critical task by exactly 6 days -> Late",
+   "today": "2026-03-11",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "T",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-05",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [],
+   "notes": "Single task w5 progress 0, end 03-05, today 03-11: overdue=6 days. es=today, ef=today+5=03-16, forecast 03-16, no due so deadline=forecast, slack 0 => critical, so lateCrit with 6 days overdue (Late only when > 5). No due/baseline => slip NULL. Overall 0; planned: window long past => 100.00. Status Late.",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 100.0,
+    "plannedDisplay": 100,
+    "forecastEnd": "2026-03-16",
+    "status": "Late",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "incomplete milestone overdue 8 days -> Late even when not critical",
+   "today": "2026-03-10",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "T",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-30",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "M",
+     "sort_order": 20,
+     "start_date": "2026-03-02",
+     "end_date": "2026-03-02",
+     "progress": 0,
+     "is_milestone": true,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [],
+   "notes": "T w30 progress 0; milestone M (w0) at 03-02, progress 0. Forward (today 03-10): T es 03-10 ef=03-10+30=04-09; M es 03-10 rem 0 ef 03-10; forecast 04-09. M has slack 30 (not critical) but an overdue incomplete milestone always counts: overdue=10-2=8 > 5 => Late. overall 0; planned T (10-1+1)/30=33.33 (M excluded) display 33.",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 33.33,
+    "plannedDisplay": 33,
+    "forecastEnd": "2026-04-09",
+    "status": "Late",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "overdue NON-critical ordinary task is ignored",
+   "today": "2026-03-10",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "T",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-30",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "X",
+     "sort_order": 20,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-02",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [],
+   "notes": "T w30, X w2, both progress 0, today 03-10. Forward: T ef 04-09, X ef 03-12; forecast 04-09. X: ls=04-09-2=04-07, es 03-10, slack 28 > 0 = min slack, so X is not critical and is not a milestone => its 8 days overdue do not count. Overall 0. Planned: T 10/30 (33.33%), X (10-1+1)/2 -> 100%: (30*33.33+2*100)/32=1200/32=37.50 exactly, display half-up 38. No due/baseline => slip NULL => On track.",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 37.5,
+    "plannedDisplay": 38,
+    "forecastEnd": "2026-04-09",
+    "status": "On track",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "job status Completed overrides to Complete",
+   "today": "2026-03-11",
+   "job": {
+    "status": "Completed",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "T",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-05",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [],
+   "notes": "Same data as the 6-days-overdue case (which alone would be Late: forecast 03-16, overall 0.00, planned 100.00) but job status is 'Completed', which takes precedence over every schedule rule => Complete. Figures unchanged.",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 100.0,
+    "plannedDisplay": 100,
+    "forecastEnd": "2026-03-16",
+    "status": "Complete",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "job status Invoiced overrides to Complete",
+   "today": "2026-03-11",
+   "job": {
+    "status": "Invoiced",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "T",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-05",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [],
+   "notes": "Same data as the 6-days-overdue case (which alone would be Late: forecast 03-16, overall 0.00, planned 100.00) but job status is 'Invoiced', which takes precedence over every schedule rule => Complete. Figures unchanged.",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 100.0,
+    "plannedDisplay": 100,
+    "forecastEnd": "2026-03-16",
+    "status": "Complete",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "job status Closed overrides to Complete",
+   "today": "2026-03-11",
+   "job": {
+    "status": "Closed",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "T",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-05",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [],
+   "notes": "Same data as the 6-days-overdue case (which alone would be Late: forecast 03-16, overall 0.00, planned 100.00) but job status is 'Closed', which takes precedence over every schedule rule => Complete. Figures unchanged.",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 100.0,
+    "plannedDisplay": 100,
+    "forecastEnd": "2026-03-16",
+    "status": "Complete",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "job status On Hold overrides to On hold",
+   "today": "2026-03-11",
+   "job": {
+    "status": "On Hold",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "T",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-05",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [],
+   "notes": "Same data as the 6-days-overdue case (which alone would be Late: forecast 03-16, overall 0.00, planned 100.00) but job status is 'On Hold', which takes precedence over every schedule rule => On hold. Figures unchanged.",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 100.0,
+    "plannedDisplay": 100,
+    "forecastEnd": "2026-03-16",
+    "status": "On hold",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "done task is not moved by its predecessor (lag 5)",
+   "today": "2026-03-02",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "A",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-10",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "B",
+     "sort_order": 20,
+     "start_date": "2026-03-05",
+     "end_date": "2026-03-06",
+     "progress": 100,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [
+    {
+     "task": "B",
+     "pred": "A",
+     "lag": 5
+    }
+   ],
+   "notes": "A w10 progress 0, B w2 done. overall=(0+2*100)/12=16.666 -> 16.67, display 17. Planned 03-02: A (2-1+1)/10=20%, B (2-5+1)<0 => 0: 10*20/12=16.666 -> 16.67, display 17. Forward: A es=today 03-02 rem 10 ef 03-12. B is done: ef stays at actual end 03-06 even though A.ef+5=03-17. forecast=max(03-12,03-06)=03-12. Nothing overdue => On track.",
+   "expect": {
+    "overall": 16.67,
+    "overallDisplay": 17,
+    "plannedToday": 16.67,
+    "plannedDisplay": 17,
+    "forecastEnd": "2026-03-12",
+    "status": "On track",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "partial progress rounds remaining duration up (dur 7, 30%)",
+   "today": "2026-03-04",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "T",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-07",
+     "progress": 30,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [],
+   "notes": "w7. overall 30.00. Planned 03-04: (4-1+1)/7=57.142 -> 57.14, display 57. Forward: started so es=03-01, rem=ceil(7*70/100)=ceil(4.9)=5, ef=03-06. forecast 03-06. No due/baseline; end 03-07 not past => On track.",
+   "expect": {
+    "overall": 30.0,
+    "overallDisplay": 30,
+    "plannedToday": 57.14,
+    "plannedDisplay": 57,
+    "forecastEnd": "2026-03-06",
+    "status": "On track",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "undated task inside a link takes part (dur 1, starts today)",
+   "today": "2026-03-10",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "A",
+     "sort_order": 10,
+     "start_date": null,
+     "end_date": null,
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "B",
+     "sort_order": 20,
+     "start_date": "2026-03-05",
+     "end_date": "2026-03-06",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [
+    {
+     "task": "B",
+     "pred": "A",
+     "lag": 0
+    }
+   ],
+   "notes": "A undated (w1), B 03-05..03-06 (w2), link B after A. overall 0. Planned 03-10: A 0 (no dates), B past => 100%: 2*100/3=66.67, display 67. Forward: A is linked so it is scheduled: dur 1, es=today 03-10, ef=03-11; B es=today 03-10 then A.ef 03-11 => es 03-11, rem 2, ef 03-13. forecast 03-13. Backward (deadline 03-13): B ls=03-11, A ls=03-10: slack 0 both => critical. B end 03-06 is 4 days before today => overdue 4 (<=5) => At risk. Slip NULL.",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 66.67,
+    "plannedDisplay": 67,
+    "forecastEnd": "2026-03-13",
+    "status": "At risk",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "done undated task in a link stays out of the schedule",
+   "today": "2026-03-10",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "A",
+     "sort_order": 10,
+     "start_date": null,
+     "end_date": null,
+     "progress": 100,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "B",
+     "sort_order": 20,
+     "start_date": "2026-03-05",
+     "end_date": "2026-03-06",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [
+    {
+     "task": "B",
+     "pred": "A",
+     "lag": 0
+    }
+   ],
+   "notes": "A undated and done (w1, p100), B 03-05..03-06 (w2, p0), link B after A. overall=(1*100)/3=33.33, display 33. Planned: A 0, B 100% => 200/3=66.67, display 67. A is done with no end date so it does NOT take part; the link is skipped, B es=today 03-10, ef=03-12; forecast 03-12. B is critical (slack 0) and 4 days overdue => At risk.",
+   "expect": {
+    "overall": 33.33,
+    "overallDisplay": 33,
+    "plannedToday": 66.67,
+    "plannedDisplay": 67,
+    "forecastEnd": "2026-03-12",
+    "status": "At risk",
+    "slipDays": null
+   }
+  },
+  {
+   "name": "baseline end beats the due date for slip",
+   "today": "2026-03-02",
+   "job": {
+    "status": "In Progress",
+    "due_date": "2026-03-20"
+   },
+   "baselineLocked": true,
+   "tasks": [
+    {
+     "key": "T",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-10",
+     "progress": 20,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": "2026-03-01",
+     "baseline_end": "2026-03-07"
+    }
+   ],
+   "links": [],
+   "notes": "Baseline locked, baseline 03-01..03-07, current 03-01..03-10, due 03-20. w10 (current dates). overall 20.00. Planned 03-02 on BASELINE dates: (2-1+1)/7=28.571 -> 28.57, display 29. Forward: started es=03-01 rem=ceil(10*80/100)=8 ef=03-09; forecast 03-09. slip is against the baseline end 03-07 (not due 03-20): +2 => At risk. gap=20.00-28.57=-8.57 -> -9, no gap risk.",
+   "expect": {
+    "overall": 20.0,
+    "overallDisplay": 20,
+    "plannedToday": 28.57,
+    "plannedDisplay": 29,
+    "forecastEnd": "2026-03-09",
+    "status": "At risk",
+    "slipDays": 2
+   }
+  },
+  {
+   "name": "due_date sets the deadline and makes an overdue task critical",
+   "today": "2026-03-10",
+   "job": {
+    "status": "In Progress",
+    "due_date": "2026-03-13"
+   },
+   "baselineLocked": true,
+   "tasks": [
+    {
+     "key": "X",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-03",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": "2026-04-01",
+     "baseline_end": "2026-04-05"
+    },
+    {
+     "key": "Y",
+     "sort_order": 20,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-20",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": "2026-04-01",
+     "baseline_end": "2026-04-30"
+    }
+   ],
+   "links": [],
+   "notes": "Baseline locked but baselines are in the future (04-01...) so planned is 0.00 and gap 0. Weights X3 (current dates) Y20; overall 0. Forward (today 03-10): X ef 03-13, Y ef 03-10+20=03-30; forecast 03-30. slip vs baseline max end 04-30 = -31. Deadline = due 03-13: X ls=03-10 slack 0; Y ls=03-13-20=02-21 slack -17; critical limit max(0,-17)=0 so X is critical. X end 03-03 is 7 days overdue > 5 => Late.",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 0.0,
+    "plannedDisplay": 0,
+    "forecastEnd": "2026-03-30",
+    "status": "Late",
+    "slipDays": -31
+   }
+  },
+  {
+   "name": "same jobs without due_date: deadline = forecast, X not critical -> On track",
+   "today": "2026-03-10",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": true,
+   "tasks": [
+    {
+     "key": "X",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-03",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": "2026-04-01",
+     "baseline_end": "2026-04-05"
+    },
+    {
+     "key": "Y",
+     "sort_order": 20,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-20",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": "2026-04-01",
+     "baseline_end": "2026-04-30"
+    }
+   ],
+   "links": [],
+   "notes": "As the previous case without a due date: deadline=forecast 03-30. Y slack 0 (min); X ls=03-27, es 03-10, slack 17 > 0 so X is not critical and not a milestone => its overdue days are ignored. slip -31, gap 0 => On track.",
+   "expect": {
+    "overall": 0.0,
+    "overallDisplay": 0,
+    "plannedToday": 0.0,
+    "plannedDisplay": 0,
+    "forecastEnd": "2026-03-30",
+    "status": "On track",
+    "slipDays": -31
+   }
+  }
+ ]
+}
