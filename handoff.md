@@ -4,6 +4,18 @@
 
 ---
 
+## Session 63 — Phase A KPI strip + baseline lock UI (NOT applied; needs the SQL migration)
+
+**Date:** 2026-10-20. Branch `feat/phase-a-ui-kpi` (stacked on `feat/phase-a-compute`). One block `// ── SCHEDULE KPI ──` ... `// ── END SCHEDULE KPI ──` above the compute block, one CSS block `/* schedule-kpi:begin */`, and the Schedule card now has `<div id="jc-sched-kpis">` above the bar (legacy `#jc-sched-overall` kept, hidden).
+
+- **Entry point** `jcRenderSchedKpis()` (never throws; the task loader/table agent must call it after every load/edit). Reads `jcTasks`, `jcSchedPhases`, `jcSchedLinks`, `jcCurrentJobId` at call time and the job status / due date from the form (`jcSchedJobCtx()`), so it must also be called when the due date or status changes.
+- **Tiles:** Overall progress (bar + planned marker) and Schedule status pill with "Handover forecast .. · due .. (+N d)", all from `jcSchedCompute`.
+- **Baseline:** caption from max `baseline_locked_at` plus the latest `job_audit_log` baseline row for the name (cached). Button (`ops:work-orders:approve`, not read-only, saved job, a dated task): first lock = confirm dialog, re-baseline = inline mandatory reason. Calls RPC `lock_job_baseline(p_job_id, p_reason)` via `sb('rpc/...')`; a missing function shows "Baseline locking is not available yet".
+- **Not applied / not verified:** the RPC does not exist in prod until the SQL migration leaf lands, so the button cannot be exercised end to end; no real-browser run behind the login (only a static render of the tiles in dark and light themes).
+- **Tests:** `node --test scripts/tests/ui/schedule-kpi.test.mjs` (30) and `node scripts/tests/ui/schedule-kpi-mutate.mjs` (31/31 caught).
+
+---
+
 ## Session 62 — Phase A compute module + shared fixture (JS side; NOT yet wired into the UI)
 
 **Date:** 2026-10-20. Branch `feat/phase-a-compute`. Adds the one shared, DOM-free compute block to `index.html` (`// ── SCHEDULE COMPUTE (shared) ──` ... `// ── END SCHEDULE COMPUTE ──`, directly above `jcLoadTasks()`): `jcTaskWeight`, `jcPlannedPct`, `jcSchedCompute({tasks, links, phases, job, today})`. Nothing calls it yet; no UI, no migration, no prod change.
