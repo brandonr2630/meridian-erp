@@ -6693,8 +6693,9 @@ window.addEventListener('popstate', (e) => {
   // state that existed *before* the modal opened, which has no `.modal` key
   // at all. Without this DOM-driven sweep, that modal's `.show` class would
   // never be removed.
+  let closedModal = false;
   document.querySelectorAll('.modal-overlay.show').forEach(el => {
-    if (!state || state.modal !== el.id) _popstateCloseModal(el.id);
+    if (!state || state.modal !== el.id) { _popstateCloseModal(el.id); closedModal = true; }
   });
   if (!state) { navigate('dashboard', { push: false }); return; }
   if (state.modal) {
@@ -6703,7 +6704,12 @@ window.addEventListener('popstate', (e) => {
     // opened it) — nothing else to do.
     return;
   }
-  if (state.view) { navigate(state.view, { push: false }); }
+  if (state.view) {
+    // Closing a modal opened from inside the Work Orders job form (confirm dialogs, pickers) lands on the view's own history entry;
+    // re-navigating to that view would reload the list and drop the open job, so the form stays put.
+    if (closedModal && state.view === currentView && document.getElementById('jc-form-wrap')?.classList.contains('active')) return;
+    navigate(state.view, { push: false });
+  }
 });
 
 async function _restoreViewFromHash() {
