@@ -8596,15 +8596,15 @@ function jcSchedCompute({ tasks, links, phases, job, today } = {}) {
   for (const t of tasks) { const b = jcSchedDay(t && t.baseline_end); if (b != null && (maxBe == null || b > maxBe)) maxBe = b; }
   const baseEnd = maxBe ?? due;
   const slip = fe != null && baseEnd != null ? fe - baseEnd : null;
-  // SQL declares v_gap as integer, so the numeric gap is ROUNDed half away from zero on assignment (-10.4 -> -10).
+  // gap = overall - planned on the stored 2 dp values (X20), in hundredths; SQL v_gap is numeric (the spec's 'int' was a bug found by running it).
   const gapC = overallC - plannedC;
-  const gap = hasBl ? Math.sign(gapC) * Math.floor((Math.abs(gapC) + 50) / 100) : null;
+  const gap = hasBl ? gapC : null;
   const L = JC_SCHED_LABELS, sl = slip ?? 0;
   let status;
   if (['Completed', 'Invoiced', 'Closed'].includes(job.status)) status = L.complete;
   else if (job.status === 'On Hold') status = L.onHold;
   else if (sl > JC_SCHED_LATE_DAYS || lateDays > JC_SCHED_LATE_DAYS) status = L.late;
-  else if ((sl >= 1 && sl <= JC_SCHED_LATE_DAYS) || (gap ?? 0) < -JC_SCHED_GAP_PTS || late) status = L.atRisk;
+  else if ((sl >= 1 && sl <= JC_SCHED_LATE_DAYS) || (gap ?? 0) < -JC_SCHED_GAP_PTS * 100 || late) status = L.atRisk;
   else status = L.onTrack;
 
   return { overall: overallC / 100, overallDisplay: jcSchedDisp(overallC), plannedToday: plannedC / 100, plannedDisplay: jcSchedDisp(plannedC),

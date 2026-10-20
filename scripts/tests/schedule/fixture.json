@@ -1258,7 +1258,7 @@
    }
   },
   {
-   "name": "status boundary: gap -10.40 rounds to -10 (SQL int cast) -> On track",
+   "name": "status boundary: gap -10.40 (2 dp, no integer rounding) -> At risk",
    "today": "2026-03-06",
    "job": {
     "status": "In Progress",
@@ -1290,19 +1290,19 @@
     }
    ],
    "links": [],
-   "notes": "Weights 2,3. overall=(2*49+3*50)/5=49.60 (display 50); planned 60.00 (both 60%). gap=49.60-60.00=-10.40. SQL declares v_gap integer, so the numeric gap is rounded on assignment to -10, which is NOT < -10 => On track (a pure-numeric comparison would say At risk: spec discrepancy, SQL wins). Forward: T1 rem=ceil(10*51/100)=6 ef 03-07; T2 rem 5 ef 03-06; forecast 03-07; slip=03-07-03-10=-3.",
+   "notes": "Weights 2,3. overall=(2*49+3*50)/5=49.60 (display 50); planned 60.00 (both 60%). gap=49.60-60.00=-10.40, computed on the 2 dp values (X20) and NOT rounded to an integer (the spec SQL declared v_gap int, a bug found by running it; fixed to numeric), so -10.40 < -10 gives At risk.",
    "expect": {
     "overall": 49.6,
     "overallDisplay": 50,
     "plannedToday": 60.0,
     "plannedDisplay": 60,
     "forecastEnd": "2026-03-07",
-    "status": "On track",
+    "status": "At risk",
     "slipDays": -3
    }
   },
   {
-   "name": "status boundary: gap -10.50 rounds to -11 (half away from zero) -> At risk",
+   "name": "status boundary: gap -10.50 (2 dp) -> At risk",
    "today": "2026-03-06",
    "job": {
     "status": "In Progress",
