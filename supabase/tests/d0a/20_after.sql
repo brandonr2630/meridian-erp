@@ -69,6 +69,11 @@ BEGIN
   PERFORM t_expect('drawings: admin deletes legacy key via fallback', t_dml('authenticated', adm, 'delete from storage.objects where bucket_id = ''job-drawings'' and name = ''legacy/odd-name.pdf'''), 'rows:1');
   PERFORM t_expect('drawings: nobody can overwrite (no UPDATE policy)', t_dml('authenticated', adm, 'update storage.objects set name = name where bucket_id = ''job-drawings'''), 'rows:0');
 
+  -- cross-tenant IDOR via the legacy-key fallback: a C1 member plants a job_drawings row that names a C2 object key
+  PERFORM t_expect('IDOR: ops plants a row pointing at a C2 key', t_dml('authenticated', ops, 'insert into public.job_drawings (job_id, company_id, storage_key) values (''' || j1 || ''', ''' || c1 || ''', ''' || c2 || '/' || j2 || '/1-b.pdf'')'), 'rows:1');
+  PERFORM t_expect('IDOR: planted row does not expose the C2 object to ops', t_count('authenticated', ops, 'select * from storage.objects where bucket_id = ''job-drawings'' and name like ''c2%'''), 'n:0');
+  PERFORM t_expect('IDOR: planted row does not let a C1 admin delete the C2 object', t_dml('authenticated', adm, 'delete from storage.objects where bucket_id = ''job-drawings'' and name like ''c2%'''), 'rows:0');
+
   -- ── storage: company-logos ──────────────────────────────────────────────────
   PERFORM t_expect('logos: client upload',            t_dml('authenticated', client, 'insert into storage.objects (bucket_id, name) values (''company-logos'', ''x.png'')'), 'err:42501');
   PERFORM t_expect('logos: ops (not admin) upload',   t_dml('authenticated', ops,    'insert into storage.objects (bucket_id, name) values (''company-logos'', ''' || c1 || '-124.png'')'), 'err:42501');

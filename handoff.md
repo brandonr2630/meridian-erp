@@ -18,6 +18,8 @@
 
 **Limits:** the stub is not Supabase (storage.objects is a plain table; auth.uid() reads a setting). **Not applied to prod.** Behavior to be aware of: the Office Admin role (1 active user) lacks `ops:work-orders:read/write`, so that user loses drawing view/upload (they cannot open Work Orders today either); staff are NOT company-scoped on the 22 tables until D0c (restrictive policy only removes non-staff). D0b (edge function that bans removed staff) is still to do. Deploy now excludes `supabase/` along with `docs/specs/` and `scripts/`.
 
+**Security review fix (same session):** the legacy-key storage fallback matched `job_drawings.storage_key`, which any company member can write, so a member could plant a row naming another company's object key and read (or, as admin, delete) it. The fallback now applies only to keys whose first path segment is not UUID-shaped; UUID-prefixed keys must pass the company-prefix rule. Covered by new 'IDOR' tests (failed before the fix, 196 checks pass after). **Follow-up (Phase B guard / D0c):** also enforce `storage_key` starts with `company_id/` on `job_drawings` INSERT/UPDATE.
+
 **Before applying to prod:** run `Q-S1` and the drawing atom-coverage query (Phase D spec), confirm the migration role can create policies on `storage.objects` (the existing drawing policies were created that way), then apply, then verify as a real `operations_tech` and `viewer` login (open/save a work order, upload and view a drawing PDF, Job Config).
 
 ---
