@@ -845,4 +845,94 @@ BEGIN
   PERFORM t_expect('backfill: legacy tasks got default new columns',
     (SELECT count(*)::text FROM job_tasks WHERE id::text LIKE 'd1000000-%' AND NOT client_visible AND NOT is_milestone AND NOT is_critical AND weight IS NULL AND baseline_locked_at IS NULL), '7');
 END $$;
+
+-- ===== 16. extra guards: single-column baseline writes, link whose task is in another job, planned rounding, ceil, future start =====
+DO $$
+DECLARE ops uuid := '11111111-1111-1111-1111-111111111111'; c text;
+  t text := 'f3000000-0000-0000-0000-000000000031';
+BEGIN
+  FOREACH c IN ARRAY ARRAY['baseline_start=''2026-06-03''', 'baseline_end=''2026-06-30''', 'baseline_locked_at=now()'] LOOP
+    PERFORM t_expect('base: single-column direct write refused: ' || c, t_dml('authenticated', ops, 'UPDATE job_tasks SET ' || c || ' WHERE id=''' || t || ''''), 'err:P0001');
+  END LOOP;
+  PERFORM t_expect('con: link whose TASK sits in another job is rejected',
+    t_dml('postgres', NULL, pg_temp.lk('d1000000-0000-0000-0000-000000000001', 'f1000000-0000-0000-0000-000000000001')), 'err:23514');
+  PERFORM t_expect('con: link whose PREDECESSOR sits in another job is rejected',
+    t_dml('postgres', NULL, pg_temp.lk('f1000000-0000-0000-0000-000000000001', 'd1000000-0000-0000-0000-000000000002')), 'err:23514');
+END $$;
+DO $$
+DECLARE j text;
+BEGIN
+  -- planned % keeps 2 dp inside the status: planned 33.33 vs overall 23 -> gap -10.33 -> At risk (a 0 dp planned of 33 would give -10)
+  j := pg_temp.mkjob('50', 'Open', NULL);
+  PERFORM set_config('app.baseline_rpc', 'on', true);
+  INSERT INTO job_tasks (company_id, job_id, sort_order, task_name, start_date, end_date, baseline_start, baseline_end, baseline_locked_at, progress, weight)
+  VALUES ('c1000000-0000-0000-0000-000000000001', j::uuid, 1, 'p', '2025-12-20', '2026-01-03', '2026-01-01', '2026-01-03', now(), 23, 1);
+  PERFORM set_config('app.baseline_rpc', 'off', true);
+  PERFORM t_expect('precision: planned 33.33 is kept to 2 dp in the gap (gap -10.33 -> At risk)', pg_temp.st(j, '2026-01-01'), '1:At risk|2026-01-01|-2');
+  -- remaining work rounds UP: 10 days at 33% -> 6.7 -> 7 days
+  j := pg_temp.mkjob('51', 'Open', NULL);
+  PERFORM pg_temp.mktask(j, 1, '2026-03-01', '2026-03-10', 33, false, NULL);
+  PERFORM t_expect('status: remaining work is rounded up (6.7 -> 7 days)', pg_temp.st(j, '2026-03-01'), '1:On track|2026-03-08|null');
+  -- an unstarted task is planned from today, not from its (future) start date
+  j := pg_temp.mkjob('52', 'Open', NULL);
+  PERFORM pg_temp.mktask(j, 1, '2026-03-20', '2026-03-25', 0, false, NULL);
+  PERFORM t_expect('status: unstarted task starts today in the forecast (6 days from 03-01)', pg_temp.st(j, '2026-03-01'), '1:On track|2026-03-07|null');
+  -- a started task keeps its actual start
+  j := pg_temp.mkjob('53', 'Open', NULL);
+  PERFORM pg_temp.mktask(j, 1, '2026-02-20', '2026-03-01', 50, false, NULL);
+  PERFORM t_expect('status: started task keeps its start (02-20 + ceil(10*0.5)=5 days)', pg_temp.st(j, '2026-03-01'), '1:On track|2026-02-25|null');
+  -- slack: a short overdue task OFF the critical path does not make the job late
+  j := pg_temp.mkjob('54', 'Open', '2026-06-30');
+  PERFORM pg_temp.mktask(j, 1, '2026-03-20', '2026-04-10', 0, false, NULL);
+  PERFORM pg_temp.mktask(j, 2, '2026-03-01', '2026-03-05', 0, false, NULL);
+  PERFORM t_expect('status: overdue short task has MORE slack than the long task, so it is not critical -> On track', pg_temp.st(j, '2026-03-20'), '1:On track|2026-04-11|-80');
+END $$;
+
+-- ===== 17. the guard contract for Phases B/C: wording list with several columns and a domain atom =====
+CREATE TABLE public.t_guard_probe (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), job_id uuid, title text, body text, note text,
+  client_visible boolean NOT NULL DEFAULT false);
+CREATE TRIGGER t_guard_probe_visibility BEFORE INSERT OR UPDATE ON public.t_guard_probe
+  FOR EACH ROW EXECUTE FUNCTION job_visibility_guard('title,body', 'quality:docs:issue');
+INSERT INTO erp_roles (id, name, permissions) VALUES
+ ('a0000000-0000-0000-0000-000000000020', 'doc_issuer', '{"ops:work-orders:read":true,"ops:work-orders:write":true,"quality:docs:issue":true}');
+INSERT INTO erp_users (id, auth_user_id, full_name, is_active) VALUES ('e0000000-0000-0000-0000-000000000020', '20202020-2020-2020-2020-202020202020', 'issuer C1', true);
+INSERT INTO erp_user_company_roles (user_id, company_id, role_id) VALUES
+ ('e0000000-0000-0000-0000-000000000020', 'c1000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000020');
+INSERT INTO t_guard_probe (id, job_id, title, body, note, client_visible) VALUES
+ ('f9000000-0000-0000-0000-000000000001', 'b1000000-0000-0000-0000-0000000000d1', 't', 'b', 'n', false),
+ ('f9000000-0000-0000-0000-000000000002', 'b1000000-0000-0000-0000-0000000000d1', 't', 'b', 'n', true),
+ ('f9000000-0000-0000-0000-000000000003', 'b1000000-0000-0000-0000-0000000000d1', 't', 'b', 'n', true),
+ ('f9000000-0000-0000-0000-000000000004', 'b1000000-0000-0000-0000-0000000000d1', 't', 'b', 'n', true);
+DO $$
+DECLARE ops uuid := '11111111-1111-1111-1111-111111111111'; wrt uuid := '12121212-1212-1212-1212-121212121212';
+  iss uuid := '20202020-2020-2020-2020-202020202020';
+  pub text := 'UPDATE t_guard_probe SET client_visible=true WHERE id=''f9000000-0000-0000-0000-000000000001''';
+BEGIN
+  PERFORM t_expect('probe: a role WITHOUT approve and without the domain atom cannot publish', t_dml_api('authenticated', wrt, pub), 'err:P0001');
+  PERFORM t_expect('probe: the refusal names the domain atom',
+    (SELECT t_msg_api('authenticated', wrt, pub)), 'permission denied: publishing to the client needs ops:work-orders:approve or quality:docs:issue');
+  PERFORM t_expect('probe: a role with the domain atom (no approve) CAN publish', t_dml_api('authenticated', iss, pub), 'rows:1');
+  PERFORM t_expect('probe: an approve holder can publish too (approve OR atom)',
+    t_dml_api('authenticated', ops, 'UPDATE t_guard_probe SET client_visible=true WHERE id=''f9000000-0000-0000-0000-000000000001'' AND NOT client_visible') , 'rows:0');
+  PERFORM t_expect('probe: first listed wording column (title) auto-unpublishes',
+    t_dml_api('authenticated', wrt, 'UPDATE t_guard_probe SET title=''t2'' WHERE id=''f9000000-0000-0000-0000-000000000002''') ||
+    (SELECT client_visible::text FROM t_guard_probe WHERE id='f9000000-0000-0000-0000-000000000003'), 'rows:1true');
+  PERFORM t_expect('probe: ... the edited row is hidden', (SELECT client_visible::text FROM t_guard_probe WHERE id='f9000000-0000-0000-0000-000000000002'), 'false');
+  PERFORM t_expect('probe: second listed wording column (body) auto-unpublishes',
+    t_dml_api('authenticated', wrt, 'UPDATE t_guard_probe SET body=''b2'' WHERE id=''f9000000-0000-0000-0000-000000000003'''), 'rows:1');
+  PERFORM t_expect('probe: ... hidden', (SELECT client_visible::text FROM t_guard_probe WHERE id='f9000000-0000-0000-0000-000000000003'), 'false');
+  PERFORM t_expect('probe: an unlisted column (note) does not unpublish',
+    t_dml_api('authenticated', wrt, 'UPDATE t_guard_probe SET note=''n2'' WHERE id=''f9000000-0000-0000-0000-000000000004'''), 'rows:1');
+  PERFORM t_expect('probe: ... still visible', (SELECT client_visible::text FROM t_guard_probe WHERE id='f9000000-0000-0000-0000-000000000004'), 'true');
+  PERFORM t_expect('probe: audit rows record the probe table name',
+    (SELECT count(*)::text FROM job_audit_log WHERE metadata->>'table' = 't_guard_probe' AND metadata->>'reason' = 'wording_edited'), '2');
+END $$;
+
+-- ===== 18. the exemption follows session_user, not the effective role =====
+DO $$
+DECLARE wrt uuid := '12121212-1212-1212-1212-121212121212';
+BEGIN
+  PERFORM t_expect('exempt: a postgres session that SET ROLEs to the write-only user is still exempt (session_user postgres)',
+    t_dml('authenticated', wrt, 'INSERT INTO job_tasks (company_id, job_id, task_name, client_visible) VALUES (''c1000000-0000-0000-0000-000000000001'',''b1000000-0000-0000-0000-0000000000d1'',''ex-setrole'', true)'), 'rows:1');
+END $$;
 ROLLBACK;

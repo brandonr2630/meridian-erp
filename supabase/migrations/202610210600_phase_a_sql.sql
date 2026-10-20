@@ -130,8 +130,7 @@ BEGIN
   IF NOT v_ok THEN
     IF TG_OP = 'INSERT' AND (NEW.baseline_start IS NOT NULL OR NEW.baseline_end IS NOT NULL OR NEW.baseline_locked_at IS NOT NULL) THEN
       RAISE EXCEPTION 'baseline is set only by lock_job_baseline()';
-    ELSIF TG_OP = 'UPDATE' AND (NEW.baseline_start, NEW.baseline_end, NEW.baseline_locked_at)
-          IS DISTINCT FROM (OLD.baseline_start, OLD.baseline_end, OLD.baseline_locked_at) THEN
+    ELSIF TG_OP = 'UPDATE' AND (NEW.baseline_start, NEW.baseline_end, NEW.baseline_locked_at) IS DISTINCT FROM (OLD.baseline_start, OLD.baseline_end, OLD.baseline_locked_at) THEN
       RAISE EXCEPTION 'baseline is set only by lock_job_baseline()';
     END IF;
   END IF;
@@ -201,8 +200,7 @@ CREATE TRIGGER job_tasks_set_updated_at      BEFORE UPDATE ON job_tasks
 --  3. Every visibility change (publish, unpublish, auto-unpublish) writes a visibility_changed job_audit_log row.
 -- SECURITY DEFINER only so it can write job_audit_log whatever the caller RLS; it is trigger-only (no EXECUTE for API roles).
 -- The session_user exemption is the condition v_pub AND session_user NOT IN (...) below.
-CREATE OR REPLACE FUNCTION job_visibility_guard() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+CREATE OR REPLACE FUNCTION job_visibility_guard() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 DECLARE
   v_cols  text[] := string_to_array(coalesce(TG_ARGV[0], ''), ',');
   v_atom  text   := nullif(TG_ARGV[1], '');
@@ -443,30 +441,20 @@ GRANT EXECUTE ON FUNCTION job_schedule_status(uuid, date) TO authenticated;
 -- ===== RLS (exact pattern of job_tasks: TO authenticated, company membership, writes need ops:work-orders:write) =====
 ALTER TABLE job_phases ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "job_phases members read" ON job_phases;
-CREATE POLICY "job_phases members read" ON job_phases FOR SELECT TO authenticated
-  USING (company_id IN (SELECT my_company_ids()));
+CREATE POLICY "job_phases members read" ON job_phases FOR SELECT TO authenticated USING (company_id IN (SELECT my_company_ids()));
 DROP POLICY IF EXISTS "job_phases writers insert" ON job_phases;
-CREATE POLICY "job_phases writers insert" ON job_phases FOR INSERT TO authenticated
-  WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));
+CREATE POLICY "job_phases writers insert" ON job_phases FOR INSERT TO authenticated WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));
 DROP POLICY IF EXISTS "job_phases writers update" ON job_phases;
-CREATE POLICY "job_phases writers update" ON job_phases FOR UPDATE TO authenticated
-  USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'))
-  WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));
+CREATE POLICY "job_phases writers update" ON job_phases FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));
 DROP POLICY IF EXISTS "job_phases writers delete" ON job_phases;
-CREATE POLICY "job_phases writers delete" ON job_phases FOR DELETE TO authenticated
-  USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));
+CREATE POLICY "job_phases writers delete" ON job_phases FOR DELETE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));
 
 ALTER TABLE job_task_links ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "job_task_links members read" ON job_task_links;
-CREATE POLICY "job_task_links members read" ON job_task_links FOR SELECT TO authenticated
-  USING (company_id IN (SELECT my_company_ids()));
+CREATE POLICY "job_task_links members read" ON job_task_links FOR SELECT TO authenticated USING (company_id IN (SELECT my_company_ids()));
 DROP POLICY IF EXISTS "job_task_links writers insert" ON job_task_links;
-CREATE POLICY "job_task_links writers insert" ON job_task_links FOR INSERT TO authenticated
-  WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));
+CREATE POLICY "job_task_links writers insert" ON job_task_links FOR INSERT TO authenticated WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));
 DROP POLICY IF EXISTS "job_task_links writers update" ON job_task_links;
-CREATE POLICY "job_task_links writers update" ON job_task_links FOR UPDATE TO authenticated
-  USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'))
-  WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));
+CREATE POLICY "job_task_links writers update" ON job_task_links FOR UPDATE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write')) WITH CHECK (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));
 DROP POLICY IF EXISTS "job_task_links writers delete" ON job_task_links;
-CREATE POLICY "job_task_links writers delete" ON job_task_links FOR DELETE TO authenticated
-  USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));
+CREATE POLICY "job_task_links writers delete" ON job_task_links FOR DELETE TO authenticated USING (company_id IN (SELECT my_company_ids()) AND user_has_perm('ops:work-orders:write'));

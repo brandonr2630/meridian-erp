@@ -170,3 +170,18 @@ BEGIN
     RETURN SQLERRM;
   END;
 END $$;
+-- t_msg_api(role, sub, stmt): error message of a DML statement run through the PostgREST-like session ('ok' when it succeeds)
+CREATE OR REPLACE FUNCTION public.t_msg_api(p_role text, p_sub uuid, p_sql text) RETURNS text LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM set_config('request.jwt.claim.sub', coalesce(p_sub::text, ''), true);
+  EXECUTE 'SET LOCAL SESSION AUTHORIZATION authenticator';
+  EXECUTE 'SET LOCAL ROLE ' || quote_ident(p_role);
+  BEGIN
+    EXECUTE p_sql;
+    RESET ROLE; RESET SESSION AUTHORIZATION;
+    RETURN 'ok';
+  EXCEPTION WHEN OTHERS THEN
+    RESET ROLE; RESET SESSION AUTHORIZATION;
+    RETURN SQLERRM;
+  END;
+END $$;
