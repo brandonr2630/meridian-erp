@@ -163,7 +163,10 @@ test("index.html carries exactly ONE compute implementation", () => {
   assert.equal(html.split("function jcPlannedPct").length - 1, 1);
   assert.equal(html.split(BEGIN).length - 1, 1);
   assert.equal(html.split(END).length - 1, 1);
-  const gap = html.indexOf("async function jcLoadTasks()") - html.indexOf(END);
+  // the Gantt renderer block (Phase A UI) sits directly below the compute block, so measure from whichever block ends last
+  const GEND = "// ── END SCHEDULE GANTT RENDERER ──", last = html.includes(GEND) ? html.indexOf(GEND) : html.indexOf(END);
+  if (html.includes(GEND)) assert.ok(html.indexOf("// ── SCHEDULE GANTT RENDERER ──") - html.indexOf(END) < 60, "Gantt block must sit directly below the compute block");
+  const gap = html.indexOf("async function jcLoadTasks()") - last;
   assert.ok(gap > 0 && gap < 60, "block must sit directly above jcLoadTasks");
   assert.ok(block.split("\n").length < 400);
 });
