@@ -1,6 +1,21 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-20 · Session 56 (D0b built)*
+*Last updated: 2026-10-20 · Session 58 (work orders read-only mode)*
+
+---
+
+## Session 58 — Work Orders read-only mode (companion to D0c; needed before D0c is applied)
+
+**Date:** 2026-10-20. D0c makes the database refuse work-order writes (jobs, entries, audit rows) without `ops:work-orders:write`, but the Work Orders UI only gated the nav item on `:read`, so a read-only user (viewer, Office Admin) could click Save. Without this change they would get either a visible "Save failed" or, when no child rows need inserting, a false "saved" (RLS-denied PATCH/DELETE return HTTP 200 with zero rows, no error). No data is lost either way (denied deletes and denied inserts are symmetrical), but the message is wrong.
+
+| Change (`index.html`) | Notes |
+|---|---|
+| `jcIsReadOnlyRole()`, `jcDenyIfReadOnly()`, `jcApplyWriteAccess()` (block marked `D0c-UI`) | Roles without `ops:work-orders:write`: New Job / Save / Duplicate hidden (6 buttons), form inert (`jc-readonly`), banner "Read-only access", toolbar (back to list, search, print) kept clickable via `.jc-form-wrap.jc-ro-role .jc-toolbar`. Applied when Work Orders loads and when a job opens; `jcSetLocked` no longer re-enables a read-only role's form. |
+| `jcNewJob`, `jcSaveJob`, `jcDuplicateJob` | Start with `if (jcDenyIfReadOnly()) return;` (defence in depth). |
+| `sbPatchChecked()` | Throws when a PATCH returns no rows. Used for the job save (`jcSaveJobData`) and task edits (`jcTaskSet`), so a refused update is reported instead of looking like success. |
+| `scripts/tests/ui/work-orders-readonly.test.mjs` | 13 tests (`node --test scripts/tests/ui/work-orders-readonly.test.mjs`); 10/10 deliberate breakages caught. Also verified in a real browser DOM (modified page served locally) by simulating a read-only and a writer `_perms`. |
+
+**Not covered:** job DELETE (`jcDeleteJob`) still uses `sbDelete` with `return=minimal`, so a refused delete would look successful; it is already admin-gated in the UI and is touched by the D0c audit PR, so left alone here. Other modules (AP bills, invoices) have the same "denied update looks like success" shape but are out of scope.
 
 ---
 
