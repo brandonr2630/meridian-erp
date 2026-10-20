@@ -1,15 +1,8 @@
-// Supabase Edge Function: create-erp-user
-// Securely creates a new Supabase auth user + erp_users profile.
-// The service role key never touches the browser — it lives only here.
-//
-// Expected request body (JSON):
-//   { name, email, password, role, company_id,
-//     module_finance, module_sales, module_operations,
-//     module_finance_ar, module_finance_ap, module_finance_bank,
-//     module_finance_ledger, module_finance_reports,
-//     module_sales_crm, module_sales_orders }
-//
-// Required env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY
+// create-erp-user Edge Function v8 — Phase 4 RBAC (repo copy refreshed from the deployed v7; v8 changes ONLY the error reporting)
+// Accepts: { name, email, password, role_id, company_id }
+// v8: Supabase Auth failures are reported with their real reason (weak password, email already registered, ...) instead of the
+// generic "Failed to create auth user" (see errors.ts). Deploy with verify_jwt = false (the browser preflight has no Authorization).
+import { describeAuthError } from "./errors.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -17,116 +10,56 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-function corsResponse(body: string | null, status: number, extra: Record<string, string> = {}) {
+function corsResponse(body: string, status: number) {
   return new Response(body, {
     status,
-    headers: { ...CORS_HEADERS, "Content-Type": "application/json", ...extra },
+    headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
   });
-}
-
-function getJwtSub(jwt: string): string {
-  const payload = JSON.parse(atob(jwt.split(".")[1]));
-  return payload.sub;
 }
 
 Deno.serve(async (req: Request) => {
-  // Handle CORS preflight
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: CORS_HEADERS });
-  }
-
-  if (req.method !== "POST") {
-    return corsResponse(JSON.stringify({ error: "Method not allowed" }), 405);
-  }
+  if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: CORS_HEADERS });
+  if (req.method !== "POST") return corsResponse(JSON.stringify({ error: "Method not allowed" }), 405);
 
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-  const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const SERVICE_KEY  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const ANON_KEY     = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-  // ── 1. Parse request body ──────────────────────────────────────────────────
-  let body: {
-    name: string;
-    email: string;
-    password: string;
-    role: string;
-    company_id: string;
-    module_finance: boolean;
-    module_sales: boolean;
-    module_operations: boolean;
-    module_finance_ar: boolean;
-    module_finance_ap: boolean;
-    module_finance_bank: boolean;
-    module_finance_ledger: boolean;
-    module_finance_reports: boolean;
-    module_sales_crm: boolean;
-    module_sales_orders: boolean;
-  };
-
-  try {
-    body = await req.json();
-  } catch {
-    return corsResponse(JSON.stringify({ error: "Invalid JSON body" }), 400);
-  }
-
-  const {
-    name, email, password, role, company_id,
-    module_finance, module_sales, module_operations,
-    module_finance_ar, module_finance_ap, module_finance_bank,
-    module_finance_ledger, module_finance_reports,
-    module_sales_crm, module_sales_orders,
-  } = body;
-
-  if (!name || !email || !password || !role || !company_id) {
-    return corsResponse(JSON.stringify({ error: "Missing required fields: name, email, password, role, company_id" }), 400);
-  }
-
-  // ── 2. Validate caller is admin or super_admin ────────────────────────────
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return corsResponse(JSON.stringify({ error: "Missing or invalid Authorization header" }), 401);
+  if (!authHeader?.startsWith("Bearer ")) {
+    return corsResponse(JSON.stringify({ error: "Missing Authorization header" }), 401);
   }
-
   const callerToken = authHeader.slice(7);
-  let callerSub: string;
 
-  try {
-    callerSub = getJwtSub(callerToken);
-  } catch {
-    return corsResponse(JSON.stringify({ error: "Malformed JWT" }), 401);
+  let body: { name: string; email: string; password: string; role_id: string; company_id: string };
+  try { body = await req.json(); }
+  catch { return corsResponse(JSON.stringify({ error: "Invalid JSON" }), 400); }
+
+  const { name, email, password, role_id, company_id } = body;
+  if (!name || !email || !password || !role_id || !company_id) {
+    return corsResponse(JSON.stringify({ error: "Missing required fields: name, email, password, role_id, company_id" }), 400);
   }
 
-  const profileUrl =
-    `${SUPABASE_URL}/rest/v1/erp_users?auth_user_id=eq.${callerSub}&is_active=eq.true&limit=1`;
-
-  const profileRes = await fetch(profileUrl, {
+  // Validate caller has admin:users permission
+  const permRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/user_has_perm`, {
+    method: "POST",
     headers: {
-      Authorization: `Bearer ${callerToken}`,
-      apikey: ANON_KEY,
+      "Authorization": `Bearer ${callerToken}`,
+      "apikey": ANON_KEY,
+      "Content-Type": "application/json",
     },
+    body: JSON.stringify({ perm: "admin:users" }),
   });
+  if (!permRes.ok) return corsResponse(JSON.stringify({ error: "Failed to verify caller permissions" }), 500);
+  const hasPerm = await permRes.json();
+  if (!hasPerm) return corsResponse(JSON.stringify({ error: "Forbidden: admin:users permission required" }), 403);
 
-  if (!profileRes.ok) {
-    return corsResponse(JSON.stringify({ error: "Failed to verify caller identity" }), 500);
-  }
-
-  const profiles = await profileRes.json();
-
-  if (!Array.isArray(profiles) || profiles.length === 0) {
-    return corsResponse(JSON.stringify({ error: "Caller has no active ERP profile" }), 403);
-  }
-
-  const callerRole: string = profiles[0].role;
-
-  if (callerRole !== "admin" && callerRole !== "super_admin") {
-    return corsResponse(JSON.stringify({ error: "Forbidden: admin or super_admin role required" }), 403);
-  }
-
-  // ── 3. Create Supabase auth user (service role) ───────────────────────────
+  // Create Supabase auth user
   const createAuthRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-      apikey: SERVICE_ROLE_KEY,
+      "Authorization": `Bearer ${SERVICE_KEY}`,
+      "apikey": SERVICE_KEY,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -136,60 +69,70 @@ Deno.serve(async (req: Request) => {
       user_metadata: { force_password_change: true },
     }),
   });
-
   if (!createAuthRes.ok) {
-    const errData = await createAuthRes.json().catch(() => ({}));
-    const message = (errData as { message?: string }).message ?? "Failed to create auth user";
-    return corsResponse(JSON.stringify({ error: message }), createAuthRes.status);
+    const err = await createAuthRes.json().catch(() => ({}));
+    const info = describeAuthError(err, createAuthRes.status);
+    return corsResponse(JSON.stringify({ error: info.message, code: info.code }), info.status);
   }
-
   const authUser = await createAuthRes.json();
-  const newUserId: string = authUser.id;
+  const authUserId: string = authUser.id;
 
-  // ── 4. Insert erp_users profile (service role) ────────────────────────────
+  // Insert erp_users profile (email is NOT NULL — must include it)
   const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/erp_users`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-      apikey: SERVICE_ROLE_KEY,
+      "Authorization": `Bearer ${SERVICE_KEY}`,
+      "apikey": SERVICE_KEY,
       "Content-Type": "application/json",
-      Prefer: "return=minimal",
+      "Prefer": "return=representation",
     },
     body: JSON.stringify({
-      auth_user_id: newUserId,
-      full_name: name,
-      role,
+      auth_user_id:          authUserId,
+      full_name:             name,
+      email:                 email,
       company_id,
-      module_finance:          module_finance          ?? true,
-      module_sales:            module_sales            ?? true,
-      module_operations:       module_operations       ?? true,
-      module_finance_ar:       module_finance_ar       ?? true,
-      module_finance_ap:       module_finance_ap       ?? true,
-      module_finance_bank:     module_finance_bank     ?? true,
-      module_finance_ledger:   module_finance_ledger   ?? true,
-      module_finance_reports:  module_finance_reports  ?? true,
-      module_sales_crm:        module_sales_crm        ?? true,
-      module_sales_orders:     module_sales_orders     ?? true,
-      is_active: true,
+      is_active:             true,
       force_password_change: true,
     }),
   });
-
   if (!insertRes.ok) {
-    // Auth user was created but profile insert failed — attempt cleanup
-    await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${newUserId}`, {
+    // Clean up auth user to avoid orphan
+    await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${authUserId}`, {
       method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-        apikey: SERVICE_ROLE_KEY,
-      },
+      headers: { "Authorization": `Bearer ${SERVICE_KEY}`, "apikey": SERVICE_KEY },
     });
+    const errBody = await insertRes.json().catch(() => ({ message: "Unknown error" }));
+    const detail = (errBody as { message?: string; details?: string }).message
+      ?? (errBody as { details?: string }).details
+      ?? JSON.stringify(errBody);
+    return corsResponse(JSON.stringify({ error: `Failed to create ERP user profile: ${detail}` }), 500);
+  }
+  const [newUser] = await insertRes.json();
+  const newUserId: string = newUser.id;
 
-    const errText = await insertRes.text().catch(() => "");
-    return corsResponse(
-      JSON.stringify({ error: "Failed to create ERP user profile", detail: errText }),
-      500,
-    );
+  // Assign role via erp_user_company_roles
+  const roleRes = await fetch(`${SUPABASE_URL}/rest/v1/erp_user_company_roles`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${SERVICE_KEY}`,
+      "apikey": SERVICE_KEY,
+      "Content-Type": "application/json",
+      "Prefer": "return=minimal",
+    },
+    body: JSON.stringify({
+      user_id:              newUserId,
+      company_id,
+      role_id,
+      permission_overrides: {},
+    }),
+  });
+  if (!roleRes.ok) {
+    const errBody = await roleRes.json().catch(() => ({ message: "Unknown error" }));
+    const detail = (errBody as { message?: string }).message ?? JSON.stringify(errBody);
+    return corsResponse(JSON.stringify({
+      success: true,
+      warning: `User created but role assignment failed: ${detail}. Use Edit Role to assign manually.`,
+    }), 200);
   }
 
   return corsResponse(JSON.stringify({ success: true }), 200);
