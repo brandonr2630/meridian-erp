@@ -1,6 +1,37 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-20 · Session 58 (work orders read-only mode)*
+*Last updated: 2026-10-20 · Session 59 (D0c applied to prod)*
+
+---
+
+## Session 59 — D0c APPLIED to prod (all five families, 2026-10-20)
+
+**Date:** 2026-10-20. The legacy `"authenticated users full access"` (`USING true`) policies are gone. Each family was applied on its own with a pre-flight, `apply_migration`, then verification as simulated identities (`SET LOCAL ROLE authenticated` + `request.jwt.claim.sub` in rolled-back `DO` blocks, one sub-transaction per identity), stopping for the owner's go-ahead before the next family.
+
+| # | Family | Prod migration name | PR | Notes |
+|---|---|---|---|---|
+| 1 | audit | `d0c_audit` | #150 | `job_audit_log` append-only, company-scoped; service_role path unaffected |
+| 2 | entries | `d0c_entries` | #151 | 28 policies on 7 entry tables; QQL-only staff cannot see, insert, re-point or delete another company's rows; entry rows unchanged (160/14/14/14/0/0/14) |
+| 3 | bills | `d0c_bills` | #153 | `bill_edit_events`, `bill_lines_archive` append-only, scoped via `bills`; forged author and other-company bill refused |
+| 4 | config | `d0c_config` | #152 | 9 catalogs + `employees` + `notification_types`, 50 policies; admins full, ops_tech read-only, Office Admin = bill-sync only |
+| 5 | jobs (last) | `d0c_jobs` | #154 | scoped select (company + `ops:work-orders:read/write`), insert/update need write, delete needs `is_company_admin`; trigger `d0c_jobs_lock_company` blocks changing `company_id` (42501) |
+
+**Jobs verification (temp TRL job, rolled back):** Brandon (QQL+TRLLC+TRL) sees 14, can create/save/delete, move-to-TRL refused. Vanessa (QQL) and Vikash (ops_tech) see 13, cannot see/create/edit TRL; both can create and save QQL jobs; Vikash cannot delete (0 rows), Vanessa can. Office Admin reads jobs and entries, no writes. Client 0 rows everywhere; anon 0 or denied. Audit insert and drawing upload work for writers. Post-check: 13 jobs, no leftover test rows, audit rows or storage objects.
+
+**Post-state (prod):** legacy open policies 0; permissive `true` policies 0; 88 `d0c_%` policies; every permissive policy references an identity. D0a's restrictive `d0_staff_only` / `d0_no_anon` stay. Security advisors show nothing from D0c (remaining: `set_updated_at` search_path, the expected SECURITY DEFINER helper lint, leaked-password protection off).
+
+**Rollback:** `supabase/rollbacks/*_d0c_<family>_down.sql` (reverse order: jobs, config, bills, entries, audit). Rolling back reopens the family to every logged-in staff member.
+
+**Decision (owner):** Office Admin stays read-only on work orders; on config tables it has bill-sync only (add item/asset, re-price).
+
+**Known limits (not fixed):**
+- `user_has_perm()` is not company-scoped: a role holding an atom in one company applies across the user's companies.
+- Office Admin can rename approved cost items (RLS cannot restrict columns).
+- Deleting a job the user may not delete looks successful in the UI (`jcDeleteJob` uses `sbDelete`).
+- `employees` PII is readable by all Work Orders/AP readers; commercial job columns are visible to read roles.
+- `job_drawings.storage_key` prefix = `company_id` is still not enforced (Phase B guard).
+
+**Still to do:** (1) owner real-login check of the read-only UI as viewer / Office Admin; (2) deploy `create-erp-user` v8 (approval, `verify_jwt=false`); (3) tighten `create-erp-user` / `update-erp-user` authorisation (company-scoped) and fix `update-erp-user`'s wrong error field; (4) optional dashboard: "Require current password when updating", leaked-password protection (Pro plan); (5) Phase A (grouped Gantt, KPIs, shared progress/publish functions), then B, C, D. Run all new SQL on the throwaway Postgres first.
 
 ---
 
