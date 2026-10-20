@@ -80,6 +80,9 @@ BEGIN
   PERFORM t_expect('struct: no cost-like column on the new tables',
     (SELECT count(*)::text FROM information_schema.columns WHERE table_name IN ('job_phases','job_task_links')
       AND (column_name LIKE '%cost%' OR column_name LIKE '%rate%' OR column_name LIKE '%price%')), '0');
+  PERFORM t_expect('struct: no Phase A function does SELECT * or names a cost column (X: no cost data read)',
+    (SELECT count(*)::text FROM pg_proc WHERE proname IN ('lock_job_baseline','job_visibility_guard','job_task_client_visible','job_task_weight','job_task_planned_pct',
+      'job_schedule_status','job_task_links_no_cycle','job_tasks_baseline_guard') AND (prosrc ~* 'select +[*]' OR prosrc ~* '(_ttd|cost|price|margin)')), '0');
 END $$;
 
 -- ===== 2. function exposure (X13) =====
@@ -854,6 +857,8 @@ BEGIN
   FOREACH c IN ARRAY ARRAY['baseline_start=''2026-06-03''', 'baseline_end=''2026-06-30''', 'baseline_locked_at=now()'] LOOP
     PERFORM t_expect('base: single-column direct write refused: ' || c, t_dml('authenticated', ops, 'UPDATE job_tasks SET ' || c || ' WHERE id=''' || t || ''''), 'err:P0001');
   END LOOP;
+  PERFORM t_expect('base: INSERT with baseline_end only is refused', t_dml('authenticated', ops, 'INSERT INTO job_tasks (company_id, job_id, task_name, baseline_end) VALUES (''c1000000-0000-0000-0000-000000000001'',''b1000000-0000-0000-0000-0000000000c1'',''x'',''2026-01-01'')'), 'err:P0001');
+  PERFORM t_expect('base: INSERT with baseline_locked_at only is refused', t_dml('authenticated', ops, 'INSERT INTO job_tasks (company_id, job_id, task_name, baseline_locked_at) VALUES (''c1000000-0000-0000-0000-000000000001'',''b1000000-0000-0000-0000-0000000000c1'',''x'', now())'), 'err:P0001');
   PERFORM t_expect('con: link whose TASK sits in another job is rejected',
     t_dml('postgres', NULL, pg_temp.lk('d1000000-0000-0000-0000-000000000001', 'f1000000-0000-0000-0000-000000000001')), 'err:23514');
   PERFORM t_expect('con: link whose PREDECESSOR sits in another job is rejected',

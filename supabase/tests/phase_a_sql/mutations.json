@@ -198,8 +198,8 @@
  },
  {
   "name": "lock: company membership dropped",
-  "find": "SELECT * INTO v_job FROM jobs WHERE id = p_job_id AND company_id IN (SELECT my_company_ids());",
-  "replace": "SELECT * INTO v_job FROM jobs WHERE id = p_job_id;"
+  "find": "FROM jobs j WHERE j.id = p_job_id AND j.company_id IN (SELECT my_company_ids());",
+  "replace": "FROM jobs j WHERE j.id = p_job_id;"
  },
  {
   "name": "lock: reason rule removed",
@@ -243,12 +243,12 @@
  },
  {
   "name": "lock: audit user_id dropped",
-  "find": "VALUES (p_job_id, v_job.job_no, auth.uid(),",
-  "replace": "VALUES (p_job_id, v_job.job_no, NULL,"
+  "find": "VALUES (p_job_id, v_job_no, auth.uid(),",
+  "replace": "VALUES (p_job_id, v_job_no, NULL,"
  },
  {
   "name": "lock: audit job_no dropped",
-  "find": "VALUES (p_job_id, v_job.job_no, auth.uid(),",
+  "find": "VALUES (p_job_id, v_job_no, auth.uid(),",
   "replace": "VALUES (p_job_id, NULL, auth.uid(),"
  },
  {
@@ -713,8 +713,8 @@
  },
  {
   "name": "status: On Hold label",
-  "find": "WHEN v_job.status = 'On Hold' THEN 'On hold'",
-  "replace": "WHEN v_job.status = 'On Hold' THEN 'On Hold'"
+  "find": "WHEN v_jstatus = 'On Hold' THEN 'On hold'",
+  "replace": "WHEN v_jstatus = 'On Hold' THEN 'On Hold'"
  },
  {
   "name": "status: late overdue rule dropped",
@@ -743,8 +743,13 @@
  },
  {
   "name": "status: slip baseline end ignored",
-  "find": "SELECT coalesce(max(baseline_end), v_job.due_date) INTO v_base_end",
-  "replace": "SELECT coalesce(v_job.due_date, max(baseline_end)) INTO v_base_end"
+  "find": "SELECT coalesce(max(baseline_end), v_due) INTO v_base_end",
+  "replace": "SELECT coalesce(v_due, max(baseline_end)) INTO v_base_end"
+ },
+ {
+  "name": "status: reads a cost column",
+  "find": "SELECT j.status, j.due_date INTO v_jstatus, v_due FROM jobs j WHERE j.id = p_job_id;",
+  "replace": "PERFORM j.quoted_ttd FROM jobs j WHERE j.id = p_job_id; SELECT j.status, j.due_date INTO v_jstatus, v_due FROM jobs j WHERE j.id = p_job_id;"
  },
  {
   "name": "status: remaining work rounded down",
