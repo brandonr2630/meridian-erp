@@ -1,6 +1,40 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-21 · Session 69*
+*Last updated: 2026-10-21 · Session 69 (file restructured: newest session first, stale statuses fixed, open items consolidated)*
+
+---
+
+## Quick Reference
+
+| Item | Value |
+|------|-------|
+| Live URL | `https://erp.terranresources.com` |
+| GitHub repo | `brandonr2630/meridian-erp` |
+| Deploy | Push to `master` via PR. `.github/workflows/deploy.yml` calls the shared reusable workflow `brandonr2630/projects/.github/workflows/deploy.yml@master`, which deploys to GreenGeeks over SSH/rsync (the cPanel Fileman API path was retired after the WAF blocks) |
+| Supabase | Project "Terran Group ERP" (prod). Free plan cap of 2 projects is full (`terran-lab` is the other) |
+| Tests | No CI. Local: `node --test scripts/tests/...`, throwaway-Postgres suites via `bash supabase/tests/d0c_common/run.sh <family>` (Docker) |
+
+---
+
+## Open items (consolidated 2026-10-21; update here, not in old sessions)
+
+**Owner-only checks (Claude cannot log in to the live ERP):**
+1. User Management, Edit Permissions and Role Manager load and save after D0d (rollback: `supabase/rollbacks/202610211000_d0d_identity_down.sql`) (S67/S68).
+2. Create User and Edit User with a throwaway account, incl. an 11-character password to see the real error (S68).
+3. A work order's Schedule card: Apply template, add tasks, milestone, predecessor, Lock baseline; check KPI tiles and Gantt (S66/S68).
+4. Viewer / Office Admin login: Work Orders shows "Read-only access" and no Save buttons (S68).
+5. Optional Supabase dashboard: "Require current password when updating". Leaked-password protection needs the Pro plan (S68).
+6. Create 3-4 ProjectLibre/MS Project XML sample projects and commit them under `scripts/tests/schedule/mspdi/`; review the A2 spec and its open questions O1-O8 (S69).
+7. Older: PO module live click-through (S48) and PO list search/pagination (S49); `www.erp` alias/cert (S51); rotate the ERP password; confirm the BMS Bar Stock cost in Job Config; watch for GreenGeeks WAF block recurrence (S47).
+
+**Claude-side, waiting on a go-ahead or a trigger:**
+- **Push branch `docs/phase-a2-projectlibre`** and open the PR. It exists only in the local worktree `.worktrees/spec-a2-projectlibre` (S69).
+- On A2 acceptance: add the roadmap row, cross-phase rules X24-X28 and the Phase D note (S69).
+- Roadmap: Phase B (quality: ITP, hold points, NCRs), then C (progress, S-curve, snapshots), then D (client portal). D0 prerequisites are done. Needs owner go-ahead.
+- Housekeeping: remove merged worktrees under `.worktrees/` with `git worktree remove`.
+- Parked: staging deploy gate (S52, blocked on the Supabase project cap); Supabase Branching `main` record stuck in `MIGRATIONS_FAILED` (S52, not the prod database).
+
+**Gotcha:** Edit/Write are blocked on the base repo's worktrees. Write the file to the scratchpad and `cp` it in. Pull or branch from `origin/master` before reading this file (a stale checkout once stopped at Session 51).
 
 ---
 
@@ -85,7 +119,7 @@
 - **To apply:** run the migration in the SQL editor, then `live_verify.sql`, expect `FAILS: 0` in the error text; roll back with the down script if any real-user check fails. Audit any SECURITY DEFINER function that writes these three tables first (they run as the owner and skip the guard triggers by design).
 - **Review round 2 (independent attack review, all fixed with tests first):** (1) `erp_users` INSERT is super-only (no puppet users / client takeover; create-erp-user uses service_role); (2) profile columns are global, so a non-super may change someone else's row only if they administer the home company AND every company the person has an assignment in (`d0d_can_admin_user`); (3) role ceiling is symmetric (adding AND removing an atom needs the atom); (4) non-super role writes must use real booleans (a planted string made `user_has_perm` raise 22P02 for holders); (5) `d0d_user_is_super` / `d0d_role_is_super` answer only to user admins and `roles_select` = global + own-company roles (+ all for supers); (6) two mutants formerly listed as equivalent now have tests.
 - **Known residuals:** an `admin:users` holder can still create a puppet user with a fresh email through the edge function and assign any non-super role in their company, i.e. `admin:users` effectively means every non-super atom in that company. Older residuals: (erp_users INSERT and shared-user lockout are now closed); assignments are not capped by the assigner's atoms (only role edits are).
----
+
 ---
 
 ## Session 66 — Phase A migration APPLIED to prod (2026-10-21)
@@ -106,33 +140,9 @@
 
 ---
 
-## Session 60 — create-erp-user v8 DEPLOYED; company-scoped user-admin functions v9 / v4 DEPLOYED
----
+## Session 65 — Phase A task table + phases/links data layer (live since Session 66; degrades without the migration)
 
-## Session 63 — Phase A KPI strip + baseline lock UI (NOT applied; needs the SQL migration)
-
-**Date:** 2026-10-20. Branch `feat/phase-a-ui-kpi` (stacked on `feat/phase-a-compute`). One block `// ── SCHEDULE KPI ──` ... `// ── END SCHEDULE KPI ──` above the compute block, one CSS block `/* schedule-kpi:begin */`, and the Schedule card now has `<div id="jc-sched-kpis">` above the bar (legacy `#jc-sched-overall` kept, hidden).
-
-- **Entry point** `jcRenderSchedKpis()` (never throws; the task loader/table agent must call it after every load/edit). Reads `jcTasks`, `jcSchedPhases`, `jcSchedLinks`, `jcCurrentJobId` at call time and the job status / due date from the form (`jcSchedJobCtx()`), so it must also be called when the due date or status changes.
-- **Tiles:** Overall progress (bar + planned marker) and Schedule status pill with "Handover forecast .. · due .. (+N d)", all from `jcSchedCompute`.
-- **Baseline:** caption from max `baseline_locked_at` plus the latest `job_audit_log` baseline row for the name (cached). Button (`ops:work-orders:approve`, not read-only, saved job, a dated task): first lock = confirm dialog, re-baseline = inline mandatory reason. Calls RPC `lock_job_baseline(p_job_id, p_reason)` via `sb('rpc/...')`; a missing function shows "Baseline locking is not available yet".
-- **Not applied / not verified:** the RPC does not exist in prod until the SQL migration leaf lands, so the button cannot be exercised end to end; no real-browser run behind the login (only a static render of the tiles in dark and light themes).
-- **Tests:** `node --test scripts/tests/ui/schedule-kpi.test.mjs` (30) and `node scripts/tests/ui/schedule-kpi-mutate.mjs` (31/31 caught).
----
-
-## Session 64 — Phase A custom Gantt renderer (UI only; reads the new columns, needs the SQL migration for phases/links)
-
-**Date:** 2026-10-20. Branch `feat/phase-a-ui-gantt` (stacked on `feat/phase-a-compute`). Replaces the frappe-gantt chart in the per-job "Schedule & Tasks" card with a dependency-free renderer in ONE block of `index.html`, `// ── SCHEDULE GANTT RENDERER ──` ... `// ── END SCHEDULE GANTT RENDERER ──`, directly below `// ── END SCHEDULE COMPUTE ──`, plus one CSS block `/* schedule-gantt:begin */ ... end`. The only other edit: `jcRenderSchedGantt()` now just calls `jcRenderJobGantt()` (same name, `#jc-sched-zoom` Day/Week/Month = 28/8/3 px per day). The portfolio Gantt and `jcLoadGanttLib` are untouched. No prod change, no SQL.
-
-- **Pure layout + dumb drawer:** `jcGanttLayout(model, opts)` returns plain data (rows with y, bars x/width, ghost, progress width, diamonds, TODAY x, axis ticks, connector paths); `jcGanttDraw(el, layout, ui)` only draws it with `createElementNS` / `textContent` / `setAttribute` (never innerHTML). `jcRenderJobGantt()` never throws (quiet "could not be drawn").
-- **Reads at call time:** `jcTasks`, `jcSchedPhases`, `jcSchedLinks` (undefined = []), the open job's due date/status from the live form (`#jc-f-due-date`, active `#jc-status-btns` button) with `jcDashData` as fallback. Critical colouring uses `jcSchedCompute().crit`; if compute throws it falls back to the cached `is_critical`. With no `jcSchedLinks` rows it builds links from the legacy `depends_on`.
-- **Behaviour:** phase headers (tint, chevron, derived span, weighted % from `phaseRollups`, thin rollup bar) + implicit Unphased group; ghost bar from baseline (35%, 4 px lower, thinner); milestone diamonds (filled at 100, red outline when past today and incomplete); gold TODAY line above the bars (middle of today's local-date cell, flag in the sticky axis; scrolled into view on open / zoom change); critical-only connectors with a "Show all dependencies" toggle; hover tooltip incl. slip days and "Added after baseline". Collapse state lives in a module Set, reset when the job id changes, kept across redraws together with the scroll position.
-- **Deviations / choices:** the sticky date axis is its own small `<svg>` above the body `<svg>` (sticky cannot live inside one svg); left pane is `position:sticky; left:0` inside one scroll container so horizontal scroll moves only the timeline. Dates outside 1990..2100 count as bad data (row shows "unscheduled"). A task with only one date is "unscheduled". End before start draws the span between and flags it in the tooltip. The month name repeats about every 180 px in the axis so it stays readable when scrolled. Right padding leaves 240 px for a milestone label.
-- **Tests:** `node --test scripts/tests/ui/schedule-gantt.test.mjs` (43 tests: pure layout, fake-DOM drawer incl. XSS, entry point, static checks); `node scripts/tests/ui/schedule-gantt-mutate.mjs` breaks the block 50 ways and must catch all. Looked at in a real browser on a scratch page (outside the repo) at all three zooms; not yet seen inside the live ERP page (needs the migration + login).
-- **Next:** merge after the KPI strip and task-table branches; check the card once the migration is applied (a long job at Month zoom, many phases, narrow windows: the left pane is a fixed 320 px).
----
-
-## Session 65 — Phase A task table + phases/links data layer (degrades without the migration)
+> Status: superseded. Migration applied in Session 66; the fallback path is now only a safety net.
 
 **Date:** 2026-10-20. Branch `feat/phase-a-ui-table` (stacked on `feat/phase-a-compute`). Staff UI leaf of Phase A in `index.html`: the Schedule card's data layer and task table. Block `// ── SCHEDULE TASK TABLE ──` ... `// ── END SCHEDULE TASK TABLE ──` sits directly above `jcLoadTasks()` (CSS: `/* schedule-table:begin */` block next to the `.jc-sched-*` rules); `jcLoadTasks/jcRenderTasks/jcAddTask/jcTaskSet/jcDeleteTask` were rewritten in place. Globals `jcSchedPhases` / `jcSchedLinks` are declared right after `jcTasks`.
 
@@ -145,25 +155,41 @@
 - **Contract with the other leaves:** after every load and edit `jcRenderSchedKpis()` then `jcRenderSchedGantt()` are called, each guarded by `typeof === 'function'`.
 - **Tests:** `node --test scripts/tests/ui/schedule-table.test.mjs` (54) and `node scripts/tests/ui/schedule-table-mutate.mjs` (54/54 mutants caught). `scripts/tests/schedule/compute.test.mjs` gap check relaxed (other leaves add blocks between the compute block and `jcLoadTasks`).
 - **Not verified:** a real browser against a migrated database (no migration exists in prod); the picker/dropdown styling.
+
 ---
 
-## Session 60 — create-erp-user v8 DEPLOYED; company-scoped user-admin functions built (v9 / v4, NOT deployed)
+## Session 64 — Phase A custom Gantt renderer (UI only; reads the new columns, live since Session 66)
 
-**Date:** 2026-10-20. (1) `create-erp-user` v8 (real Auth error messages, PR #149) deployed to prod with `verify_jwt=false`; probed without credentials: OPTIONS 200, POST without token 401. (2) Closes the parked finding that both user functions authorised with the non-company-scoped `user_has_perm('admin:users')`.
+> Status: superseded. Migration applied in Session 66; not yet seen in the live ERP by the owner (see Open items).
 
-| File | What |
-|---|---|
-| `supabase/functions/{create,update}-erp-user/authz.ts` | IDENTICAL copy in both folders (a test fails on drift; the deploy takes one folder per function). Verifies the bearer token with Supabase Auth, then reads the caller's rights from the database (service role, keyed on the verified user id): `isSuper` = an active role with `admin:companies`; `adminCompanies` = companies where a role assigned IN THAT COMPANY carries `admin:users`. |
-| `create-erp-user/handler.ts` (+ `index.ts`) | Caller must administer the TARGET company; company must exist; role must exist and be global or owned by that company; only a super admin may assign a role with `admin:companies`; server-side 12 character password minimum and email/uuid validation; everything is checked before anything is created; writes a `staff.create` audit row (no secrets). |
-| `update-erp-user/handler.ts` (+ `index.ts`, `errors.ts`) | Super admin may change anyone; otherwise the caller must administer EVERY company the target belongs to and the target must not be a super admin; callers with no admin rights get 403 before any lookup (no existence oracle); 12 character minimum (was 8); the real Auth reason is reported (it read `message`, GoTrue sends `msg`); `staff.credentials.update` audit row names fields only. Source is now in the repo (it was not before). |
-| `supabase/tests/authz/` | 39 tests against an in-memory Auth/PostgREST fake (`node --test supabase/tests/authz/create.test.mjs supabase/tests/authz/update.test.mjs`) and `mutate.mjs` (25 deliberate breakages, all caught). |
+**Date:** 2026-10-20. Branch `feat/phase-a-ui-gantt` (stacked on `feat/phase-a-compute`). Replaces the frappe-gantt chart in the per-job "Schedule & Tasks" card with a dependency-free renderer in ONE block of `index.html`, `// ── SCHEDULE GANTT RENDERER ──` ... `// ── END SCHEDULE GANTT RENDERER ──`, directly below `// ── END SCHEDULE COMPUTE ──`, plus one CSS block `/* schedule-gantt:begin */ ... end`. The only other edit: `jcRenderSchedGantt()` now just calls `jcRenderJobGantt()` (same name, `#jc-sched-zoom` Day/Week/Month = 28/8/3 px per day). The portfolio Gantt and `jcLoadGanttLib` are untouched. No prod change, no SQL.
 
-**DEPLOYED 2026-10-21 with owner approval** (create-erp-user v9, update-erp-user v4, `verify_jwt=false`; probed without credentials: OPTIONS 200, no token 401, forged token 401). Not yet exercised as a real admin: test Create User and Edit User with a throwaway account. (Original note: deploying changes live behaviour of Create User and Edit User, so it waited for approval (`verify_jwt=false`, deploy folder contents of each function incl. `authz.ts` and `errors.ts`). After deploy, test with a throwaway user as an admin.
+- **Pure layout + dumb drawer:** `jcGanttLayout(model, opts)` returns plain data (rows with y, bars x/width, ghost, progress width, diamonds, TODAY x, axis ticks, connector paths); `jcGanttDraw(el, layout, ui)` only draws it with `createElementNS` / `textContent` / `setAttribute` (never innerHTML). `jcRenderJobGantt()` never throws (quiet "could not be drawn").
+- **Reads at call time:** `jcTasks`, `jcSchedPhases`, `jcSchedLinks` (undefined = []), the open job's due date/status from the live form (`#jc-f-due-date`, active `#jc-status-btns` button) with `jcDashData` as fallback. Critical colouring uses `jcSchedCompute().crit`; if compute throws it falls back to the cached `is_critical`. With no `jcSchedLinks` rows it builds links from the legacy `depends_on`.
+- **Behaviour:** phase headers (tint, chevron, derived span, weighted % from `phaseRollups`, thin rollup bar) + implicit Unphased group; ghost bar from baseline (35%, 4 px lower, thinner); milestone diamonds (filled at 100, red outline when past today and incomplete); gold TODAY line above the bars (middle of today's local-date cell, flag in the sticky axis; scrolled into view on open / zoom change); critical-only connectors with a "Show all dependencies" toggle; hover tooltip incl. slip days and "Added after baseline". Collapse state lives in a module Set, reset when the job id changes, kept across redraws together with the scroll position.
+- **Deviations / choices:** the sticky date axis is its own small `<svg>` above the body `<svg>` (sticky cannot live inside one svg); left pane is `position:sticky; left:0` inside one scroll container so horizontal scroll moves only the timeline. Dates outside 1990..2100 count as bad data (row shows "unscheduled"). A task with only one date is "unscheduled". End before start draws the span between and flags it in the tooltip. The month name repeats about every 180 px in the axis so it stays readable when scrolled. Right padding leaves 240 px for a milestone label.
+- **Tests:** `node --test scripts/tests/ui/schedule-gantt.test.mjs` (43 tests: pure layout, fake-DOM drawer incl. XSS, entry point, static checks); `node scripts/tests/ui/schedule-gantt-mutate.mjs` breaks the block 50 ways and must catch all. Looked at in a real browser on a scratch page (outside the repo) at all three zooms; not yet seen inside the live ERP page (needs the migration + login).
+- **Next:** merge after the KPI strip and task-table branches; check the card once the migration is applied (a long job at Month zoom, many phases, narrow windows: the left pane is a fixed 320 px).
 
-**Finding (separate, bigger, NOT fixed):** the same escalation exists at the database level, so tightening the functions alone does not close it. `erp_user_company_roles` INSERT/UPDATE policies (`ucr_insert`, `ucr_update`) allow any holder of `admin:users` (not company-scoped) to assign or change ANY role, including `super_admin`, for rows in their companies; `erp_users` UPDATE (`rls_erp_users_update`) lets ANY staff member in a company edit every profile in it (name, `is_active`, `company_id`). The ERP's Edit Permissions modal writes `erp_user_company_roles` directly. Fix = a D0d migration (role-assignment policies requiring a company-scoped admin and forbidding `admin:companies` roles unless super admin; restrict `erp_users` updates) plus routing the modal through a function. Needs its own tests and approval.
 ---
 
-## Session 62 — Phase A compute module + shared fixture (JS side; NOT yet wired into the UI)
+## Session 63 — Phase A KPI strip + baseline lock UI (live since Session 66)
+
+> Status: superseded. The `lock_job_baseline` RPC exists in prod since Session 66; the owner check of the Schedule card is still open (see Open items).
+
+**Date:** 2026-10-20. Branch `feat/phase-a-ui-kpi` (stacked on `feat/phase-a-compute`). One block `// ── SCHEDULE KPI ──` ... `// ── END SCHEDULE KPI ──` above the compute block, one CSS block `/* schedule-kpi:begin */`, and the Schedule card now has `<div id="jc-sched-kpis">` above the bar (legacy `#jc-sched-overall` kept, hidden).
+
+- **Entry point** `jcRenderSchedKpis()` (never throws; the task loader/table agent must call it after every load/edit). Reads `jcTasks`, `jcSchedPhases`, `jcSchedLinks`, `jcCurrentJobId` at call time and the job status / due date from the form (`jcSchedJobCtx()`), so it must also be called when the due date or status changes.
+- **Tiles:** Overall progress (bar + planned marker) and Schedule status pill with "Handover forecast .. · due .. (+N d)", all from `jcSchedCompute`.
+- **Baseline:** caption from max `baseline_locked_at` plus the latest `job_audit_log` baseline row for the name (cached). Button (`ops:work-orders:approve`, not read-only, saved job, a dated task): first lock = confirm dialog, re-baseline = inline mandatory reason. Calls RPC `lock_job_baseline(p_job_id, p_reason)` via `sb('rpc/...')`; a missing function shows "Baseline locking is not available yet".
+- **Not applied / not verified:** the RPC does not exist in prod until the SQL migration leaf lands, so the button cannot be exercised end to end; no real-browser run behind the login (only a static render of the tiles in dark and light themes).
+- **Tests:** `node --test scripts/tests/ui/schedule-kpi.test.mjs` (30) and `node scripts/tests/ui/schedule-kpi-mutate.mjs` (31/31 caught).
+
+---
+
+## Session 62 — Phase A compute module + shared fixture (JS side; wired into the UI in Sessions 63-65)
+
+> Status: superseded. Wired in by the Session 63-65 UI leaves; live since Session 66.
 
 **Date:** 2026-10-20. Branch `feat/phase-a-compute`. Adds the one shared, DOM-free compute block to `index.html` (`// ── SCHEDULE COMPUTE (shared) ──` ... `// ── END SCHEDULE COMPUTE ──`, directly above `jcLoadTasks()`): `jcTaskWeight`, `jcPlannedPct`, `jcSchedCompute({tasks, links, phases, job, today})`. Nothing calls it yet; no UI, no migration, no prod change.
 
@@ -172,9 +198,12 @@
 - **Spec vs SQL:** the SQL stores the status gap in an `integer` variable, so `overall - plannedToday` is rounded half away from zero before `< -10` (gap -10.4 is On track, -10.5 is At risk). The prose says `gap < -10` on the numeric value. JS follows the SQL; the fixture pins both cases.
 - **Tests:** `node --test scripts/tests/schedule/compute.test.mjs` (45 hand-derived cases in `scripts/tests/schedule/fixture.json`, shared with the SQL run; plus unit, cycle, determinism, static, constant-mirroring tests). `node scripts/tests/schedule/mutate.mjs` breaks the block 45 ways and must catch every one.
 - **Next:** wire the module (KPI strip, Gantt, portfolio colouring) after the Phase A migration lands; run the same fixture against the SQL functions.
+
 ---
 
-## Session 61 — Phase A (Schedule v2) SQL built and tested on throwaway Postgres, NOT applied
+## Session 61 — Phase A (Schedule v2) SQL built and tested on throwaway Postgres, applied to prod in Session 66
+
+> Status: superseded. Applied to prod 2026-10-21 as `phase_a_schedule_v2` (Session 66). The "Next" list below is historical.
 
 **Date:** 2026-10-21. The desk-checked SQL in `docs/specs/project-portal/phase-a-schedule-v2.md` was executed for the first time on a throwaway Postgres 17 (Docker). Nothing was applied to prod, no Supabase MCP tool was used, `index.html` is untouched. The spec now embeds the executed migration verbatim plus an "Execution notes" section.
 
@@ -194,6 +223,25 @@
 **Known limits (not fixed, report only):** `user_has_perm` is not company-scoped (a user with approve in company B and membership in A can lock A's baseline); `job_phases.job_id`/`job_tasks.phase_id` are not checked against the row's company (same as live `job_tasks`); the guard writes an audit row against whatever `job_id` the row carries.
 
 **Next:** (1) owner review of the PR; (2) before applying to prod run read-only pre-flights: legacy `depends_on` cycles/self/cross-job rows (expect NOTICEs), the Q-D SECURITY DEFINER sweep after; (3) apply with `apply_migration`, then verify as simulated identities incl. through the real REST API (publish as write-only role refused); (4) drop the real `fixture.json` into `scripts/tests/schedule/` and run `bash supabase/tests/phase_a_sql/run-fixture.sh`; (5) UI leaf (Phase A UI, shared JS compute) is a separate PR.
+
+---
+
+## Session 60 — create-erp-user v8 DEPLOYED; company-scoped user-admin functions DEPLOYED (v9 / v4, 2026-10-21)
+
+> Status: create-erp-user v9 and update-erp-user v4 deployed 2026-10-21 (see the DEPLOYED note below).
+
+**Date:** 2026-10-20. (1) `create-erp-user` v8 (real Auth error messages, PR #149) deployed to prod with `verify_jwt=false`; probed without credentials: OPTIONS 200, POST without token 401. (2) Closes the parked finding that both user functions authorised with the non-company-scoped `user_has_perm('admin:users')`.
+
+| File | What |
+|---|---|
+| `supabase/functions/{create,update}-erp-user/authz.ts` | IDENTICAL copy in both folders (a test fails on drift; the deploy takes one folder per function). Verifies the bearer token with Supabase Auth, then reads the caller's rights from the database (service role, keyed on the verified user id): `isSuper` = an active role with `admin:companies`; `adminCompanies` = companies where a role assigned IN THAT COMPANY carries `admin:users`. |
+| `create-erp-user/handler.ts` (+ `index.ts`) | Caller must administer the TARGET company; company must exist; role must exist and be global or owned by that company; only a super admin may assign a role with `admin:companies`; server-side 12 character password minimum and email/uuid validation; everything is checked before anything is created; writes a `staff.create` audit row (no secrets). |
+| `update-erp-user/handler.ts` (+ `index.ts`, `errors.ts`) | Super admin may change anyone; otherwise the caller must administer EVERY company the target belongs to and the target must not be a super admin; callers with no admin rights get 403 before any lookup (no existence oracle); 12 character minimum (was 8); the real Auth reason is reported (it read `message`, GoTrue sends `msg`); `staff.credentials.update` audit row names fields only. Source is now in the repo (it was not before). |
+| `supabase/tests/authz/` | 39 tests against an in-memory Auth/PostgREST fake (`node --test supabase/tests/authz/create.test.mjs supabase/tests/authz/update.test.mjs`) and `mutate.mjs` (25 deliberate breakages, all caught). |
+
+**DEPLOYED 2026-10-21 with owner approval** (create-erp-user v9, update-erp-user v4, `verify_jwt=false`; probed without credentials: OPTIONS 200, no token 401, forged token 401). Not yet exercised as a real admin: test Create User and Edit User with a throwaway account. (Original note: deploying changes live behaviour of Create User and Edit User, so it waited for approval (`verify_jwt=false`, deploy folder contents of each function incl. `authz.ts` and `errors.ts`). After deploy, test with a throwaway user as an admin.
+
+**Finding (separate, bigger, NOT fixed):** the same escalation exists at the database level, so tightening the functions alone does not close it. `erp_user_company_roles` INSERT/UPDATE policies (`ucr_insert`, `ucr_update`) allow any holder of `admin:users` (not company-scoped) to assign or change ANY role, including `super_admin`, for rows in their companies; `erp_users` UPDATE (`rls_erp_users_update`) lets ANY staff member in a company edit every profile in it (name, `is_active`, `company_id`). The ERP's Edit Permissions modal writes `erp_user_company_roles` directly. Fix = a D0d migration (role-assignment policies requiring a company-scoped admin and forbidding `admin:companies` roles unless super admin; restrict `erp_users` updates) plus routing the modal through a function. Needs its own tests and approval.
 
 ---
 
@@ -228,7 +276,7 @@
 
 ---
 
-## Session 58 — Work Orders read-only mode (companion to D0c; needed before D0c is applied)
+## Session 58 — Work Orders read-only mode (companion to D0c; shipped before D0c was applied)
 
 **Date:** 2026-10-20. D0c makes the database refuse work-order writes (jobs, entries, audit rows) without `ops:work-orders:write`, but the Work Orders UI only gated the nav item on `:read`, so a read-only user (viewer, Office Admin) could click Save. Without this change they would get either a visible "Save failed" or, when no child rows need inserting, a false "saved" (RLS-denied PATCH/DELETE return HTTP 200 with zero rows, no error). No data is lost either way (denied deletes and denied inserts are symmetrical), but the message is wrong.
 
@@ -243,7 +291,7 @@
 
 ---
 
-## Session 57 — create-erp-user real error messages; repo copy refreshed (deploy pending approval)
+## Session 57 — create-erp-user real error messages; repo copy refreshed (deployed as v8, then v9, see Session 60)
 
 **Date:** 2026-10-20. The Create User form showed only "Failed to create auth user" for every failure: Supabase Auth reports its reason in `msg`/`error_code`, but the function read only `message`. Found when creating the throwaway test user (an 11-character password was rejected by the 12-character minimum with no explanation).
 
@@ -964,24 +1012,6 @@ New feature: each row in the Drawing Control Register can now have a PDF attache
 - **Job → Invoice link** — completed job pre-fills Meridian invoice (Session 21)
 - **Job Cards PDF** — printable work order report
 - **Work Orders in Client 360** — requires `contact_id` FK on `jobs`
-
----
-
-## Session 34 — RBAC RLS infinite recursion fix
-
-**Date:** 2026-06-22
-**Branch / PRs:** [PR #86](https://github.com/brandonr2630/meridian-erp/pull/86) · [PR #87](https://github.com/brandonr2630/meridian-erp/pull/87)
-
----
-
-## Quick Reference
-
-| Item | Value |
-|------|-------|
-| Live URL | `https://erp.terranresources.com` |
-| GitHub repo | `brandonr2630/meridian-erp` |
-| Deploy | Push to `master` via PR → GitHub Actions → GreenGeeks cPanel auto-deploys |
-| Deploy workflow | `.github/workflows/deploy.yml` → cPanel Fileman API (`chi203.greengeeks.net`) |
 
 ---
 
@@ -1895,7 +1925,7 @@ Rewrote `.github/workflows/deploy.yml` to upload files directly via `Fileman/sav
 
 ### Application
 
-The entire app is `index.html` — approximately 15,200 lines of inline CSS and JavaScript. **Never edit `index-archive-*.html` or `index2–5.html`; those are archives.**
+The entire app is `index.html` — approximately 20,350 lines (measured 2026-10-21) of inline CSS and JavaScript. **Never edit `index-archive-*.html` or `index2–5.html`; those are archives.**
 
 ### Backend
 
@@ -1935,7 +1965,15 @@ PDFs rendered client-side with a custom multi-page renderer. SheetJS lazy-loaded
 
 ## Known Issues
 
-*(none)*
+No open defects. Known limits, by design or deferred (details in Sessions 59 and 68):
+
+- `user_has_perm()` is not company-scoped; the older D0c policies still use it (D0d helpers are company-scoped).
+- An `admin:users` holder can create a user with a fresh email through `create-erp-user` and assign any non-super role in their company; assignments are not capped by the assigner's own atoms.
+- Office Admin can rename approved cost items (RLS cannot restrict columns); `employees` PII is readable by all Work Orders/AP readers; commercial job columns are visible to read roles.
+- A refused job delete (no delete right) can look successful in the UI (`jcDeleteJob`); other modules share the "denied update looks like success" shape.
+- `job_drawings.storage_key` prefix = `company_id` is not enforced yet (Phase B guard).
+- The publish refusal for a write-only role cannot be tested live (no such role); it is covered by the throwaway-Postgres suite.
+- Advisors that remain: `set_updated_at` mutable `search_path` (minor) and the intended SECURITY DEFINER-helper lints.
 
 ## Backlog
 
@@ -1946,14 +1984,14 @@ Items are grouped by theme and ordered by suggested priority within each group. 
 - [x] **CRM module** — Pipeline, Activities, Tasks views under the Sales nav; `type: development` for dev inquiry handling. Built in Session 18.
 - [x] **"Convert to Quote" on won deals** — write `quotation_id` back to the opportunity and pre-fill the quote form. Built in Session 28.
 - [x] **Client 360 view** — unified client profile (timeline, financials, deals, invoices, quotes, tasks). Built in Session 31. Work Orders excluded pending `contact_id` FK on `jobs`.
-- [ ] **Email delivery** — send invoices, quotes, and receipts directly from the app via Supabase Edge Function → Resend/SendGrid. Closes the biggest day-to-day manual step.
+- [x] **Email delivery** — send invoices, quotes, and receipts directly from the app via Supabase Edge Function → Resend/SendGrid. Closes the biggest day-to-day manual step. Built in Session 35 (Edge Function `send-document-email`, Resend).
 - [ ] **Recurring invoices** — flag an invoice as recurring with a frequency; auto-generate the next one on due date. Useful for retainer/monthly clients.
 - [ ] **Overdue reminders** — automated or one-click email reminder for outstanding AR balances. Drives off existing `balance_due` and `due_date` fields.
 
 ### Finance
 
 - [x] **Cash Flow Statement** — indirect method; `runCF()` + `getBSBalances()` helper. See Session 17.
-- [ ] **Purchase Orders** — PO that a bill can be matched against; enables approval-before-spend workflows and 3-way matching.
+- [x] **Purchase Orders** — PO that a bill can be matched against; enables approval-before-spend workflows and 3-way matching. Built in Session 48 (module live; list search/pagination Session 49).
 - [ ] **VAT / Tax report** — output tax vs input tax by period; useful for filing. Derived from tax-category accounts already in the CoA.
 - [ ] **Spend approval thresholds** — bills/POs above a configurable amount require admin approval before payment is released. Ties into existing role system.
 - [ ] **Credit limit management** — configurable credit limit per client; warning or block when a new invoice would exceed it.
@@ -1979,11 +2017,9 @@ Items are grouped by theme and ordered by suggested priority within each group. 
 
 ## Next Up
 
-### To Do
+See "Open items" at the top for the live list. Product to-dos not yet scheduled:
 
-- [ ] **Enable leaked password protection** — Supabase Dashboard → Authentication → Passwords. Cannot be set via SQL/MCP — requires a manual dashboard toggle.
-- [ ] **Job → Invoice link** — completed job's costing summary pre-fills a Meridian invoice (Session 21)
-- [ ] **Job Cards PDF** — printable job card / work order report for the workshop floor
-- [ ] **Work Orders in Client 360** — add `contact_id` FK to `jobs` table then wire into `loadClient360()`
-- [ ] **Orphaned storage cleanup** — job deletion cascades DB rows but leaves `job-drawings` storage objects; consider a Supabase Edge Function or pg trigger to delete storage objects when a job is deleted
-
+- [ ] **Job -> Invoice link** - completed job's costing summary pre-fills a Meridian invoice (Session 21)
+- [ ] **Job Cards PDF** - printable job card / work order report for the workshop floor
+- [ ] **Work Orders in Client 360** - add `contact_id` FK to `jobs`, then wire into `loadClient360()`
+- [ ] **Orphaned storage cleanup** - job deletion cascades DB rows but leaves `job-drawings` storage objects; consider an Edge Function or pg trigger
