@@ -1,6 +1,44 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-21 · Session 68 (wrap-up)*
+*Last updated: 2026-10-21 · Session 69*
+
+---
+
+## Session 69 — Phase A2 spec (ProjectLibre / MS Project compatibility) written; PR #137 verified (2026-10-21)
+
+**Done:**
+- **PR #137 (browser history sync) verified working live by the owner.** Closes the "merged unverified" note in Session 51.
+- **Phase A2 spec written and committed** on branch `docs/phase-a2-projectlibre` (off `origin/master`, worktree `.worktrees/spec-a2-projectlibre`), file `docs/specs/project-portal/phase-a2-projectlibre.md`. **Not pushed, no PR yet.** `verify-spec`, `verify-roadmap` and `verify-guards` pass. Spec only: no migration applied, no code changed.
+- ProjectLibre is installed at `C:\Program Files\ProjectLibre` (`ProjectLibre.exe`, bundled runtime; no separate Java needed). It is a GUI app: used for creating fixtures and manual interop checks, not scriptable from here.
+
+**What A2 decides (owner goals: share files with ProjectLibre/MS Project, copy a proven platform's features, link tasks to Work Orders for resources/QC/documents, client download of the schedule):**
+- A2 is **additive on top of Phase A, which is already live** (migration `phase_a_schedule_v2`, Session 66). Do not amend the Phase A spec.
+- **MS Project XML (MSPDI) is the only interchange format.** `.mpp` (proprietary binary) and `.pod` (ProjectLibre native, believed Java-serialised, unverified) are out; users re-save as XML. Owner rarely receives `.mpp`.
+- Schema (additive, no new table): `job_task_links.link_type` (FS/SS/FF/SF), `msp_uid` on `job_phases` and `job_tasks` (one UID space per job), RPCs `prepare_schedule_export` and `import_job_schedule` (atomic; append / merge / replace; replace and baseline need `ops:work-orders:approve`, replace needs a reason).
+- Calendar: Meridian schedules in calendar days. Export writes a 7-day calendar and pins starts with Start No Earlier Than so ProjectLibre cannot pull tasks earlier; import takes the file's dates as authoritative.
+- **Dedicated schedule window:** full-screen route `#/schedule/<job_id>`, opened in a new tab from the Work Order's Schedule card (task table, Gantt, details pane, import/export dialogs). Codec in its own pure file `schedule-msp.js`; `jcSchedCompute` and the Gantt functions stay in `index.html` and are reused.
+- **Client download** (contract only; built in Phase D): client-visible rows only (X22), no assignee names, weights, critical flag or baseline; audited via `prepare_schedule_export(..., 'client')`.
+- Proposes cross-phase rules X24-X28 (link types, interchange, UID space, audit/no-publish on import, task id as the anchor for later phases). They are **not yet added** to `00-overview.md`, `99-roadmap.md` or `phase-d-client-portal.md`; the spec ends with the list of those edits to make on acceptance.
+- Out of scope, with reasons: resources and utilisation (own phase "R", reuse `employees` and `config_equipment`), working calendars, scheduling constraints, arbitrary outline depth (two levels only; deeper levels flattened with a warning), task notes, Gantt drag-edit.
+
+**Risks to remember:**
+- **R1: the MSPDI details come from the public schema and memory; no ProjectLibre file has been inspected.** Fixtures from the owner come first.
+- Link types change `jcSchedCompute` and SQL `job_schedule_status`, which Phase A shipped. FS-only results must stay identical (the 45-case shared fixture must pass unmodified).
+- Two tabs may race on token refresh (`tryRestoreSession()`); check before building the new-tab window.
+- `import_job_schedule` is a definer function that can delete (replace mode) and must be owned by the owner of `lock_job_baseline`; it needs the independent attack review that D0d got.
+
+**Open questions in the spec (defaults apply unless the owner objects):** O1 flatten deeper outlines; O2 defer resources to Phase R; O3 copy-and-verify the codec into the portal; O4 codec in its own file, window inline; O5 no undo in v1; O6 no baseline in client files; O7 imported weights NULL; O8 add nullable `task_id` notes to the B and C specs.
+
+**Next steps:**
+1. **Owner:** create 3-4 sample projects in ProjectLibre and save each as MS Project XML (simple FS chain; mixed link types with lag and lead; milestones plus a summary task; resources plus a baseline; a Mon-Fri calendar project). Commit them under `scripts/tests/schedule/mspdi/`. Add an MS Project sample if available.
+2. Owner review of the A2 spec and its open questions, then push the branch and open a PR.
+3. On acceptance: add the roadmap row, X24-X28 and the Phase D note.
+4. Build order: engine (link types, extended fixture) first, then the codec, then the migration on the throwaway Postgres, then window UI, import dialog, export menu.
+
+**Housekeeping / gotchas found this session:**
+- The `Z:\09 DevPro\projects\meridian-erp` checkout was on `docs/handoff-pr137-note` and its `handoff.md` stopped at Session 51; `origin/master` was at Session 68. Pull or branch from `origin/master` before reading the handoff.
+- Edit/Write are blocked on the base repo's worktrees: write the file to the scratchpad and copy it in with `cp`.
+- Still open from earlier sessions: `www` alias/cert to-dos (Session 51), the PO module live click-through (Session 48), PO list search/pagination check (Session 49), rotate the ERP password, confirm the BMS Bar Stock cost in Job Config, GreenGeeks WAF block recurrence, and the owner checks listed in Session 68.
 
 ---
 
