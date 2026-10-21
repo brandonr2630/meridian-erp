@@ -2,6 +2,8 @@
 
 *Status: draft for review, round 2 · 2026-10-19 · applies the consistency and security reviews and the orchestrator's live read-only queries (`live-facts.md`). Depends on Phases A–C and on the blocking prerequisite D0.*
 
+> **Amendment 2026-10-21 (from the A2 owner decisions, O6).** (1) Clients **see baseline dates**: `portal_schedule` already returns `baseline_start`/`baseline_end` and the page draws a ghost bar, so the portal side stands; the A2 download contract now includes Baseline 0. (2) **New hard gate: a release / user agreement.** Access to project data requires the client to have accepted the current agreement version. The agreement restricts use of the information in legal proceedings, and **ownership stays with Q2 Machines**. Mechanism (design only, no SQL yet): a versioned agreement table (text, SHA-256 of the text, effective and retired dates), a per-client-user acceptance record (user, agreement version, time, text hash), a `portal_accept_agreement` RPC, `portal_me` reporting `agreement_required`, and a central check that makes every `portal_*` data RPC and the schedule download refuse until the current version is accepted. Acceptances and client exports are audited. Today `accepted_at` only records the first sign-in; it is not an agreement. The wording belongs to the owner's lawyer (see open questions 9 and 10). Tracked in the A2 spec as rule X29 and open point N8.
+
 ## Goal and scope
 
 Give named representatives of a Q2 Machines client a read-mostly, per-project portal. It is a **separate flat-file app** on its own subdomain, on the same Supabase project as the ERP (contract D3). It shows the mockup's Overview, Schedule, Quality, Documents, Messages and Team screens for the jobs a client has been granted. Clients can take four actions, each through a narrow `SECURITY DEFINER` RPC: respond to a hold point, approve or reject a drawing revision, send a message, and mark messages read. Staff invite clients, reply and revoke access inside the ERP. Clients are notified by email (a new portal edge function on the existing Resend path) and in the app.
@@ -1615,6 +1617,8 @@ Migration names and order follow X16 and X23 (`supabase/migrations/YYYYMMDDHHMM_
 6. **Staff role labels.** *Default: two relationship labels ("Q2 project contact" for the inviter, "Q2 project team" otherwise). A per-staff job title can be added later as an ERP field.*
 7. **Do clients see staff read receipts?** *Default: staff see client receipts; clients do not see staff receipts.*
 8. **Message retention?** *Default: life of the job plus 7 years; client auth accounts deleted 90 days after their last grant ends.*
+9. **Release agreement: text and legal effect.** *Default: the owner's lawyer drafts it; the system stores versioned text with its hash and requires re-acceptance on each new version.* Open: whether a clause restricting use in legal proceedings is enforceable in the owner's jurisdiction, and what a client who declines can see (default: nothing).
+10. **Who must accept?** *Default: every client user, individually, on first sign-in and again after each new version; an approver cannot accept for a viewer.*
 
 ## Acceptance criteria
 

@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-21 · Session 69 (file restructured: newest session first, stale statuses fixed, open items consolidated)*
+*Last updated: 2026-10-21 · Session 70*
 
 ---
 
@@ -24,12 +24,13 @@
 3. A work order's Schedule card: Apply template, add tasks, milestone, predecessor, Lock baseline; check KPI tiles and Gantt (S66/S68).
 4. Viewer / Office Admin login: Work Orders shows "Read-only access" and no Save buttons (S68).
 5. Optional Supabase dashboard: "Require current password when updating". Leaked-password protection needs the Pro plan (S68).
-6. Create 3-4 ProjectLibre/MS Project XML sample projects and commit them under `scripts/tests/schedule/mspdi/`; review the A2 spec and its open questions O1-O8 (S69).
-7. Older: PO module live click-through (S48) and PO list search/pagination (S49); `www.erp` alias/cert (S51); rotate the ERP password; confirm the BMS Bar Stock cost in Job Config; watch for GreenGeeks WAF block recurrence (S47).
+6. Create 3-4 ProjectLibre/MS Project XML sample projects and commit them under `scripts/tests/schedule/mspdi/` (S69). The A2 open questions O1-O8 were answered 2026-10-21 (S70); review the amended spec, especially the new design points N1-N11.
+7. Get the client release / user agreement drafted by your lawyer (S70): restricts use of the information in legal proceedings; ownership stays with Q2 Machines.
+8. Older: PO module live click-through (S48) and PO list search/pagination (S49); `www.erp` alias/cert (S51); rotate the ERP password; confirm the BMS Bar Stock cost in Job Config; watch for GreenGeeks WAF block recurrence (S47).
 
 **Claude-side, waiting on a go-ahead or a trigger:**
-- **Push branch `docs/phase-a2-projectlibre`** and open the PR. It exists only in the local worktree `.worktrees/spec-a2-projectlibre` (S69).
-- On A2 acceptance: add the roadmap row, cross-phase rules X24-X28 and the Phase D note (S69).
+- **A2 spec amended** with the O1-O8 decisions (S70); it grew a lot (hierarchy, resources with job-card auto-fill, undo/redo, client baseline plus agreement gate). Next: resolve N1-N11, decide the A2a/A2b/A2c split, then the engine.
+- On A2 acceptance: add the roadmap row, cross-phase rules X24-X30 (X29 agreement gate and X30 job-card actuals are proposed in S70) and the X1 summary-task amendment.
 - Roadmap: Phase B (quality: ITP, hold points, NCRs), then C (progress, S-curve, snapshots), then D (client portal). D0 prerequisites are done. Needs owner go-ahead.
 - Housekeeping: remove merged worktrees under `.worktrees/` with `git worktree remove`.
 - Parked: staging deploy gate (S52, blocked on the Supabase project cap); Supabase Branching `main` record stuck in `MIGRATIONS_FAILED` (S52, not the prod database).
@@ -38,11 +39,25 @@
 
 ---
 
+## Session 70 - A2 owner decisions recorded; handoff and spec corrections (2026-10-21)
+
+**Done:**
+- `handoff.md` restructured (PR #170): newest session first, stale statuses fixed, consolidated Open items.
+- The owner answered A2 open questions O1-O8. **Changed:** O1 real task hierarchy, O2 resources in A2 with auto-fill from the job-card sections, O5 undo/redo built, O6 clients see baseline behind a release agreement (ownership stays with Q2 Machines). O3, O4, O7, O8 keep their defaults.
+- A2 spec amended (new "Owner decisions" section, Superseded markers, new design points N1-N11, proposed X29 and X30) and a Phase D amendment (agreement gate, open questions 9-10). Spec text only: no migration, no code.
+- Fixed here: the A2 spec is merged (PR #168), not unpushed; `CLAUDE.md` line count for `index.html` (about 20,350).
+
+**Next:** you write the ProjectLibre fixtures and have the agreement drafted; resolve N1-N11 and decide whether to split A2 into A2a (links, hierarchy, codec, window), A2b (resources and job-card fill), A2c (undo/redo); then the engine.
+
+**Gotcha:** before writing "unpushed" or "not merged", check `git branch -a --contains <sha>` or `gh pr list`; handoff text goes stale.
+
+---
+
 ## Session 69 — Phase A2 spec (ProjectLibre / MS Project compatibility) written; PR #137 verified (2026-10-21)
 
 **Done:**
 - **PR #137 (browser history sync) verified working live by the owner.** Closes the "merged unverified" note in Session 51.
-- **Phase A2 spec written and committed** on branch `docs/phase-a2-projectlibre` (off `origin/master`, worktree `.worktrees/spec-a2-projectlibre`), file `docs/specs/project-portal/phase-a2-projectlibre.md`. **Not pushed, no PR yet.** `verify-spec`, `verify-roadmap` and `verify-guards` pass. Spec only: no migration applied, no code changed.
+- **Phase A2 spec written and committed** on branch `docs/phase-a2-projectlibre` (off `origin/master`, worktree `.worktrees/spec-a2-projectlibre`), file `docs/specs/project-portal/phase-a2-projectlibre.md`. **Merged to master via PR #168.** `verify-spec`, `verify-roadmap` and `verify-guards` pass. Spec only: no migration applied, no code changed.
 - ProjectLibre is installed at `C:\Program Files\ProjectLibre` (`ProjectLibre.exe`, bundled runtime; no separate Java needed). It is a GUI app: used for creating fixtures and manual interop checks, not scriptable from here.
 
 **What A2 decides (owner goals: share files with ProjectLibre/MS Project, copy a proven platform's features, link tasks to Work Orders for resources/QC/documents, client download of the schedule):**
@@ -65,7 +80,7 @@
 
 **Next steps:**
 1. **Owner:** create 3-4 sample projects in ProjectLibre and save each as MS Project XML (simple FS chain; mixed link types with lag and lead; milestones plus a summary task; resources plus a baseline; a Mon-Fri calendar project). Commit them under `scripts/tests/schedule/mspdi/`. Add an MS Project sample if available.
-2. Owner review of the A2 spec and its open questions, then push the branch and open a PR.
+2. Owner review of the A2 spec and its open questions (done 2026-10-21, see Session 70).
 3. On acceptance: add the roadmap row, X24-X28 and the Phase D note.
 4. Build order: engine (link types, extended fixture) first, then the codec, then the migration on the throwaway Postgres, then window UI, import dialog, export menu.
 
