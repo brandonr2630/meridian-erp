@@ -4,6 +4,51 @@
 
 **What this addendum owns:** the MS Project XML (MSPDI) import/export contract, the extra link types and per-link lag editing the format needs, stable identifiers for lossless round trips, the atomic import RPC, and the dedicated full-screen schedule window. It changes Phase A objects (`job_task_links`, `job_tasks`, `job_phases`, the shared progress/status rule) only additively and says exactly which Phase A rules it amends (section "Amendments to Phase A and the X-rules").
 
+## Owner decisions (2026-10-21)
+
+The owner answered the open questions O1-O8 on 2026-10-21. **Four answers widen the scope of A2** (O1, O2, O5, O6). Text elsewhere in this addendum marked *Superseded* still describes the pre-decision design and is rewritten at the next revision; until then **this section wins**. Nothing here changes the database: Phase A is live, A2 remains a draft, and all SQL stays desk-checked.
+
+| # | Decision | Change vs the draft default |
+|---|---|---|
+| O1 | **Real task hierarchy now.** Imported outlines keep their depth; no flattening. | Changed. Needs the X1 amendment: summary tasks (rows with children) carry weight 0. |
+| O2 | **Resources are built into A2**, not deferred to a Phase R. As the Work Order's job-card sections (labour, equipment, materials, consumables, sub-contractors) are filled during execution, the matching resource fields on the schedule are **auto-populated**. | Changed. |
+| O3 | Copy-and-verify codec for the portal. | Default stands. |
+| O4 | Codec in its own `schedule-msp.js`; window code inline in `index.html`. | Default stands. |
+| O5 | **Undo/redo is built** in the schedule window. | Changed. |
+| O6 | **Clients see baseline dates (ghost bars)**, in the portal and in the downloaded file, for transparency. Access is conditional on the client accepting a **release / user agreement** that restricts use of the information in legal proceedings. **Ownership of the schedule and its data stays with Q2 Machines.** | Changed. Phase D's `portal_schedule` already returns baseline columns, so the portal side is consistent; this reverses A2's "no baseline in client files". The agreement gate is new (see the Phase D amendment). |
+| O7 | Imported tasks get `weight = NULL`. | Default stands. |
+| O8 | Add notes to the B and C specs now (`task_id` link); build later. | Default stands. |
+
+### What this changes
+
+1. **Hierarchy (O1).** The two-level phase/task model (X1) becomes a tree. Compute (`jcSchedCompute`), the SQL `job_schedule_status`, the Gantt layout, the task table and the codec all change. FS-only flat jobs must still produce identical results, so the 45-case shared fixture must pass unmodified and gains hierarchy cases.
+2. **Resources (O2).** MSPDI `Resource` and `Assignment` elements enter the codec and the field-mapping table; the Out of scope entry on resources is withdrawn. Planned resources are entered on the schedule; actuals flow in from the job card.
+3. **Undo/redo (O5).** Edits in the window are undoable and redoable. Today each edit is an immediate database write, so undo means writing the inverse (see N7).
+4. **Client disclosure (O6).** The client file includes Baseline 0 for client-visible tasks. The release agreement is a hard gate in Phase D: no schedule data reaches a client until they have accepted the current agreement version.
+5. **Scale.** O1, O2 and O5 together are much larger than the draft. Recommendation (not a decision): split into **A2a** (link types, hierarchy, codec, window), **A2b** (resources and job-card auto-fill) and **A2c** (undo/redo), so each can be tested and applied on its own.
+
+### New open design points
+
+- **N1. Hierarchy model.** Keep `job_phases` as the top level and add `job_tasks.parent_task_id` (self-FK, cycle guard, depth cap), or fold phases into the tree? Which rows are summaries (derived: has children)? Can links target summary tasks? Dates and % of a summary are derived (X1 amendment: weight 0, excluded from weighting).
+- **N2. Existing data.** Phase A is live; existing tasks have `phase_id` and no parent. The migration must leave them valid and results unchanged.
+- **N3. Resource model.** What is a resource: people from `employees`, equipment from `config_equipment`, materials, sub-contractors? Units and quantities, planned versus actual, and whether any rate or cost is stored. Recommended default: no cost data in A2; rates stay internal and never reach the portal (X10 and the Phase D `rate`/`cost` guard).
+- **N4. Job-card to schedule mapping.** Job-card entries carry no task id today. How does an entry reach a task: a new nullable `task_id` on the job-card entry rows, matching by name or category, or roll-up per phase or per job? What happens to an entry with no matching task?
+- **N5. Auto-fill semantics.** Does auto-fill write actuals only (planned stays as entered), may it change task progress, and how are conflicts shown when a person edits an auto-filled field?
+- **N6. Resource round trip.** Matching MSPDI resources to `employees` and `config_equipment` on import (by name? by a stored UID), and what an unmatched resource becomes.
+- **N7. Undo/redo scope.** Per session and per tab only? Interaction with import (undo an import?), with auto-fill, with another user editing the same row, and with published and baseline-locked rows (some edits must not be undoable).
+- **N8. Release agreement.** Wording is for the owner's lawyer, not this spec. Open: versioning and re-acceptance when the text changes, who must accept (every client user, or the approver only), what a client sees if they decline, and whether a clause that restricts use in legal proceedings is enforceable in the owner's jurisdiction. The spec only fixes the mechanism (Phase D amendment).
+- **N9. Notice in the exported file.** Embed an ownership and confidentiality notice in the MSPDI file (project title or notes, a note on the first task) and record each client export in the audit log with the agreement version.
+- **N10. Resource names to clients.** X10 shows clients first name plus role only. Do client files carry resource names at all? Draft default: no (assignee and resources omitted from client files).
+- **N11. Effort and order.** Confirm or reject the A2a/A2b/A2c split, and whether the owner's ProjectLibre fixtures (still outstanding) must exist before A2a starts (draft: yes).
+
+### Rules to add to the cross-phase list when this is accepted
+
+- **X1 amendment:** summary tasks (rows with children) are excluded from weighting, like milestones.
+- **X29 (proposed): client schedule disclosure requires an accepted agreement.** Every portal schedule read and every client export checks that the caller has accepted the current agreement version; each acceptance and each export is audited.
+- **X30 (proposed): job-card actuals are the source for resource actuals** on the schedule; the schedule never writes back to job-card entries.
+
+---
+
 ## Goal and scope
 
 Make the per-job schedule interoperable with ProjectLibre and MS Project, and give it room to grow into a project-scheduling tool. Four outcomes:
@@ -17,10 +62,10 @@ The task stays the single anchor for later work (resources, QC hold points, docu
 
 ## Out of scope
 
-- **Resources and utilisation** (a `resources` entity, assignments with units, cost rates, over-allocation, leveling). A2 only round-trips the free-text `assignee` as a resource *name*. Planned as its own phase ("Phase R"); it should reuse `employees` and `config_equipment` rather than invent people and plant again.
+- **Resources and utilisation** (a `resources` entity, assignments with units, cost rates, over-allocation, leveling). A2 only round-trips the free-text `assignee` as a resource *name*. Planned as its own phase ("Phase R"); it should reuse `employees` and `config_equipment` rather than invent people and plant again. **Superseded 2026-10-21 (O2): resources are now in scope; see Owner decisions.**
 - **Working calendars** (working days, holidays, shift hours). Meridian schedules in calendar days. A2 exports a 7-day calendar so durations line up (see "Calendar and duration mapping"); real calendars are a later phase.
 - **Scheduling constraints** (Must Start On, Finish No Later Than, deadlines) and **manual vs auto-scheduling**. Import ignores them with a warning; export uses the one constraint in "Date pinning".
-- **Arbitrary outline depth.** Meridian has two levels, phase then task. Deeper MSPDI levels are flattened on import with a warning (decision O1). Real sub-tasks need an amendment to X1 (summary tasks must carry weight 0) and are deferred.
+- **Arbitrary outline depth.** Meridian has two levels, phase then task. Deeper MSPDI levels are flattened on import with a warning (decision O1). Real sub-tasks need an amendment to X1 (summary tasks must carry weight 0) and are deferred. **Superseded 2026-10-21 (O1): real hierarchy is now in scope; see Owner decisions.**
 - **`.mpp`, `.pod` and any binary format.** MSPDI XML only. `.pod` is ProjectLibre's native container and `.mpp` is Microsoft's binary format; both are poor targets for a browser app.
 - **Task notes, custom fields, cost, work (hours) and overtime, multiple baselines (only Baseline 0), cross-project links, subprojects.**
 - **Drag-to-edit on the Gantt bars.** Still read-only (as Phase A); editing stays in the table and details pane. A follow-up can add it.
@@ -242,7 +287,7 @@ The Work Order's "Schedule & Tasks" card keeps its KPI strip and baseline captio
 +------------------------------------------------------------------------------------------------+
 ```
 
-- **Table:** the Phase A task table promoted to the window, with a **Days** column (`end - start + 1`), predecessors shown MS-Project-style (`3FS+2d`), and indent/outdent (moves a task into or out of the phase above it; there are only two levels). Keyboard: arrows to move, Enter to edit, Tab to next cell. Undo/redo is not promised in v1 (open question O5).
+- **Table:** the Phase A task table promoted to the window, with a **Days** column (`end - start + 1`), predecessors shown MS-Project-style (`3FS+2d`), and indent/outdent (moves a task into or out of the phase above it; there are only two levels). Keyboard: arrows to move, Enter to edit, Tab to next cell. Undo/redo is not promised in v1 (open question O5). **Superseded 2026-10-21 (O1, O5): the tree has arbitrary depth, and undo/redo is built; see Owner decisions.**
 - **Details pane:** the predecessor editor with type and lag per link (the new capability), the assignee, weight (staff only, as Phase A), and the publish toggle with the existing guard behaviour.
 - **Gantt:** same renderer as Phase A, extended to draw an arrow per link and to start/end it at the correct bar edge for each link type; zoom, today line, ghost bars and critical colouring unchanged.
 - **Import dialog:** file picker, parse, then a preview table (counts to create / update / keep / skip, list of warnings with counts, and per-row actions for the first 50 rows), mode selector (Append / Merge / Replace) with merge disabled and explained for foreign files, a reason box for Replace, and a final **Apply** button. Nothing is written before Apply. On a stale-schedule error the dialog re-previews.
@@ -257,7 +302,7 @@ None from A2 itself: the schedule window and import are staff-only. A2 does defi
 
 - The portal's schedule page offers **Download schedule (MS Project / ProjectLibre)**, produced from `portal_schedule` rows only, using the same pure codec (`schedule-msp.js`).
 - Included: client-visible phases and tasks (per X22: `task.client_visible AND (task.phase_id IS NULL OR phase.client_visible)`), names, dates, progress, milestones, and links whose **both** ends are client-visible.
-- Excluded: `assignee`/resource names (X10: clients see first name plus role only; resources are therefore omitted), `weight`, `is_critical`, internal-only rows and any link touching one, baseline dates (unless Phase D decides clients see the baseline; recommended default: no), and anything not in the `portal_schedule` whitelist.
+- Excluded: `assignee`/resource names (X10: clients see first name plus role only; resources are therefore omitted), `weight`, `is_critical`, internal-only rows and any link touching one, baseline dates (unless Phase D decides clients see the baseline; recommended default: no), and anything not in the `portal_schedule` whitelist. **Superseded 2026-10-21 (O6): baseline dates are now included for the client; see Owner decisions.**
 - Every client download is audited through `prepare_schedule_export(..., 'client')` (called by Phase D's definer, not by the browser) and rate-limited by Phase D.
 - The codec is the same file in both apps. Because the portal is a separate flat-file app (D3), the file is copied into the portal directory by the deploy workflow and a check script (`scripts/verify-msp-sync.mjs`) fails if the two copies differ. If copy-and-check proves awkward, the fallback is a Supabase edge function `schedule-export` that builds the XML server-side from `portal_schedule` (open question O3).
 
@@ -303,14 +348,16 @@ None from A2 itself: the schedule window and import are staff-only. A2 does defi
 
 ## Open questions
 
+Resolved 2026-10-21: see "Owner decisions" above (O1, O2, O5, O6 changed; O3, O4, O7, O8 keep their defaults). The original questions stay below for the record.
+
 Recommended defaults apply unless you object.
 
-- **O1: Outline depth on import.** Level 1 summary = phase, level 2 = task; deeper levels are flattened into their level-2 ancestor's phase as tasks, and their WBS prefix is kept in the task name (`1.2.3 Weld`). **Default: flatten with warning.** Alternative: add task hierarchy now (needs an X1 amendment, summary tasks weight 0).
-- **O2: Resources.** A2 round-trips `assignee` only. **Default: defer resources to Phase R**, which will reuse `employees` and `config_equipment`, and which should key assignments on `job_tasks.id`.
+- **O1: **[Resolved 2026-10-21: real task hierarchy now.]** Outline depth on import.** Level 1 summary = phase, level 2 = task; deeper levels are flattened into their level-2 ancestor's phase as tasks, and their WBS prefix is kept in the task name (`1.2.3 Weld`). **Default: flatten with warning.** Alternative: add task hierarchy now (needs an X1 amendment, summary tasks weight 0).
+- **O2: **[Resolved 2026-10-21: resources built into A2, auto-filled from job-card sections.]** Resources.** A2 round-trips `assignee` only. **Default: defer resources to Phase R**, which will reuse `employees` and `config_equipment`, and which should key assignments on `job_tasks.id`.
 - **O3: Codec sharing with the portal.** Copy-and-verify script vs an edge function. **Default: copy-and-verify**, because the portal reads only `portal_*` functions and a client-side build avoids a new trust boundary.
 - **O4: File layout.** New `schedule-msp.js` vs staying fully inline in `index.html`. **Default: codec in its own file, window code inline** until it exceeds a manageable size.
-- **O5: Undo/redo in the window.** **Default: not in v1**; row-level conflict notices instead.
-- **O6: Does the client see baseline dates (ghost bars) in the downloaded file?** **Default: no.** Phase D decides for the portal page; A2's contract follows.
+- **O5: **[Resolved 2026-10-21: undo/redo is built.]** Undo/redo in the window.** **Default: not in v1**; row-level conflict notices instead.
+- **O6: **[Resolved 2026-10-21: yes, clients see baseline, behind a release agreement.]** Does the client see baseline dates (ghost bars) in the downloaded file?** **Default: no.** Phase D decides for the portal page; A2's contract follows.
 - **O7: Weighted progress on import.** Imported tasks get `weight = NULL` (duration weighting). **Default: yes**; round-tripping weights through an MSPDI extended attribute is not worth the complexity.
 - **O8: Tie-in with Phases B and C.** Phase B (not yet built) could add a nullable `task_id` to ITP items and hold points so a QC check belongs to a schedule task; Phase C updates could reference a task. **Default: raise as a note in the B and C specs now, build later.**
 

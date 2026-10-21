@@ -4,7 +4,7 @@ Live URL: `erp.terranresources.com` · Repo: `brandonr2630/meridian-erp`
 
 ## Architecture
 
-**Single-file app** — the entire application is `index.html` (~8400 lines of inline CSS + JS). Never edit `index2–5.html`; those are archives.
+**Single-file app** — the entire application is `index.html` (~20,350 lines of inline CSS + JS). Never edit `index2–5.html`; those are archives.
 
 - **Backend:** Supabase, called via a thin fetch wrapper. All DB access goes through `sb()` → `sbGet / sbPost / sbPatch / sbPatchWhere / sbDelete / sbDeleteWhere`.
 - **Auth:** Supabase JWT. Session persisted to `localStorage` and restored on load by `tryRestoreSession()`.
