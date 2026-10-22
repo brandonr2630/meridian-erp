@@ -1,0 +1,3 @@
+# Fixtures are ground truth: keep byte-stable, LF on every platform.
+*.xml text eol=lf
+*.txt text eol=lf
