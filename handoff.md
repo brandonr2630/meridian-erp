@@ -24,12 +24,12 @@
 3. A work order's Schedule card: Apply template, add tasks, milestone, predecessor, Lock baseline; check KPI tiles and Gantt (S66/S68).
 4. Viewer / Office Admin login: Work Orders shows "Read-only access" and no Save buttons (S68).
 5. Optional Supabase dashboard: "Require current password when updating". Leaked-password protection needs the Pro plan (S68).
-6. Create 3-4 ProjectLibre/MS Project XML sample projects and commit them under `scripts/tests/schedule/mspdi/` (S69). The A2 open questions O1-O8 were answered 2026-10-21 (S70); review the amended spec, especially the new design points N1-N11.
+6. ~~ProjectLibre fixtures~~ done 2026-10-21 (PR #172, `scripts/tests/schedule/mspdi/`). Review the amended A2 spec, especially the new design points N1-N11 (S70). Optional: an MS Project sample with a real Material resource would verify the material round trip (the owner has no MS Project, so materials stay unverified).
 7. Get the client release / user agreement drafted by your lawyer (S70): restricts use of the information in legal proceedings; ownership stays with Q2 Machines.
 8. Older: PO module live click-through (S48) and PO list search/pagination (S49); `www.erp` alias/cert (S51); rotate the ERP password; confirm the BMS Bar Stock cost in Job Config; watch for GreenGeeks WAF block recurrence (S47).
 
 **Claude-side, waiting on a go-ahead or a trigger:**
-- **A2 spec amended** with the O1-O8 decisions (S70); it grew a lot (hierarchy, resources with job-card auto-fill, undo/redo, client baseline plus agreement gate). Next: resolve N1-N11, decide the A2a/A2b/A2c split, then the engine.
+- **A2 spec amended** with the O1-O8 decisions (S70) and **fixtures merged** (S70, PR #172). Next, once N1-N11 are resolved and the A2a/A2b/A2c split is decided: engine first (link types FS/SS/FF/SF and hierarchy in `jcSchedCompute` and SQL `job_schedule_status`; the 45-case shared fixture must pass unmodified and gain hierarchy cases), then the codec against the fixtures, then the migration on the throwaway Postgres, then the window UI.
 - On A2 acceptance: add the roadmap row, cross-phase rules X24-X30 (X29 agreement gate and X30 job-card actuals are proposed in S70) and the X1 summary-task amendment.
 - Roadmap: Phase B (quality: ITP, hold points, NCRs), then C (progress, S-curve, snapshots), then D (client portal). D0 prerequisites are done. Needs owner go-ahead.
 - Housekeeping: remove merged worktrees under `.worktrees/` with `git worktree remove`.
@@ -39,15 +39,17 @@
 
 ---
 
-## Session 70 - A2 owner decisions recorded; handoff and spec corrections (2026-10-21)
+## Session 70 - A2 owner decisions recorded; MSPDI fixtures merged; handoff and spec corrections (2026-10-21)
 
 **Done:**
 - `handoff.md` restructured (PR #170): newest session first, stale statuses fixed, consolidated Open items.
 - The owner answered A2 open questions O1-O8. **Changed:** O1 real task hierarchy, O2 resources in A2 with auto-fill from the job-card sections, O5 undo/redo built, O6 clients see baseline behind a release agreement (ownership stays with Q2 Machines). O3, O4, O7, O8 keep their defaults.
 - A2 spec amended (new "Owner decisions" section, Superseded markers, new design points N1-N11, proposed X29 and X30) and a Phase D amendment (agreement gate, open questions 9-10). Spec text only: no migration, no code.
+- **MSPDI fixtures merged (PR #172)**: six ProjectLibre files (01 realistic mixed-link job with % complete, 02 all four link types with lag and lead, 03 two summaries and a milestone, 04 four-level hierarchy, 05 resources and a baseline, 06 Mon-Fri calendar with a holiday exception), one **synthetic** 07 (hand-written Material resource, not from any real tool), `README.txt` with expected values, and a `.gitattributes` keeping them LF.
+- **Findings from real ProjectLibre output** (full list in the fixtures README): link type codes 0=FF 1=FS 2=SF 3=SS; lag in tenths of a minute; durations in working hours, never days; hierarchy from OutlineLevel only (WBS is unreliable); unassigned tasks use placeholder resource -65535; ProjectLibre does NOT export Material resources correctly (written as Work, junk work value seen); stored finish dates can be stale across calendar exceptions; the default save is the native .pod, and saves on the Z: drive can leave a `_tmp0.xml` instead of the real file.
 - Fixed here: the A2 spec is merged (PR #168), not unpushed; `CLAUDE.md` line count for `index.html` (about 20,350).
 
-**Next:** you write the ProjectLibre fixtures and have the agreement drafted; resolve N1-N11 and decide whether to split A2 into A2a (links, hierarchy, codec, window), A2b (resources and job-card fill), A2c (undo/redo); then the engine.
+**Next:** you have the client agreement drafted by your lawyer; resolve N1-N11 and decide whether to split A2 into A2a (links, hierarchy, codec, window), A2b (resources and job-card fill), A2c (undo/redo); then the engine (see Open items). Codec rules the fixtures force: durations hours to days via the file calendar; recompute finishes across calendar exceptions and warn; skip placeholder resources; warn and drop quantities on material-like resources; never trust WBS.
 
 **Gotcha:** before writing "unpushed" or "not merged", check `git branch -a --contains <sha>` or `gh pr list`; handoff text goes stale.
 
