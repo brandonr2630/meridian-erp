@@ -1934,6 +1934,397 @@
     "status": "On track",
     "slipDays": -31
    }
+  },
+  {
+   "name": "A2 SS link with lag 2",
+   "today": "2026-03-02",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "A",
+     "sort_order": 10,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-13",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "B",
+     "sort_order": 20,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-14",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [
+    {
+     "task": "B",
+     "pred": "A",
+     "lag": 2,
+     "type": "SS"
+    }
+   ],
+   "notes": "Day numbers d0 = 03-02. Both unstarted: es=d0. A dur 5: ef=d0+5. SS lag 2: es(B) >= es(A)+2 = d0+2, so B (dur 6) ends d0+8 = 03-10 = forecast. Backward from 03-10: A ls=d0+3, B ls=d0+2; SS bound on A late finish = ls(B)-2+5 = d0+5, so A lf=d0+5 ls=d0. Slack A=0-0, B=2-2: both critical. Nothing started and all tasks start after today: overall 0, planned 0, On track.",
+   "expect": {
+    "overall": 0,
+    "overallDisplay": 0,
+    "plannedToday": 0,
+    "plannedDisplay": 0,
+    "slipDays": null,
+    "status": "On track",
+    "forecastEnd": "2026-03-10"
+   }
+  },
+  {
+   "name": "A2 FF link with lag 0",
+   "today": "2026-03-02",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "A",
+     "sort_order": 10,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-13",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "B",
+     "sort_order": 20,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-11",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [
+    {
+     "task": "B",
+     "pred": "A",
+     "lag": 0,
+     "type": "FF"
+    }
+   ],
+   "notes": "A dur 5: es=d0, ef=d0+5. FF lag 0: ef(B) >= ef(A), so es(B) >= d0+5-3 = d0+2, B ends d0+5. Forecast d0+5 = 03-07. Backward from d0+5: A ls=d0, B ls=d0+2; FF bound on A late finish = lf(B)-0 = d0+5 (no change). Slack A 0, B 2-2=0: both critical.",
+   "expect": {
+    "overall": 0,
+    "overallDisplay": 0,
+    "plannedToday": 0,
+    "plannedDisplay": 0,
+    "slipDays": null,
+    "status": "On track",
+    "forecastEnd": "2026-03-07"
+   }
+  },
+  {
+   "name": "A2 SF link that does not bind",
+   "today": "2026-03-02",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "A",
+     "sort_order": 10,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-12",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "B",
+     "sort_order": 20,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-11",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [
+    {
+     "task": "B",
+     "pred": "A",
+     "lag": 0,
+     "type": "SF"
+    }
+   ],
+   "notes": "SF lag 0: ef(B) >= es(A)+0. es(A)=d0 so es(B) >= d0-3, below today, no effect. A ends d0+4, B ends d0+3. Forecast d0+4 = 03-06. Backward from d0+4: A ls=d0, B ls=d0+1; SF bound on A late finish = lf(B)-0+4 = d0+8 (no change). Slack A 0, B 1: only A is critical.",
+   "expect": {
+    "overall": 0,
+    "overallDisplay": 0,
+    "plannedToday": 0,
+    "plannedDisplay": 0,
+    "slipDays": null,
+    "status": "On track",
+    "forecastEnd": "2026-03-06"
+   }
+  },
+  {
+   "name": "A2 SF link that pushes the successor",
+   "today": "2026-03-02",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "A",
+     "sort_order": 10,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-10",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "B",
+     "sort_order": 20,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-10",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [
+    {
+     "task": "B",
+     "pred": "A",
+     "lag": 5,
+     "type": "SF"
+    }
+   ],
+   "notes": "SF lag 5: ef(B) >= es(A)+5 = d0+5, so es(B) >= d0+5-2 = d0+3 and B ends d0+5. A ends d0+2. Forecast d0+5 = 03-07. Backward from d0+5: B ls=d0+3; SF bound on A late finish = lf(B)-5+2 = d0+2, so A lf=d0+2 ls=d0. Slack A 0-0, B 3-3: both critical.",
+   "expect": {
+    "overall": 0,
+    "overallDisplay": 0,
+    "plannedToday": 0,
+    "plannedDisplay": 0,
+    "slipDays": null,
+    "status": "On track",
+    "forecastEnd": "2026-03-07"
+   }
+  },
+  {
+   "name": "A2 mixed link types into one successor take the latest",
+   "today": "2026-03-02",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "A",
+     "sort_order": 10,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-11",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "B",
+     "sort_order": 20,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-14",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "C",
+     "sort_order": 30,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-12",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "D",
+     "sort_order": 40,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-10",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [
+    {
+     "task": "D",
+     "pred": "A",
+     "lag": 0,
+     "type": "FS"
+    },
+    {
+     "task": "D",
+     "pred": "B",
+     "lag": 4,
+     "type": "SS"
+    },
+    {
+     "task": "D",
+     "pred": "C",
+     "lag": 3,
+     "type": "FF"
+    }
+   ],
+   "notes": "A,B,C start d0: ef A=d0+3, B=d0+6, C=d0+4. D dur 2: FS from A gives es>=d0+3; SS(lag 4) from B gives es>=d0+0+4 = d0+4; FF(lag 3) from C gives es>=d0+4+3-2 = d0+5. Maximum d0+5: D runs d0+5..d0+7. Forecast = max(3,6,4,7) = d0+7 = 03-09. Backward from d0+7: D ls=d0+5. FS bound on A lf=d0+5 (ls=d0+2); SS bound on B lf = 5-4+6 = d0+7 (no change, ls=d0+1); FF bound on C lf = 7-3 = d0+4 (ls=d0). Slack A 2, B 1, C 0, D 0: critical = C and D.",
+   "expect": {
+    "overall": 0,
+    "overallDisplay": 0,
+    "plannedToday": 0,
+    "plannedDisplay": 0,
+    "slipDays": null,
+    "status": "On track",
+    "forecastEnd": "2026-03-09"
+   }
+  },
+  {
+   "name": "A2 FS with a lead (negative lag) and explicit type",
+   "today": "2026-03-02",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "A",
+     "sort_order": 10,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-12",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "B",
+     "sort_order": 20,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-11",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [
+    {
+     "task": "B",
+     "pred": "A",
+     "lag": -2,
+     "type": "FS"
+    }
+   ],
+   "notes": "FS lag -2: es(B) >= ef(A)-2 = d0+4-2 = d0+2, so B ends d0+5. Forecast d0+5 = 03-07. An explicit type FS is the same as no type.",
+   "expect": {
+    "overall": 0,
+    "overallDisplay": 0,
+    "plannedToday": 0,
+    "plannedDisplay": 0,
+    "slipDays": null,
+    "status": "On track",
+    "forecastEnd": "2026-03-07"
+   }
+  },
+  {
+   "name": "A2 SS on a started predecessor",
+   "today": "2026-03-02",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "A",
+     "sort_order": 10,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-05",
+     "progress": 40,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "B",
+     "sort_order": 20,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-12",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [
+    {
+     "task": "B",
+     "pred": "A",
+     "lag": 2,
+     "type": "SS"
+    }
+   ],
+   "notes": "A started 03-01 (d0-1), dur 5, 40%: rem = ceil(5*60/100) = 3, es=d0-1, ef=d0+2. SS lag 2: es(B) >= es(A)+2 = d0+1, B (dur 4) ends d0+5. Forecast d0+5 = 03-07. Weights A=5, B=4: overall = 5*40/9 = 22.22 (22). Planned on 03-02: A (2-day elapsed of 5) = 40%, B not started = 0: 5*40/9 = 22.22 (22). Backward from d0+5: A ls=d0+2, B ls=d0+1; SS bound on A lf = 1-2+3 = d0+2, so A lf=d0+2 ls=d0-1. Slack A -1-(-1)=0, B 1-1=0: both critical.",
+   "expect": {
+    "overall": 22.22,
+    "overallDisplay": 22,
+    "plannedToday": 22.22,
+    "plannedDisplay": 22,
+    "forecastEnd": "2026-03-07",
+    "status": "On track",
+    "slipDays": null
+   }
   }
  ]
 }

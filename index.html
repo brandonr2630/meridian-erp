@@ -8504,11 +8504,13 @@ function jcSchedCompute({ tasks, links, phases, job, today } = {}) {
     ls.push(null); lf.push(null);
   }
   // ---- links: only between tasks of this job (unknown ids ignored); undated linked tasks take part (dur 1, start today) ----
-  const lt = [], lp = [], llag = [];
+  // A2 link types (X24): FS (default, also for a missing/unknown value), SS, FF, SF. Day numbers: es = first day, ef/lf = day after the last.
+  const lt = [], lp = [], llag = [], lty = [];
   for (const l of links) {
     const t = l ? idx.get(l.task_id) : undefined, p = l ? idx.get(l.predecessor_id) : undefined;
     if (t === undefined || p === undefined) continue;
     lt.push(t); lp.push(p); llag.push(jcSchedNum(l.lag_days) ?? 0);
+    lty.push(l.link_type === 'SS' || l.link_type === 'FF' || l.link_type === 'SF' ? l.link_type : 'FS');
     if (!(done[t] && endd[t] == null)) sched[t] = true;
     if (!(done[p] && endd[p] == null)) sched[p] = true;
   }
@@ -8522,7 +8524,9 @@ function jcSchedCompute({ tasks, links, phases, job, today } = {}) {
     for (let j = 0; j < m; j++) {
       const t = lt[j], p = lp[j];
       if (sched[t] && sched[p] && !done[t] && ef[p] != null) {
-        const cand = ef[p] + llag[j];
+        // earliest start the link allows: FS after p's end, SS with p's start, FF/SF so that t's END meets p's end/start
+        const ty = lty[j];
+        const cand = ty === 'FS' ? ef[p] + llag[j] : ty === 'SS' ? es[p] + llag[j] : ty === 'FF' ? ef[p] + llag[j] - rem[t] : es[p] + llag[j] - rem[t];
         if (cand > es[t]) { es[t] = cand; ef[t] = cand + rem[t]; changed = true; }
       }
     }
@@ -8541,7 +8545,10 @@ function jcSchedCompute({ tasks, links, phases, job, today } = {}) {
     for (let j = 0; j < m; j++) {
       const t = lt[j], p = lp[j];                            // t = successor, p = predecessor
       if (sched[t] && sched[p] && !done[t] && !done[p]) {
-        const cand = ls[t] - llag[j];
+        // latest finish the link allows p (mirror of the forward rules): FS before t's late start, FF with t's late finish,
+        // SS/SF bound p's late START, so the late finish is that start plus p's remaining days
+        const ty = lty[j];
+        const cand = ty === 'FS' ? ls[t] - llag[j] : ty === 'FF' ? lf[t] - llag[j] : (ty === 'SS' ? ls[t] : lf[t]) - llag[j] + rem[p];
         if (cand < lf[p]) { lf[p] = cand; ls[p] = cand - rem[p]; changed = true; }
       }
     }
