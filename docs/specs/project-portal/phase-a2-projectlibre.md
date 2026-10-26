@@ -1,6 +1,6 @@
 # Phase A — Addendum A2: ProjectLibre / MS Project compatibility and the schedule window
 
-*Status: draft for owner review · 2026-10-21 · additive to the Phase A migration `phase_a_schedule_v2` that is **live on prod** (Session 66). Depends on `00-overview.md` (decisions D1-D5, X1-X23 apply unchanged) and `phase-a-schedule-v2.md`. All SQL here is **desk-checked only**: nothing has been executed against any database, and no ProjectLibre file has been opened yet (see Risks, R1).*
+*Status: draft for owner review · 2026-10-21 (N1-N11 resolutions and A2a/A2b/A2c split proposed 2026-10-26, pending approval) · additive to the Phase A migration `phase_a_schedule_v2` that is **live on prod** (Session 66). Depends on `00-overview.md` (decisions D1-D5, X1-X23 apply unchanged) and `phase-a-schedule-v2.md`. All SQL here is **desk-checked only**: nothing has been executed against any database, and the ProjectLibre fixtures now exist (PR #172) but the codec has not been built against them (see Risks, R1).*
 
 **What this addendum owns:** the MS Project XML (MSPDI) import/export contract, the extra link types and per-link lag editing the format needs, stable identifiers for lossless round trips, the atomic import RPC, and the dedicated full-screen schedule window. It changes Phase A objects (`job_task_links`, `job_tasks`, `job_phases`, the shared progress/status rule) only additively and says exactly which Phase A rules it amends (section "Amendments to Phase A and the X-rules").
 
@@ -27,19 +27,43 @@ The owner answered the open questions O1-O8 on 2026-10-21. **Four answers widen 
 4. **Client disclosure (O6).** The client file includes Baseline 0 for client-visible tasks. The release agreement is a hard gate in Phase D: no schedule data reaches a client until they have accepted the current agreement version.
 5. **Scale.** O1, O2 and O5 together are much larger than the draft. Recommendation (not a decision): split into **A2a** (link types, hierarchy, codec, window), **A2b** (resources and job-card auto-fill) and **A2c** (undo/redo), so each can be tested and applied on its own.
 
-### New open design points
+### Resolutions of N1-N11 (proposed 2026-10-26; **pending owner approval**)
 
-- **N1. Hierarchy model.** Keep `job_phases` as the top level and add `job_tasks.parent_task_id` (self-FK, cycle guard, depth cap), or fold phases into the tree? Which rows are summaries (derived: has children)? Can links target summary tasks? Dates and % of a summary are derived (X1 amendment: weight 0, excluded from weighting).
-- **N2. Existing data.** Phase A is live; existing tasks have `phase_id` and no parent. The migration must leave them valid and results unchanged.
-- **N3. Resource model.** What is a resource: people from `employees`, equipment from `config_equipment`, materials, sub-contractors? Units and quantities, planned versus actual, and whether any rate or cost is stored. Recommended default: no cost data in A2; rates stay internal and never reach the portal (X10 and the Phase D `rate`/`cost` guard).
-- **N4. Job-card to schedule mapping.** Job-card entries carry no task id today. How does an entry reach a task: a new nullable `task_id` on the job-card entry rows, matching by name or category, or roll-up per phase or per job? What happens to an entry with no matching task?
-- **N5. Auto-fill semantics.** Does auto-fill write actuals only (planned stays as entered), may it change task progress, and how are conflicts shown when a person edits an auto-filled field?
-- **N6. Resource round trip.** Matching MSPDI resources to `employees` and `config_equipment` on import (by name? by a stored UID), and what an unmatched resource becomes.
-- **N7. Undo/redo scope.** Per session and per tab only? Interaction with import (undo an import?), with auto-fill, with another user editing the same row, and with published and baseline-locked rows (some edits must not be undoable).
-- **N8. Release agreement.** Wording is for the owner's lawyer, not this spec. Open: versioning and re-acceptance when the text changes, who must accept (every client user, or the approver only), what a client sees if they decline, and whether a clause that restricts use in legal proceedings is enforceable in the owner's jurisdiction. The spec only fixes the mechanism (Phase D amendment).
-- **N9. Notice in the exported file.** Embed an ownership and confidentiality notice in the MSPDI file (project title or notes, a note on the first task) and record each client export in the audit log with the agreement version.
-- **N10. Resource names to clients.** X10 shows clients first name plus role only. Do client files carry resource names at all? Draft default: no (assignee and resources omitted from client files).
-- **N11. Effort and order.** Confirm or reject the A2a/A2b/A2c split, and whether the owner's ProjectLibre fixtures (still outstanding) must exist before A2a starts (draft: yes).
+These are recommendations, written so the engine can start once the owner approves them. Where a resolution contradicts text further down this addendum, **this section wins** until the next revision.
+
+- **N1. Hierarchy model.** **Keep `job_phases` as level 1 and add `job_tasks.parent_task_id`** (nullable self-FK, same-job check, cycle guard, depth cap 6 counting the phase as level 1). A phase maps to MSPDI outline level 1; tasks nest below it. A **summary** is a task that has children (derived, never stored). Links may target summaries, but progress, weighting and critical-path maths use leaf rows only; summary dates are the min start and max end of descendants, and summary % is the weighted average of descendant leaves (X1 amendment). Reason: folding phases into the tree would rewrite live Phase A tables, the publish toggles and the X22 predicate.
+- **N2. Existing data.** Every new column is nullable with no backfill, so existing rows stay valid as direct children of their phase and results are unchanged. Gate: the 45-case shared fixture passes unmodified, and gains hierarchy cases.
+- **N3. Resource model.** **Two new tables:** `job_resources` (kind: person, equipment or subcontractor; nullable FK to `employees` or `config_equipment`; `msp_uid`) and `job_task_assignments` (task, resource, planned units). **Materials and consumables are not schedule resources**: they stay on the job card (see the material finding below). No rate or cost is stored in A2; rates stay internal and never reach the portal (X10, Phase D `rate`/`cost` guard).
+- **N4. Job-card to schedule mapping.** **A nullable `task_id` on the job-card entry rows**, chosen from a dropdown on the job card (the same anchor as O8 and X28). Entries with no task roll up to the job and show as "Unassigned actuals"; nothing is matched by name or category. *To check before the migration:* the exact entry tables and their current columns (labour, equipment, material, consumable, subcontractor entries).
+- **N5. Auto-fill semantics.** Auto-fill produces **actuals only**; planned units stay as entered and task progress is never changed by it (X30). Actuals are computed from the entries, not stored on the schedule, so a job-card edit simply changes the figure. A manual override, if allowed at all, sits beside the computed value and is flagged.
+- **N6. Resource round trip.** Match an imported resource on `msp_uid` (files exported from this job), then on exact name against `employees` and `config_equipment`. An unmatched resource becomes a **schedule-only resource** (no FK) with a preview warning. Import never creates employees or equipment. Skip resource UID 0 and the placeholder UID -65535 (confirmed in the fixtures).
+- **N7. Undo/redo scope.** Per tab and per session, in memory, depth 50. Each edit records its inverse and replays it through the existing write path. The stack is cleared on import, on baseline lock and on a stale-`updated_at` conflict. Publishing, baseline locking and import are **not undoable** (they are audited, and import is atomic). Auto-filled values are not edits and are not on the stack.
+- **N8. Release agreement.** The spec fixes the mechanism only; the wording is for the owner's lawyer. Mechanism: a versioned `agreement_versions` record and a per-client-user acceptance record; **every client user must accept** (an approver's acceptance does not cover colleagues); a new version requires re-acceptance; a client who has not accepted sees the schedule locked, with no schedule data (X29). Whether a restriction on use in legal proceedings is enforceable in the owner's jurisdiction is for the lawyer.
+- **N9. Notice in the exported file.** Yes. Write an ownership and confidentiality notice into the project notes and the first task's note, and write an audit row for every client export with the agreement version.
+- **N10. Resource names to clients.** No. Client files carry no assignee or resource names, per X10 and the draft default.
+- **N11. Effort and order.** Split confirmed as below. The ProjectLibre fixtures now exist (PR #172), so the A2a precondition is met.
+
+### Proposed split
+
+| Part | Scope | Depends on | Gate |
+|---|---|---|---|
+| **A2a** | `link_type` (FS/SS/FF/SF), `msp_uid`, `parent_task_id` and hierarchy; compute changes in `jcSchedCompute` and `job_schedule_status`; `schedule-msp.js`; `prepare_schedule_export` and `import_job_schedule`; the `#/schedule/<job_id>` window with import and export. | Fixtures (done). | 45-case fixture unmodified plus new link-type and hierarchy cases; codec tests on fixtures 01-07; migration on throwaway Postgres; manual ProjectLibre interop. |
+| **A2b** | `job_resources`, `job_task_assignments`, `task_id` on job-card entries, actuals roll-up, MSPDI Resource and Assignment mapping. | A2a (UIDs, window). | Throwaway-Postgres suite; fixture 05 round trip; a test proving no rate or resource name reaches a client file. |
+| **A2c** | Undo/redo in the schedule window. | A2a. Independent of A2b. | UI tests: inverse replay, stack clearing, non-undoable actions. |
+
+The client baseline and the agreement gate (O6, N8-N10) land in Phase D; A2a only needs the export notice (N9). Each part is applied to prod on its own, one step at a time, with simulated-identity verification.
+
+### Fixture findings that change the codec (2026-10-21, PR #172)
+
+The ProjectLibre fixtures under `scripts/tests/schedule/mspdi/` (the README there lists expected values) settle part of risk R1. Rules the codec must follow:
+
+- Link type codes: 0 = FF, 1 = FS, 2 = SF, 3 = SS (matches the mapping table). `LinkLag` is in tenths of a minute (9600 = 2 working days at 8 h/day).
+- Durations are working **hours** (`PT8H0M0S` = 1 day on the 8-hour calendar), never days. Convert with the file's calendar.
+- Hierarchy comes from `OutlineLevel` only; `Summary=1` marks summaries. **Never trust `WBS`** (fixture 04 has a stray value).
+- Skip resource UID 0 and the placeholder resource UID -65535 (written for unassigned tasks).
+- **Material resources are not exported correctly by ProjectLibre** (written as Work, and a junk work value of 24 million hours was seen). Warn on a resource that looks like a material and never trust a quantity from such a row. The material round trip is **unverified** against a real tool (fixture 07 is synthetic).
+- **Stored finish dates can be stale across calendar exceptions** (fixture 06). This conflicts with "Start and Finish are authoritative" in "Calendar and duration mapping": for a file whose calendar is not a 7-day week, recompute the finish from the file's calendar and warn. Files on the 7-day calendar keep the rule as written.
+- ProjectLibre's default save is the native `.pod` (Java serialization); a renamed `.pod` is not XML. Reject any file that does not start with `<?xml`.
 
 ### Rules to add to the cross-phase list when this is accepted
 
@@ -308,7 +332,7 @@ None from A2 itself: the schedule window and import are staff-only. A2 does defi
 
 ## Migration and rollout
 
-1. **Prerequisite (owner): create fixture files.** In ProjectLibre, build 3-4 small sample projects covering: a simple FS chain; mixed link types with lag and lead; milestones and a summary task; resources and a baseline; a Mon-Fri calendar project; and save each as MS Project XML. Also save one from MS Project if available. These are the ground truth for the codec (risk R1) and are committed under `scripts/tests/schedule/mspdi/`.
+1. **Prerequisite (owner): create fixture files. Done 2026-10-21 (PR #172, `scripts/tests/schedule/mspdi/`, six ProjectLibre files plus one synthetic; none from MS Project).** Original text: In ProjectLibre, build 3-4 small sample projects covering: a simple FS chain; mixed link types with lag and lead; milestones and a summary task; resources and a baseline; a Mon-Fri calendar project; and save each as MS Project XML. Also save one from MS Project if available. These are the ground truth for the codec (risk R1) and are committed under `scripts/tests/schedule/mspdi/`.
 2. **Spec review** of this addendum and the amended rules (owner go-ahead).
 3. **Engine first, no UI, no database:** extend `jcSchedCompute` and `job_schedule_status` for link types, extend `fixture.json`, prove JS and SQL agree (the 45 existing cases still pass unchanged). Gate: shared fixture green; mutation run catches the new branches.
 4. **Codec:** `schedule-msp.js` with unit tests against the owner's fixture files; export-then-parse-then-compare round-trip tests; opening a generated file in ProjectLibre by hand (and MS Project if available) is a manual gate.
@@ -335,7 +359,7 @@ None from A2 itself: the schedule window and import are staff-only. A2 does defi
 
 | # | Risk | Mitigation |
 |---|---|---|
-| R1 | **The MSPDI details here come from the public schema and general knowledge; no ProjectLibre file has been inspected yet.** ProjectLibre may write or require things differently (UID 0 summary, `LagFormat`, duration formats, `PercentComplete` rounding, whether it honours Start No Earlier Than on open). | Step 1 of rollout: owner supplies fixture files before any codec work; the mapping table is corrected from real files; the interop test is a manual gate. |
+| R1 | **Partly mitigated (fixtures merged, see "Fixture findings"). The MSPDI details here come from the public schema and general knowledge, checked against ProjectLibre files only; nothing is verified against MS Project, and material resources are unverified.** ProjectLibre may write or require things differently (UID 0 summary, `LagFormat`, duration formats, `PercentComplete` rounding, whether it honours Start No Earlier Than on open). | Step 1 of rollout: owner supplies fixture files before any codec work; the mapping table is corrected from real files; the interop test is a manual gate. |
 | R2 | Date drift on round trip (calendar differences; ProjectLibre auto-scheduling moves tasks). | 7-day export calendar, Start No Earlier Than pin, dates authoritative on import, the preview shows date changes before Apply. |
 | R3 | Two tabs refreshing the Supabase token at once may sign one out. | Verify in `tryRestoreSession()` before building; add a cross-tab lock if needed. |
 | R4 | `import_job_schedule` (definer, deletes in replace mode) is a new write path that bypasses the UI. | Server re-validation, atomicity, advisory lock, stale check, audit with recovery metadata, independent attack review, mutation tests, replace limited to approvers with a reason. |
