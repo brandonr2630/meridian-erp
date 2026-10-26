@@ -8517,51 +8517,106 @@ function jcSchedCompute({ tasks, links, phases, job, today } = {}) {
   const m = lt.length;
   for (let i = 0; i < n; i++) if (sched[i] && ef[i] == null) ef[i] = es[i] + rem[i];
 
+  // ---- hierarchy (A2, N1): job_tasks.parent_task_id. A row with children is a SUMMARY: its dates are derived from its
+  // leaf descendants, it has weight 0, is never critical and never counts toward progress or the forecast. Only leaf
+  // rows are scheduled; links touching a summary are applied through its leaves (see the passes). ----
+  const par = new Array(n).fill(-1), kids = tasks.map(() => []);
+  for (let i = 0; i < n; i++) {
+    const pid = (tasks[i] || {}).parent_task_id, pi = pid == null ? undefined : idx.get(pid);
+    if (pi !== undefined && pi !== i) par[i] = pi;
+  }
+  for (let i = 0; i < n; i++) {                                  // a parent cycle (the DB trigger forbids it): cut the closing edge
+    const seen = new Set([i]);
+    for (let k = i; par[k] !== -1;) {
+      const nx = par[k];
+      if (seen.has(nx)) { par[k] = -1; if (!warnings.includes('hierarchy-cycle')) warnings.push('hierarchy-cycle'); break; }
+      seen.add(nx); k = nx;
+    }
+  }
+  for (let i = 0; i < n; i++) if (par[i] !== -1) kids[par[i]].push(i);
+  const isSum = kids.map(k => k.length > 0), depth = new Array(n).fill(0);
+  for (let i = 0; i < n; i++) for (let k = par[i]; k !== -1; k = par[k]) depth[i]++;
+  const sumDesc = [];                                            // summaries, deepest first, so a parent derives from finished children
+  for (let i = 0; i < n; i++) if (isSum[i]) sumDesc.push(i);
+  sumDesc.sort((a, b) => depth[b] - depth[a] || a - b);
+  const leaves = new Array(n);                                   // leaf descendants of each summary (own index for a leaf)
+  for (let i = 0; i < n; i++) if (!isSum[i]) leaves[i] = [i];
+  for (const s of sumDesc) leaves[s] = kids[s].flatMap(c => leaves[c]);
+  for (const s of sumDesc) { done[s] = kids[s].every(c => done[c]); sched[s] = kids[s].some(c => sched[c]); }
+  let approx = false;
+  const deriveFwd = () => {
+    for (const s of sumDesc) {
+      let e0 = null, f0 = null;
+      for (const c of kids[s]) if (sched[c]) { if (e0 == null || es[c] < e0) e0 = es[c]; if (f0 == null || ef[c] > f0) f0 = ef[c]; }
+      if (e0 != null) { es[s] = e0; ef[s] = f0; }
+    }
+  };
+  const deriveBwd = () => {
+    for (const s of sumDesc) {
+      let a = null, b = null;
+      for (const c of kids[s]) if (sched[c] && !done[c]) { if (a == null || ls[c] < a) a = ls[c]; if (b == null || lf[c] > b) b = lf[c]; }
+      if (a != null) { ls[s] = a; lf[s] = b; }
+    }
+  };
+
   // ---- forward pass (relaxation over links; done tasks are not moved by predecessors) ----
+  // A summary predecessor uses its derived start/end (min/max of its leaves). A link INTO a summary constrains every leaf of
+  // it when it bounds the START (FS, SS); a finish-bound link (FF, SF) into a summary is ignored with an 'summary-link-approx' warning.
   let pass = 0;
   for (;;) {
     let changed = false;
+    deriveFwd();
     for (let j = 0; j < m; j++) {
-      const t = lt[j], p = lp[j];
-      if (sched[t] && sched[p] && !done[t] && ef[p] != null) {
-        // earliest start the link allows: FS after p's end, SS with p's start, FF/SF so that t's END meets p's end/start
-        const ty = lty[j];
-        const cand = ty === 'FS' ? ef[p] + llag[j] : ty === 'SS' ? es[p] + llag[j] : ty === 'FF' ? ef[p] + llag[j] - rem[t] : es[p] + llag[j] - rem[t];
-        if (cand > es[t]) { es[t] = cand; ef[t] = cand + rem[t]; changed = true; }
+      const t = lt[j], p = lp[j], ty = lty[j];
+      if (!(sched[t] && sched[p] && ef[p] != null)) continue;
+      let targets = [t];
+      if (isSum[t]) { if (ty === 'FS' || ty === 'SS') targets = leaves[t]; else { approx = true; continue; } }
+      for (const c of targets) {
+        if (!sched[c] || done[c]) continue;
+        // earliest start the link allows: FS after p's end, SS with p's start, FF/SF so that c's END meets p's end/start
+        const cand = ty === 'FS' ? ef[p] + llag[j] : ty === 'SS' ? es[p] + llag[j] : ty === 'FF' ? ef[p] + llag[j] - rem[c] : es[p] + llag[j] - rem[c];
+        if (cand > es[c]) { es[c] = cand; ef[c] = cand + rem[c]; changed = true; }
       }
     }
     if (!changed) break;
     if (++pass > n + 1) { warnings.push('cycle'); break; }   // SQL RAISEs here; we stop and carry on with what we have
   }
+  deriveFwd();
   let fe = null;
-  for (let i = 0; i < n; i++) if (sched[i] && ef[i] != null && (fe == null || ef[i] > fe)) fe = ef[i];
+  for (let i = 0; i < n; i++) if (!isSum[i] && sched[i] && ef[i] != null && (fe == null || ef[i] > fe)) fe = ef[i];
   const due = jcSchedDay(job.due_date), deadline = due ?? fe;
 
   // ---- backward pass (incomplete tasks only) ----
-  for (let i = 0; i < n; i++) if (sched[i] && !done[i]) { lf[i] = deadline; ls[i] = deadline - rem[i]; }
+  for (let i = 0; i < n; i++) if (!isSum[i] && sched[i] && !done[i]) { lf[i] = deadline; ls[i] = deadline - rem[i]; }
   pass = 0;
   for (;;) {
     let changed = false;
+    deriveBwd();
     for (let j = 0; j < m; j++) {
-      const t = lt[j], p = lp[j];                            // t = successor, p = predecessor
-      if (sched[t] && sched[p] && !done[t] && !done[p]) {
-        // latest finish the link allows p (mirror of the forward rules): FS before t's late start, FF with t's late finish,
-        // SS/SF bound p's late START, so the late finish is that start plus p's remaining days
-        const ty = lty[j];
-        const cand = ty === 'FS' ? ls[t] - llag[j] : ty === 'FF' ? lf[t] - llag[j] : (ty === 'SS' ? ls[t] : lf[t]) - llag[j] + rem[p];
-        if (cand < lf[p]) { lf[p] = cand; ls[p] = cand - rem[p]; changed = true; }
+      const t = lt[j], p = lp[j], ty = lty[j];                // t = successor, p = predecessor
+      if (!(sched[t] && sched[p] && !done[t] && !done[p])) continue;
+      let targets = [p];
+      if (isSum[p]) { if (ty === 'FS' || ty === 'FF') targets = leaves[p]; else { approx = true; continue; } }
+      for (const c of targets) {
+        if (!sched[c] || done[c]) continue;
+        // latest finish the link allows c (mirror of the forward rules): FS before t's late start, FF with t's late finish,
+        // SS/SF bound c's late START, so the late finish is that start plus c's remaining days
+        const cand = ty === 'FS' ? ls[t] - llag[j] : ty === 'FF' ? lf[t] - llag[j] : (ty === 'SS' ? ls[t] : lf[t]) - llag[j] + rem[c];
+        if (cand < lf[c]) { lf[c] = cand; ls[c] = cand - rem[c]; changed = true; }
       }
     }
     if (!changed) break;
     if (++pass > n + 1) { if (!warnings.includes('cycle')) warnings.push('cycle'); break; }
   }
+  if (approx) warnings.push('summary-link-approx');
 
   // ---- slack, critical set (slack <= max(0, min slack): the min-slack path when the deadline is later than forecast) ----
   let minSlack = null;
-  for (let i = 0; i < n; i++) if (sched[i] && !done[i]) { const s = ls[i] - es[i]; if (minSlack == null || s < minSlack) minSlack = s; }
+  for (let i = 0; i < n; i++) if (!isSum[i] && sched[i] && !done[i]) { const s = ls[i] - es[i]; if (minSlack == null || s < minSlack) minSlack = s; }
   const critLimit = Math.max(0, minSlack ?? 0), crit = [], slackByTask = {};
   let late = false, lateDays = 0;
   for (let i = 0; i < n; i++) {
+    if (isSum[i]) continue;                                      // summaries are never critical and never late on their own
     const slack = sched[i] && !done[i] ? ls[i] - es[i] : null;
     const isCrit = slack != null && slack <= critLimit;
     if (slack != null) slackByTask[ids[i]] = slack;
@@ -8582,7 +8637,7 @@ function jcSchedCompute({ tasks, links, phases, job, today } = {}) {
     }
     return sw > 0 ? { overall: jcSchedCents(sp * 100 / sw), planned: jcSchedCents(sq * 100 / sw) } : { overall: 0, planned: 0 };
   };
-  const all = tasks.map((_, i) => i), a = agg(all);
+  const all = tasks.map((_, i) => i).filter(i => !isSum[i]), a = agg(all);   // summaries carry weight 0: leaves only
   const overallC = a.overall, plannedC = a.planned;
 
   // ---- phase rollups: same formula over each phase's tasks; span = min start .. max end ----
@@ -8602,6 +8657,12 @@ function jcSchedCompute({ tasks, links, phases, job, today } = {}) {
     .map(p => mkRoll(p.id, all.filter(i => tasks[i] && tasks[i].phase_id === p.id)));
   const loose = all.filter(i => !tasks[i] || tasks[i].phase_id == null || !known.has(tasks[i].phase_id));
   if (loose.length) phaseRollups.push(mkRoll(null, loose));  // tasks with no (or an unknown) phase
+  // summary rows: span = min start .. max end of the leaf descendants' current dates, % = weighted average of those leaves
+  const summaries = {};
+  for (const s of sumDesc) {
+    const r = mkRoll(null, leaves[s]);
+    summaries[ids[s]] = { leafCount: leaves[s].length, overall: r.overall, overallDisplay: r.overallDisplay, start: r.start, end: r.end };
+  }
 
   // ---- baseline, slip, gap, status (SQL job_schedule_status tail) ----
   const hasBl = typeof job.baselineLocked === 'boolean' ? job.baselineLocked : tasks.some(t => t && t.baseline_locked_at);
@@ -8621,7 +8682,7 @@ function jcSchedCompute({ tasks, links, phases, job, today } = {}) {
   else status = L.onTrack;
 
   return { overall: overallC / 100, overallDisplay: jcSchedDisp(overallC), plannedToday: plannedC / 100, plannedDisplay: jcSchedDisp(plannedC),
-    phaseRollups, forecastEnd: jcSchedYmd(fe), status, slipDays: slip, crit, slackByTask, warnings };
+    phaseRollups, summaries, forecastEnd: jcSchedYmd(fe), status, slipDays: slip, crit, slackByTask, warnings };
 }
 // ── END SCHEDULE COMPUTE ──
 // ── SCHEDULE GANTT RENDERER ──

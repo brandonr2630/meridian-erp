@@ -2325,6 +2325,213 @@
     "status": "On track",
     "slipDays": null
    }
+  },
+  {
+   "name": "A2 hierarchy: a summary row carries no weight and no progress",
+   "today": "2026-03-02",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "S",
+     "sort_order": 10,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-20",
+     "progress": 100,
+     "is_milestone": false,
+     "weight": 50,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "C1",
+     "sort_order": 20,
+     "start_date": "2026-03-01",
+     "end_date": "2026-03-04",
+     "progress": 50,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null,
+     "parent": "S"
+    },
+    {
+     "key": "C2",
+     "sort_order": 30,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-12",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null,
+     "parent": "S"
+    }
+   ],
+   "links": [],
+   "notes": "S has children, so it is a summary: its stored weight 50 and progress 100 are ignored. Leaves C1 (dur 4, 50%) and C2 (dur 4, 0%) weigh 4 each: overall = 4*50/8 = 25.00. Planned on 03-02: C1 (03-02 - 03-01 + 1 = 2 of 4 days) = 50%, C2 starts later = 0: 4*50/8 = 25.00. C1 started: es=d0-1, rem=ceil(4*50/100)=2, ef=d0+1; C2 es=d0, ef=d0+4. Forecast = d0+4 = 03-06. If S were counted the overall would be far above 25.",
+   "expect": {
+    "overall": 25,
+    "overallDisplay": 25,
+    "plannedToday": 25,
+    "plannedDisplay": 25,
+    "forecastEnd": "2026-03-06",
+    "slipDays": null,
+    "status": "On track"
+   }
+  },
+  {
+   "name": "A2 hierarchy: FS from a summary waits for its latest leaf",
+   "today": "2026-03-02",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "S",
+     "sort_order": 10,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-13",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "C1",
+     "sort_order": 20,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-10",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null,
+     "parent": "S"
+    },
+    {
+     "key": "C2",
+     "sort_order": 30,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-13",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null,
+     "parent": "S"
+    },
+    {
+     "key": "X",
+     "sort_order": 40,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-11",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    }
+   ],
+   "links": [
+    {
+     "task": "X",
+     "pred": "S",
+     "lag": 0,
+     "type": "FS"
+    }
+   ],
+   "notes": "Leaves C1 (dur 2) and C2 (dur 5) start d0: ef d0+2 and d0+5, so the summary ends d0+5 (latest leaf). X (dur 3) FS after S: es=d0+5, ef=d0+8 = 03-10 = forecast. Backward from d0+8: X ls=d0+5; the FS bound applies to every leaf of S: lf=d0+5, so C1 ls=d0+3 and C2 ls=d0. Slack C1 3, C2 0, X 0: critical = C2 and X (S itself is never critical).",
+   "expect": {
+    "overall": 0,
+    "overallDisplay": 0,
+    "plannedToday": 0,
+    "plannedDisplay": 0,
+    "forecastEnd": "2026-03-10",
+    "slipDays": null,
+    "status": "On track"
+   }
+  },
+  {
+   "name": "A2 hierarchy: FS into a summary delays every leaf",
+   "today": "2026-03-02",
+   "job": {
+    "status": "In Progress",
+    "due_date": null
+   },
+   "baselineLocked": false,
+   "tasks": [
+    {
+     "key": "P",
+     "sort_order": 10,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-12",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "S",
+     "sort_order": 20,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-11",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null
+    },
+    {
+     "key": "C1",
+     "sort_order": 30,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-10",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null,
+     "parent": "S"
+    },
+    {
+     "key": "C2",
+     "sort_order": 40,
+     "start_date": "2026-03-09",
+     "end_date": "2026-03-11",
+     "progress": 0,
+     "is_milestone": false,
+     "weight": null,
+     "baseline_start": null,
+     "baseline_end": null,
+     "parent": "S"
+    }
+   ],
+   "links": [
+    {
+     "task": "S",
+     "pred": "P",
+     "lag": 1,
+     "type": "FS"
+    }
+   ],
+   "notes": "P (dur 4) es=d0, ef=d0+4. FS lag 1 into the summary S: every leaf must start no earlier than d0+5. C1 (dur 2) d0+5..d0+7, C2 (dur 3) d0+5..d0+8. Forecast d0+8 = 03-10. Backward from d0+8: C1 lf=d0+8 ls=d0+6, C2 ls=d0+5; S derived late start = min = d0+5, so P late finish = d0+5-1 = d0+4, ls=d0. Slack P 0, C1 6-5=1, C2 0: critical = P and C2.",
+   "expect": {
+    "overall": 0,
+    "overallDisplay": 0,
+    "plannedToday": 0,
+    "plannedDisplay": 0,
+    "forecastEnd": "2026-03-10",
+    "slipDays": null,
+    "status": "On track"
+   }
   }
  ]
 }
