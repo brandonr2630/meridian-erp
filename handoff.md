@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-21 · Session 70*
+*Last updated: 2026-10-26 · Session 71*
 
 ---
 
@@ -24,18 +24,49 @@
 3. A work order's Schedule card: Apply template, add tasks, milestone, predecessor, Lock baseline; check KPI tiles and Gantt (S66/S68).
 4. Viewer / Office Admin login: Work Orders shows "Read-only access" and no Save buttons (S68).
 5. Optional Supabase dashboard: "Require current password when updating". Leaked-password protection needs the Pro plan (S68).
-6. ~~ProjectLibre fixtures~~ done 2026-10-21 (PR #172, `scripts/tests/schedule/mspdi/`). Review the amended A2 spec, especially the new design points N1-N11 (S70). Optional: an MS Project sample with a real Material resource would verify the material round trip (the owner has no MS Project, so materials stay unverified).
-7. Get the client release / user agreement drafted by your lawyer (S70): restricts use of the information in legal proceedings; ownership stays with Q2 Machines.
+6. ~~ProjectLibre fixtures~~ done 2026-10-21 (PR #172). **A2 spec approved 2026-10-26 (S71)**: N1-N11 resolutions and the A2a/A2b/A2c split are in the spec (PR #174). Still yours: the manual interop check (see 9). Optional: an MS Project sample with a real Material resource, so the material round trip can be verified (you have no MS Project, so materials stay unverified).
+7. Get the client release / user agreement drafted by your lawyer (S70): restricts use of the information in legal proceedings; ownership stays with Q2 Machines. Also give the lawyer the placeholder file notice `SCHED_WIN_NOTICE` (index.html, schedule window block) that exports currently embed.
+9. **Try the schedule window live (S71, PR #177, merged 2026-10-26):** open a saved work order, click **Open schedule**, confirm the window loads (table, Gantt, details), then **Export XML**, open the file in ProjectLibre, and check that dates, links (all four types), lags and milestones match and that no task moves earlier. Then **Import XML** with a ProjectLibre file and check the preview (Apply is disabled by design). Not yet exercised against a real login or real data: only a local page with stubbed data was looked at.
 8. Older: PO module live click-through (S48) and PO list search/pagination (S49); `www.erp` alias/cert (S51); rotate the ERP password; confirm the BMS Bar Stock cost in Job Config; watch for GreenGeeks WAF block recurrence (S47).
 
 **Claude-side, waiting on a go-ahead or a trigger:**
-- **A2 spec amended** with the O1-O8 decisions (S70) and **fixtures merged** (S70, PR #172). Next, once N1-N11 are resolved and the A2a/A2b/A2c split is decided: engine first (link types FS/SS/FF/SF and hierarchy in `jcSchedCompute` and SQL `job_schedule_status`; the 45-case shared fixture must pass unmodified and gain hierarchy cases), then the codec against the fixtures, then the migration on the throwaway Postgres, then the window UI.
-- On A2 acceptance: add the roadmap row, cross-phase rules X24-X30 (X29 agreement gate and X30 job-card actuals are proposed in S70) and the X1 summary-task amendment.
+- **A2a, JS side DONE and merged (S71)**: link types FS/SS/FF/SF and task hierarchy in `jcSchedCompute` (PRs #175, #176), the MSPDI codec `schedule-msp.js` (#176), and the read-only schedule window with Export XML and an import dry run (#177). **A2a still open:** (1) the SQL side, which needs **Docker** (not installed on the machine used in S71; install it first): the A2 migration (`link_type`, `msp_uid`, `parent_task_id` + cycle guard, depth cap), `job_schedule_status` rewritten with the same link-type and hierarchy rules as the JS (the 52+3 shared fixture cases must pass on SQL too: update `scripts/tests/schedule/sql-fixture-runner.mjs`, which does not pass `link_type` or the new `parent` key yet, so the new cases fail loudly against the old SQL), `prepare_schedule_export`, `import_job_schedule` (needs an independent attack review like D0d), all proven on throwaway Postgres with mutation checks and then applied to prod one step at a time; (2) window editing and Apply import once the RPCs exist; (3) audit row per export. Then **A2b** (resources, `task_id` on labour and equipment entries, `jcSaveJobData` change) and **A2c** (undo/redo).
+- A2 spec is accepted (S71): still to do: add the roadmap row, cross-phase rules X24-X30 (X29 agreement gate and X30 job-card actuals are proposed) and the X1 summary-task amendment to `00-overview.md` / `99-roadmap.md`, and the Phase D note that `portal_schedule` feeds the shared codec. Not done yet.
+- On A2 acceptance (original wording): add the roadmap row, cross-phase rules X24-X30 (X29 agreement gate and X30 job-card actuals are proposed in S70) and the X1 summary-task amendment.
 - Roadmap: Phase B (quality: ITP, hold points, NCRs), then C (progress, S-curve, snapshots), then D (client portal). D0 prerequisites are done. Needs owner go-ahead.
-- Housekeeping: remove merged worktrees under `.worktrees/` with `git worktree remove`.
+- Housekeeping: remove merged worktrees under `.worktrees/` with `git worktree remove` (S71 added `spec-a2-n1-n11`, `a2a-engine`, `a2a-hier`, `a2a-window`, `handoff-s71`, all merged once their PRs land).
 - Parked: staging deploy gate (S52, blocked on the Supabase project cap); Supabase Branching `main` record stuck in `MIGRATIONS_FAILED` (S52, not the prod database).
 
 **Gotcha:** Edit/Write are blocked on the base repo's worktrees. Write the file to the scratchpad and `cp` it in. Pull or branch from `origin/master` before reading this file (a stale checkout once stopped at Session 51).
+
+---
+
+## Session 71 - A2 resolved and A2a built on the JS side: link types, hierarchy, MSPDI codec, schedule window (2026-10-26)
+
+**Merged to master (all deploy automatically on push):**
+- **#174 (docs):** N1-N11 resolved in `docs/specs/project-portal/phase-a2-projectlibre.md` plus the A2a/A2b/A2c split and the fixture findings. Owner approved. Later amended after reading the code: N3-N5 (see Findings).
+- **#175:** `jcSchedCompute` handles link types FS/SS/FF/SF (forward and backward pass). Missing or unknown type = FS, so nothing changes until the migration adds `link_type`. 7 hand-derived fixture cases, critical-set and slack asserts. The 45 original cases pass unmodified.
+- **#176:** (a) hierarchy in `jcSchedCompute` (`parent_task_id`): a row with children is a summary: derived dates from its leaves, weight 0, never critical, excluded from progress and forecast; output gains `summaries`; links out of a summary use its derived start/end; FS/SS into a summary constrain every leaf. **Approximations, flagged with a `summary-link-approx` warning and ignored:** FF/SF into a summary, and SS/SF out of a summary in the backward pass. Parent cycles are cut with `hierarchy-cycle`. 3 more fixture cases (now 55 shared cases). (b) **`schedule-msp.js`**, the pure MSPDI codec at the repo root: `parse`, `toPayload`, `build`.
+- **#177:** read-only schedule window, route `#/schedule/<job_id>` (new tab from an **Open schedule** button on the Schedule card): KPI strip, task table (phases, predecessors with type and lag, slack, critical marker), details pane, the Phase A Gantt, **Export XML** and **Import XML dry run** (parse + preview; Apply disabled, says the DB upgrade is needed). Nothing in the window writes to the DB (a test asserts it). `index.html` now loads `schedule-msp.js` with a script tag.
+
+**Tests:** 272 pass (`node --test scripts/tests/ui/*.test.mjs scripts/tests/schedule/*.test.mjs`); mutation harnesses: compute `node scripts/tests/schedule/mutate.mjs` 67/67, codec `node scripts/tests/schedule/msp-mutate.mjs` 57/57, window `node scripts/tests/ui/schedule-window-mutate.mjs` 44/44. verify-spec / verify-roadmap / verify-guards pass. The window was also looked at in a real browser page (served locally, login and data stubbed): layout, escaping, import preview, export, route restore; no console errors. **Not** tested against real Supabase or a login.
+
+**Findings worth remembering:**
+- **The job-card save deletes every entry row for the job and re-inserts them with new ids** (`jcSaveJobData`, all seven entry tables). So N4's `task_id` must be part of the job-card row model and written on every save; a separate update would be erased. There are seven entry tables (labour, equipment, material, consumable, hardware, tooling, subcontractor); only labour and equipment carry time. `labour_entries.tasks` / `equipment_entries.tasks` are catalogue task names from `config_tasks`: a different concept, do not reuse.
+- **ProjectLibre dates:** a task that starts mid-day (13:00) legitimately ends the next working day, so a day-granular recompute of finish dates corrupts valid data (my first version did, on fixtures 01 and 02). Rule now: keep the stored finish unless it falls on a NON-working day of the file's calendar (fixture 06, stale across an exception); then recompute from the calendar using time of day. Zero-duration leaves are treated as milestones (fixture 01 has two).
+- **`escHTML(0)` returns an empty string** (it tests truthiness). Any number passed to it vanishes at 0 ("0%" showed as "%"). The window uses `schedWinEsc` (stringifies first). Check this anywhere else numbers go through `escHTML`.
+- Export UIDs are TEMPORARY (1,000,001+) with `Project/Manager = meridian-readonly-export`, because stable UIDs come from `prepare_schedule_export` (not built). So an exported file is "foreign" on import (append/replace only) until then. The file carries a placeholder ownership notice, wording for the lawyer.
+- The Gantt renderer still draws arrows end-to-start whatever the link type and does not nest by `parent_task_id`.
+- Two-tab token refresh race (spec R3) was not touched; Supabase's refresh-token reuse window should cover it but it was not exercised.
+- **Docker is not installed** on the machine used this session (`docker: command not found`). Every SQL change in this project must be proven on throwaway Postgres first, so the SQL half of A2a is blocked on that.
+
+**Gotchas:**
+- Shell quoting: a missing closing quote in a long `node "...path"` Bash command fails with "unexpected EOF"; check quotes before blaming the script. For multi-line JS edits write a script file to the scratchpad instead of `node -e`.
+- `Edit` works on files in `.worktrees/<name>/` (the old "Edit/Write are blocked" gotcha did not bite this session). `git worktree add` needs `--no-track` against `refs/remotes/origin/master`, or it prints a tracking hint and (once) failed to check out.
+- `fixture.json` is CRLF with 1-space indent and no trailing newline: append cases by splicing text, never re-serialise (it rewrites the whole file).
+- PR bodies/commits: the session ends commits with the Co-Authored-By line given by the app.
+
+**Next (in order):** install Docker; then SQL for A2a (see Claude-side list); owner item 9 (live check of the window and ProjectLibre interop); lawyer items; roadmap/X-rule edits for A2; Phase B on go-ahead.
 
 ---
 
