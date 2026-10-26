@@ -37,7 +37,7 @@ function toInput(c) {
   return {
     tasks: c.tasks.map((t) => ({ id: t.key, sort_order: t.sort_order, start_date: t.start_date, end_date: t.end_date, progress: t.progress,
       is_milestone: t.is_milestone, weight: t.weight, baseline_start: t.baseline_start, baseline_end: t.baseline_end, phase_id: null })),
-    links: c.links.map((l) => ({ task_id: l.task, predecessor_id: l.pred, lag_days: l.lag })),
+    links: c.links.map((l) => ({ task_id: l.task, predecessor_id: l.pred, lag_days: l.lag, link_type: l.type })),
     phases: [], job: { status: c.job.status, due_date: c.job.due_date, baselineLocked: c.baselineLocked }, today: c.today,
   };
 }
@@ -78,6 +78,28 @@ test("critical sets and slack", () => {
   assert.deepEqual(run(toInput(caseByName("all complete, no due"))).slackByTask, {});
   assert.deepEqual(run(toInput(caseByName("due date later than forecast"))).slackByTask, { A: 13, B: 13, C: 17 });
   assert.deepEqual(run(toInput(caseByName("due date earlier than forecast"))).slackByTask, { A: -3, B: -3 });
+});
+
+// ---------- A2 link types: critical sets and slack (hand derived in the fixture notes of the same cases) ----------
+test("A2 link types: critical sets and slack", () => {
+  assert.deepEqual(critOf("A2 SS link with lag 2"), ["A", "B"]);
+  assert.deepEqual(critOf("A2 FF link with lag 0"), ["A", "B"]);
+  assert.deepEqual(critOf("A2 SF link that does not bind"), ["A"]);
+  assert.deepEqual(critOf("A2 SF link that pushes"), ["A", "B"]);
+  assert.deepEqual(critOf("A2 mixed link types"), ["C", "D"]);
+  assert.deepEqual(critOf("A2 FS with a lead"), ["A", "B"]);
+  assert.deepEqual(critOf("A2 SS on a started"), ["A", "B"]);
+  assert.deepEqual(run(toInput(caseByName("A2 SF link that does not bind"))).slackByTask, { A: 0, B: 1 });
+  assert.deepEqual(run(toInput(caseByName("A2 mixed link types"))).slackByTask, { A: 2, B: 1, C: 0, D: 0 });
+  assert.deepEqual(run(toInput(caseByName("A2 SS on a started"))).slackByTask, { A: 0, B: 0 });
+});
+test("A2 link types: a missing or unknown type behaves as FS", () => {
+  const c = caseByName("A2 FS with a lead"), input = toInput(c);
+  const fs = run(input);
+  for (const t of [undefined, null, "", "XX", "fs"]) {
+    const alt = toInput(c); alt.links = alt.links.map((l) => ({ ...l, link_type: t }));
+    assert.deepEqual(run(alt), fs);
+  }
 });
 
 // ---------- helpers ----------
