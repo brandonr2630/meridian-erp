@@ -1628,6 +1628,36 @@ body {
 .gt-tip-t { font-weight:700; margin-bottom:4px; word-break:break-word; }
 .gt-tip-l { color:var(--text-2); }
 /* schedule-gantt:end */
+/* schedule-window:begin */
+.sw-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+#sw-msg { margin:0 0 12px; padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius); color:var(--red); background:var(--bg-3); font-size:13px; }
+.sw-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; margin:0 0 14px; }
+.sw-kpi { background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px; }
+.sw-kpi-l { font-size:11px; color:var(--text-3); text-transform:uppercase; letter-spacing:.04em; }
+.sw-kpi-v { font-size:20px; font-weight:600; margin-top:2px; }
+.sw-kpi-x { font-size:12px; color:var(--text-2); margin-top:2px; }
+.sw-pill { display:inline-block; padding:1px 10px; border-radius:999px; font-size:13px; font-weight:600; background:var(--bg-3); }
+.sw-ok { color:var(--green); } .sw-warn { color:var(--amber); } .sw-bad { color:var(--red); }
+.sw-layout { display:grid; grid-template-columns:minmax(0,3fr) minmax(250px,1fr); gap:14px; align-items:start; }
+@media (max-width:1000px) { .sw-layout { grid-template-columns:minmax(0,1fr); } }
+.sw-card { background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius); padding:10px 12px; margin:0 0 14px; }
+.sw-layout .sw-card, .sw-card:last-child { margin-bottom:0; }
+.sw-tbl tr.sw-task { cursor:pointer; }
+.sw-tbl tr.sw-task:hover, .sw-tbl tr.sw-sel { background:var(--bg-3); }
+.sw-tbl tr.sw-crit td:first-child { box-shadow:inset 3px 0 0 var(--red); }
+.sw-tbl tr.sw-phase td { font-weight:600; font-size:12px; background:var(--bg-3); }
+.sw-dim { color:var(--text-3); }
+.sw-nw { white-space:nowrap; }
+.sw-err { color:var(--red); font-size:13px; margin:6px 0; }
+.sw-dtitle { font-weight:600; margin-bottom:8px; }
+.sw-dgrid { display:grid; grid-template-columns:92px minmax(0,1fr); gap:4px 10px; font-size:12px; }
+.sw-dk { color:var(--text-3); }
+.sw-imp-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; font-size:13px; }
+.sw-imp-sum, .sw-imp-src { font-size:12px; color:var(--text-2); margin:4px 0; }
+.sw-imp-warn { margin:6px 0; padding-left:18px; font-size:12px; color:var(--amber); }
+.sw-imp-tbl { max-height:320px; overflow:auto; margin:8px 0; }
+.sw-imp-apply { display:flex; align-items:center; gap:10px; font-size:12px; flex-wrap:wrap; }
+/* schedule-window:end */
 /* schedule-table:begin */
 .jc-sched-notice { margin:6px 0; padding:6px 10px; font-size:12px; color:var(--text-2); background:var(--bg-3); border:1px solid var(--border); border-radius:var(--radius); }
 .jc-sched-phasebar { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:6px 0 8px; font-size:12px; }
@@ -3491,6 +3521,7 @@ body.light .global-search-results, body.light .split-btn-menu {
                   <select class="jc-dash-filter" id="jc-sched-zoom" onchange="jcRenderSchedGantt()">
                     <option value="Day" selected>Day</option><option value="Week">Week</option><option value="Month">Month</option>
                   </select>
+                  <button class="btn btn-ghost btn-sm" id="jc-sched-open" onclick="schedWinOpen(jcCurrentJobId)">Open schedule ↗</button>
                 </div>
                 <div class="jc-sched-notice" id="jc-sched-notice" style="display:none"></div>
                 <div class="jc-sched-phasebar" id="jc-sched-phasebar" style="display:none"></div>
@@ -3982,6 +4013,38 @@ body.light .global-search-results, body.light .split-btn-menu {
         </div>
       </div>
       <div class="page-body" id="job-config-body"></div>
+    </div>
+
+    <!-- Schedule window (#/schedule/<job_id>), opened in a new tab from the Work Order's Schedule card -->
+    <div class="page-view" id="view-schedule">
+      <div class="page-header">
+        <div>
+          <div class="page-title" id="sw-title">Schedule</div>
+          <div class="page-subtitle" id="sw-sub"></div>
+        </div>
+        <div class="page-actions sw-actions">
+          <select class="jc-dash-filter" id="sw-zoom" onchange="schedWinSetZoom(this.value)" aria-label="Chart zoom">
+            <option value="Day" selected>Day</option><option value="Week">Week</option><option value="Month">Month</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" id="sw-import" onclick="schedWinImportPick()" disabled>Import XML</button>
+          <button class="btn btn-ghost btn-sm" id="sw-export" onclick="schedWinExport()" disabled>Export XML</button>
+          <button class="btn btn-ghost btn-sm" onclick="navigate('work-orders')">Work orders</button>
+          <input type="file" id="sw-file" accept=".xml,application/xml,text/xml" style="display:none" onchange="schedWinImportFile(this.files && this.files[0])">
+        </div>
+      </div>
+      <div class="page-body">
+        <div id="sw-msg" style="display:none"></div>
+        <div id="sw-main" style="display:none">
+          <div class="jc-sched-notice" id="sw-notice" style="display:none"></div>
+          <div class="sw-kpis" id="sw-kpis"></div>
+          <div class="sw-card" id="sw-import-panel" style="display:none"></div>
+          <div class="sw-layout">
+            <div class="sw-card"><div id="sw-table" class="dyn-table-wrap"></div></div>
+            <div class="sw-card" id="sw-detail"></div>
+          </div>
+          <div class="sw-card" style="margin-top:14px"><div id="sw-gantt"></div></div>
+        </div>
+      </div>
     </div>
 
   </main>
@@ -6079,6 +6142,7 @@ body.light .global-search-results, body.light .split-btn-menu {
   </div>
 </div>
 
+<script src="schedule-msp.js"></script>
 <script>
 // ═══════════════════════════════════════════════════════════════
 //  TERRAN GROUP ERP — Finance Module
@@ -6650,7 +6714,7 @@ function navigate(view, opts = {}) {
     const moduleGuard = {
       finance:    ['coa','journal','ar','credit-notes','ap','vendors','purchase-orders','bank','pl','bs','tb','cf','aged-ar','aged-ap'],
       sales:      ['sales-leads','pipeline','crm-activities','crm-tasks','quotations','clients','client-360'],
-      operations: ['work-orders','job-costing','delivery-notes','job-config'],
+      operations: ['work-orders','job-costing','delivery-notes','job-config','schedule'],
     };
     for (const [mod, views] of Object.entries(moduleGuard)) {
       if (views.includes(view) && u[`module_${mod}`] === false) { view = 'dashboard'; break; }
@@ -6679,7 +6743,7 @@ function navigate(view, opts = {}) {
   currentView = view;
   (VIEW_SECTIONS[view] || []).forEach(expandSection);
   if (window.innerWidth <= 900) closeSidebar();
-  if (push) history.pushState({ view }, '', '#/' + view);
+  if (push) history.pushState({ view }, '', '#/' + view + (view === 'schedule' && _schedWinJobId ? '/' + _schedWinJobId : ''));
   return loadViewData(view);
 }
 
@@ -6718,6 +6782,14 @@ async function _restoreViewFromHash() {
   const parts = hash.split('/');
   const view = parts[0];
   if (!document.getElementById('view-' + view)) { navigate('dashboard', { push: false }); return; }
+  if (view === 'schedule') {   // #/schedule/<job_id>: keep the job id in the address (navigate() would reduce it to #/schedule)
+    const jid = schedWinJobIdFromHash(hash);
+    if (!jid) { navigate('dashboard', { push: false }); return; }
+    _schedWinJobId = jid;
+    await navigate('schedule', { push: false });
+    history.replaceState({ view: 'schedule' }, '', '#/schedule/' + jid);
+    return;
+  }
   await navigate(view, { push: false });
   history.replaceState({ view: currentView }, '', '#/' + currentView);
   if (parts.length >= 3) {
@@ -6828,6 +6900,7 @@ async function loadViewData(view) {
     case 'user-management': await loadUserManagement(); break;
     case 'role-management': await loadRoleManagement(); break;
     case 'job-config': await loadJobConfig(); break;
+    case 'schedule': await loadScheduleWindow(); break;
   }
 }
 
@@ -9090,6 +9163,252 @@ function jcRenderJobGantt() {
   }
 }
 // ── END SCHEDULE GANTT RENDERER ──
+// ── SCHEDULE WINDOW ──
+// Phase A2a: the full-screen schedule window, route #/schedule/<job_id>, opened in a new tab from the Work Order's Schedule card.
+// READ-ONLY in this version: task table, Gantt (the Phase A renderer), details pane, KPI summary, Export XML (MS Project XML via
+// schedule-msp.js) and an Import XML DRY RUN (parse + preview). Editing stays on the Work Order card; applying an import needs the
+// A2 database migration (link_type, msp_uid, import_job_schedule), which does not exist yet, so Apply is disabled and says why.
+// Exports use TEMPORARY UIDs (1,000,001 and up) and the read-only marker in Project/Manager, because stable UIDs are assigned by
+// prepare_schedule_export (not built yet). Every dynamic string goes through textContent / escHTML; the codec rejects hostile files.
+const SCHED_WIN_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SCHED_WIN_TEMP_UID = 1000000;
+const SCHED_WIN_MARKER = 'meridian-readonly-export';
+const SCHED_WIN_NOTICE = 'Confidential. Schedule data owned by Q2 Machines. Exported from Meridian ERP.';
+const SCHED_WIN_MAX_BYTES = 5 * 1024 * 1024;
+let _schedWinJobId = null;
+const schedWin = { seq: 0, job: null, tasks: [], phases: [], links: [], v2: false, compute: null, selected: null, zoom: 'Day',
+  collapsed: new Set(), showAll: false, imp: null, lastWrap: null, viewKey: null, error: '' };
+
+// '#/schedule/<uuid>' (or 'schedule/<uuid>') -> the job id, or null for anything else. Never throws.
+function schedWinJobIdFromHash(hash) {
+  const parts = String(hash == null ? '' : hash).replace(/^#\/?/, '').split('/');
+  return parts[0] === 'schedule' && SCHED_WIN_UUID.test(parts[1] || '') ? parts[1].toLowerCase() : null;
+}
+function schedWinOpen(jobId) {
+  if (!jobId) { showToast('Save the job before opening its schedule.', 'warn'); return; }
+  window.open(location.pathname + '#/schedule/' + encodeURIComponent(jobId), '_blank', 'noopener');
+}
+
+// escHTML turns 0 into an empty string, so every value goes through String() first (a 0% task must read "0%", not "%")
+const schedWinEsc = v => escHTML(String(v == null ? "" : v));
+const schedWinNum = v => (v == null || v === '' || !Number.isFinite(+v)) ? 0 : +v;
+const schedWinBySort = (a, b) => (schedWinNum(a.sort_order) - schedWinNum(b.sort_order)) || String(a.created_at || '').localeCompare(String(b.created_at || ''));
+// "Remove bearings FS+2d, Inspect SS" for one task: its predecessors with link type (default FS) and lag in days.
+function schedWinPredText(task, links, byId) {
+  const out = [];
+  for (const l of links || []) {
+    if (!l || l.task_id !== task.id) continue;
+    const p = byId.get(l.predecessor_id); if (!p) continue;
+    const lag = Math.round(schedWinNum(l.lag_days)), type = l.link_type === 'SS' || l.link_type === 'FF' || l.link_type === 'SF' ? l.link_type : 'FS';
+    const name = String(p.task_name || '(unnamed)');
+    out.push((name.length > 28 ? name.slice(0, 27) + '…' : name) + ' ' + type + (lag ? (lag > 0 ? '+' : '') + lag + 'd' : ''));
+  }
+  return out.join(', ');
+}
+// Table order: each phase (sort_order) with its tasks, then the unphased tasks. Task rows carry an indent from parent_task_id (when present).
+function schedWinRows(tasks, phases) {
+  const ts = (tasks || []).filter(Boolean).slice().sort(schedWinBySort), ph = (phases || []).filter(Boolean).slice().sort(schedWinBySort);
+  const known = new Set(ph.map(p => p.id)), byId = new Map(ts.map(t => [t.id, t]));
+  const depth = t => { let d = 0; for (let p = byId.get(t.parent_task_id), g = 0; p && g < 8; p = byId.get(p.parent_task_id), g++) d++; return d; };
+  const rows = [];
+  const pushTasks = list => { for (const t of list) rows.push({ kind: 'task', id: t.id, task: t, depth: depth(t) }); };
+  for (const p of ph) { rows.push({ kind: 'phase', id: p.id, phase: p }); pushTasks(ts.filter(t => t.phase_id === p.id)); }
+  const loose = ts.filter(t => t.phase_id == null || !known.has(t.phase_id));
+  if (loose.length) { if (ph.length) rows.push({ kind: 'phase', id: '__unphased__', phase: { id: '__unphased__', name: 'Unphased' } }); pushTasks(loose); }
+  return rows;
+}
+// The model schedule-msp.js builds a file from. UIDs are temporary (see the header comment); links to unknown tasks are skipped.
+function schedWinBuildModel(job, tasks, phases, links) {
+  const ph = (phases || []).slice().sort(schedWinBySort), ts = (tasks || []).slice().sort(schedWinBySort);
+  const phaseUid = new Map(), taskUid = new Map();
+  let next = SCHED_WIN_TEMP_UID;
+  for (const p of ph) phaseUid.set(p.id, ++next);
+  for (const t of ts) taskUid.set(t.id, ++next);
+  const out = ts.map(t => ({ uid: taskUid.get(t.id), name: String(t.task_name || '').trim() || '(unnamed)', phase_uid: phaseUid.has(t.phase_id) ? phaseUid.get(t.phase_id) : null,
+    parent_uid: taskUid.has(t.parent_task_id) ? taskUid.get(t.parent_task_id) : null, start_date: t.start_date || null, end_date: t.end_date || null,
+    progress: schedWinNum(t.progress), is_milestone: !!t.is_milestone, is_critical: !!t.is_critical,
+    baseline_start: t.baseline_start || null, baseline_end: t.baseline_end || null, links: [] }));
+  const byUid = new Map(out.map(o => [o.uid, o]));
+  for (const l of links || []) {
+    const tu = taskUid.get(l && l.task_id), pu = taskUid.get(l && l.predecessor_id);
+    if (tu == null || pu == null || tu === pu) continue;
+    byUid.get(tu).links.push({ pred_uid: pu, link_type: l.link_type === 'SS' || l.link_type === 'FF' || l.link_type === 'SF' ? l.link_type : 'FS', lag_days: Math.round(schedWinNum(l.lag_days)) });
+  }
+  const no = String((job && job.job_no) || '').trim(), desc = String((job && job.description) || '').trim();
+  return { project: { id: job && job.id, name: no || 'Schedule', title: (no + (desc ? ' ' + desc : '')).trim() || 'Schedule' },
+    phases: ph.map(p => ({ uid: phaseUid.get(p.id), name: String(p.name || '').trim() || '(unnamed phase)' })), tasks: out };
+}
+const schedWinFileName = job => 'WO-' + String((job && job.job_no) || 'schedule').replace(/[^A-Za-z0-9._-]+/g, '_').slice(0, 40) + '-schedule.xml';
+
+async function loadScheduleWindow() {
+  const seq = ++schedWin.seq, jid = _schedWinJobId;
+  Object.assign(schedWin, { job: null, tasks: [], phases: [], links: [], v2: false, compute: null, selected: null, imp: null, error: '', viewKey: null });
+  schedWin.collapsed.clear();
+  schedWinRender();
+  if (!jid || !SCHED_WIN_UUID.test(jid)) { schedWin.error = 'This link does not point to a schedule.'; schedWinRender(); return; }
+  if (!can('ops:work-orders:read')) { schedWin.error = 'You do not have access to Work Orders.'; schedWinRender(); return; }
+  try {
+    const [jobs, tasks, phases, links] = await Promise.all([
+      sbGet('jobs', `id=eq.${jid}&select=id,job_no,description,status,due_date,company_id&limit=1`),
+      sbGet('job_tasks', `job_id=eq.${jid}&order=sort_order.asc,created_at.asc`),
+      sbGet('job_phases', `job_id=eq.${jid}&order=sort_order.asc`).catch(() => null),
+      sbGet('job_task_links', `job_id=eq.${jid}&order=created_at.asc`).catch(() => null)
+    ]);
+    if (seq !== schedWin.seq) return;
+    if (!jobs || !jobs[0]) { schedWin.error = 'That work order was not found, or you do not have access to it.'; schedWinRender(); return; }
+    schedWin.job = jobs[0]; schedWin.tasks = Array.isArray(tasks) ? tasks : [];
+    schedWin.v2 = Array.isArray(phases) && Array.isArray(links);
+    schedWin.phases = schedWin.v2 ? phases : [];
+    schedWin.links = schedWin.v2 ? links : schedWin.tasks.filter(x => x && x.depends_on && x.id).map(x => ({ task_id: x.id, predecessor_id: x.depends_on, lag_days: 0 }));
+    try { schedWin.compute = jcSchedCompute({ tasks: schedWin.tasks, links: schedWin.links, phases: schedWin.phases, job: { status: schedWin.job.status, due_date: schedWin.job.due_date }, today: jcSchedToday() }); }
+    catch (e) { schedWin.compute = null; }
+  } catch (e) { if (seq !== schedWin.seq) return; schedWin.error = 'Could not load the schedule: ' + (e && e.message ? e.message : e); }
+  schedWinRender();
+}
+
+function schedWinEl(id) { return document.getElementById(id); }
+function schedWinSet(id, html) { const el = schedWinEl(id); if (el) el.innerHTML = html; }
+const schedWinDate = s => s ? schedWinEsc(jcKpiFmtDate(s)) : '<span class="sw-dim">—</span>';
+function schedWinRender() {
+  const w = schedWin, t = schedWinEl('sw-title'), sub = schedWinEl('sw-sub');
+  if (t) t.textContent = w.job ? 'Schedule · ' + (w.job.job_no || '') : 'Schedule';
+  if (sub) sub.textContent = w.job ? String(w.job.description || '') : '';
+  const msg = schedWinEl('sw-msg');
+  if (msg) { msg.textContent = w.error || ''; msg.style.display = w.error ? '' : 'none'; }
+  const ok = !!w.job && !w.error;
+  for (const id of ['sw-main']) { const el = schedWinEl(id); if (el) el.style.display = ok ? '' : 'none'; }
+  for (const id of ['sw-export', 'sw-import']) { const b = schedWinEl(id); if (b) b.disabled = !ok; }
+  const nb = schedWinEl('sw-notice');
+  if (nb) { nb.textContent = w.v2 ? '' : 'The schedule upgrade (phases and links) is not applied to this database yet, so this view uses the single predecessor of each task.'; nb.style.display = ok && !w.v2 ? '' : 'none'; }
+  if (!ok) { schedWinImportRender(); return; }
+  schedWinRenderKpis(); schedWinRenderTable(); schedWinRenderDetail(); schedWinRenderGantt(); schedWinImportRender();
+}
+function schedWinRenderKpis() {
+  const c = schedWin.compute, host = schedWinEl('sw-kpis'); if (!host) return;
+  if (!c) { host.textContent = ''; return; }
+  const status = String(c.status || ''), cls = status === 'Late' ? 'sw-bad' : status === 'At risk' ? 'sw-warn' : 'sw-ok';
+  const tile = (label, value, extra) => `<div class="sw-kpi"><div class="sw-kpi-l">${schedWinEsc(label)}</div><div class="sw-kpi-v">${value}</div>${extra ? `<div class="sw-kpi-x">${extra}</div>` : ''}</div>`;
+  host.innerHTML =
+    tile('Overall progress', schedWinEsc(c.overallDisplay) + '%', 'Planned today ' + schedWinEsc(c.plannedDisplay) + '%') +
+    tile('Schedule', `<span class="sw-pill ${cls}">${schedWinEsc(status)}</span>`, c.forecastEnd ? 'Forecast ' + schedWinEsc(jcKpiFmtDate(c.forecastEnd)) + (c.slipDays > 0 ? ' · +' + schedWinEsc(c.slipDays) + ' d vs baseline' : '') : '') +
+    tile('Tasks', schedWinEsc(schedWin.tasks.length), schedWin.phases.length ? schedWinEsc(schedWin.phases.length) + ' phase' + (schedWin.phases.length === 1 ? '' : 's') : '');
+}
+function schedWinRenderTable() {
+  const w = schedWin, host = schedWinEl('sw-table'); if (!host) return;
+  const rows = schedWinRows(w.tasks, w.phases), byId = new Map(w.tasks.map(t => [t.id, t]));
+  const crit = new Set(w.compute ? w.compute.crit : []), slack = w.compute ? w.compute.slackByTask : {};
+  if (!rows.length) { host.innerHTML = '<div class="jc-sched-empty">No tasks yet. Add tasks on the work order, then open this window again.</div>'; return; }
+  const body = rows.map(r => {
+    if (r.kind === 'phase') return `<tr class="sw-phase"><td colspan="6">${schedWinEsc(String(r.phase.name || '(unnamed phase)'))}</td></tr>`;
+    const t = r.task, sel = w.selected === t.id;
+    const name = schedWinEsc(String(t.task_name || '(unnamed)')), pad = 8 + r.depth * 16;
+    const sl = slack && slack[t.id] != null ? schedWinEsc(slack[t.id]) + ' d' : '<span class="sw-dim">—</span>';
+    return `<tr class="sw-task${sel ? ' sw-sel' : ''}${crit.has(t.id) ? ' sw-crit' : ''}" data-id="${schedWinEsc(t.id)}">` +
+      `<td style="padding-left:${pad}px">${t.is_milestone ? '◆ ' : ''}${name}</td><td class="sw-nw">${schedWinDate(t.start_date)}</td><td class="sw-nw">${schedWinDate(t.end_date)}</td>` +
+      `<td class="sw-nw">${schedWinEsc(Math.round(schedWinNum(t.progress)))}%</td><td>${schedWinEsc(schedWinPredText(t, w.links, byId)) || '<span class="sw-dim">—</span>'}</td><td class="sw-nw">${sl}</td></tr>`;
+  }).join('');
+  host.innerHTML = `<table class="dyn-table sw-tbl"><thead><tr><th>Task</th><th style="width:96px">Start</th><th style="width:96px">End</th><th style="width:60px">Done</th><th style="width:210px">Predecessors</th><th style="width:70px">Slack</th></tr></thead><tbody>${body}</tbody></table>`;
+  host.querySelectorAll('tr.sw-task').forEach(tr => tr.addEventListener('click', () => { schedWin.selected = tr.getAttribute('data-id'); schedWinRenderTable(); schedWinRenderDetail(); }));
+}
+function schedWinRenderDetail() {
+  const w = schedWin, host = schedWinEl('sw-detail'); if (!host) return;
+  const t = w.tasks.find(x => x.id === w.selected);
+  if (!t) { host.innerHTML = '<div class="sw-dim">Select a task to see its details.</div>'; return; }
+  const byId = new Map(w.tasks.map(x => [x.id, x])), ph = w.phases.find(p => p.id === t.phase_id);
+  const succ = w.links.filter(l => l && l.predecessor_id === t.id).map(l => byId.get(l.task_id)).filter(Boolean).map(x => String(x.task_name || '(unnamed)'));
+  const crit = w.compute && w.compute.crit.includes(t.id), sl = w.compute && w.compute.slackByTask[t.id];
+  const row = (k, v) => `<div class="sw-dk">${schedWinEsc(k)}</div><div class="sw-dv">${v}</div>`;
+  host.innerHTML = `<div class="sw-dtitle">${schedWinEsc(String(t.task_name || '(unnamed)'))}</div><div class="sw-dgrid">` +
+    row('Phase', ph ? schedWinEsc(String(ph.name || '')) : 'Unphased') + row('Dates', schedWinDate(t.start_date) + ' → ' + schedWinDate(t.end_date)) +
+    row('Baseline', t.baseline_start ? schedWinDate(t.baseline_start) + ' → ' + schedWinDate(t.baseline_end) : '<span class="sw-dim">not locked</span>') +
+    row('Progress', schedWinEsc(Math.round(schedWinNum(t.progress))) + '%') + row('Assignee', t.assignee ? schedWinEsc(t.assignee) : '<span class="sw-dim">—</span>') +
+    row('Critical', crit ? 'Yes' + (sl != null ? ' (slack ' + schedWinEsc(sl) + ' d)' : '') : 'No' + (sl != null ? ' (slack ' + schedWinEsc(sl) + ' d)' : '')) +
+    row('Predecessors', schedWinEsc(schedWinPredText(t, w.links, byId)) || '<span class="sw-dim">none</span>') +
+    row('Successors', succ.length ? schedWinEsc(succ.join(', ')) : '<span class="sw-dim">none</span>') + '</div>';
+}
+function schedWinRenderGantt() {
+  const w = schedWin, host = schedWinEl('sw-gantt'); if (!host) return;
+  try {
+    if (!w.tasks.length) { host.textContent = ''; return; }
+    const px = JC_GANTT_ZOOM[w.zoom] || JC_GANTT_ZOOM.Day, today = jcGanttToday();
+    const layout = jcGanttLayout({ tasks: w.tasks, phases: w.phases, links: w.links, compute: w.compute, today, pxPerDay: px, collapsed: w.collapsed, showAll: w.showAll });
+    const keepL = w.lastWrap ? w.lastWrap.scrollLeft || 0 : 0, keepT = w.lastWrap ? w.lastWrap.scrollTop || 0 : 0;
+    const res = jcGanttDraw(host, layout, {
+      showAll: w.showAll,
+      onToggle: k => { if (w.collapsed.has(k)) w.collapsed.delete(k); else w.collapsed.add(k); schedWinRenderGantt(); },
+      onToggleAll: v => { w.showAll = !!v; schedWinRenderGantt(); }
+    });
+    w.lastWrap = res.wrap;
+    if (!res.wrap) return;
+    const key = w.job.id + '|' + px;
+    if (key !== w.viewKey) { w.viewKey = key; res.wrap.scrollLeft = layout.today ? Math.max(0, layout.today.x - 0.35 * Math.max(0, (res.wrap.clientWidth || 0) - JC_GANTT_LEFT_W)) : 0; }
+    else { res.wrap.scrollLeft = keepL; res.wrap.scrollTop = keepT; }
+  } catch (e) { host.textContent = 'The schedule chart could not be drawn.'; try { console.warn('schedWinRenderGantt', e); } catch (_) { /* no console */ } }
+}
+function schedWinSetZoom(v) { schedWin.zoom = JC_GANTT_ZOOM[v] ? v : 'Day'; schedWinRenderGantt(); }
+
+// ---- export: a file the user asked for, built in the browser; nothing is sent anywhere ----
+function schedWinExport() {
+  const w = schedWin;
+  if (!w.job) return;
+  if (typeof MspCodec === 'undefined') { showToast('The export module did not load. Reload the page.', 'error'); return; }
+  try {
+    const model = schedWinBuildModel(w.job, w.tasks, w.phases, w.links);
+    const xml = MspCodec.build(model, { notice: SCHED_WIN_NOTICE, manager: SCHED_WIN_MARKER });
+    const url = URL.createObjectURL(new Blob([xml], { type: 'application/xml' }));
+    const a = document.createElement('a'); a.href = url; a.download = schedWinFileName(w.job); document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast('Schedule exported as MS Project XML.', 'success');
+  } catch (e) { showToast('Export failed: ' + (e && e.message ? e.message : e), 'error'); }
+}
+
+// ---- import: dry run only (parse + preview) ----
+function schedWinImportPick() { const f = schedWinEl('sw-file'); if (f) { f.value = ''; f.click(); } }
+async function schedWinImportFile(file) {
+  if (!file) return;
+  if (typeof MspCodec === 'undefined') { showToast('The import module did not load. Reload the page.', 'error'); return; }
+  const imp = { name: String(file.name || 'file').slice(0, 120), size: file.size, error: '', parsed: null, payload: null };
+  schedWin.imp = imp; schedWinImportRender();
+  if (file.size > SCHED_WIN_MAX_BYTES) { imp.error = 'The file is larger than 5 MB.'; schedWinImportRender(); return; }
+  try {
+    const text = await file.text();
+    imp.parsed = MspCodec.parse(text); imp.payload = MspCodec.toPayload(imp.parsed);
+  } catch (e) { imp.error = e && e.name === 'MspError' ? e.message : 'The file could not be read.'; }
+  if (schedWin.imp === imp) schedWinImportRender();
+}
+function schedWinImportClose() { schedWin.imp = null; schedWinImportRender(); }
+// Counts shown in the preview (pure, so it can be tested): rows by kind and links by type.
+function schedWinImportSummary(payload) {
+  const tasks = (payload && payload.tasks) || [], types = { FS: 0, SS: 0, FF: 0, SF: 0 };
+  for (const t of tasks) for (const l of t.links || []) if (types[l.link_type] !== undefined) types[l.link_type]++;
+  return { phases: ((payload && payload.phases) || []).length, tasks: tasks.length, summaries: tasks.filter(t => t.is_summary).length,
+    milestones: tasks.filter(t => t.is_milestone).length, links: types.FS + types.SS + types.FF + types.SF, types,
+    resources: ((payload && payload.resources) || []).length };
+}
+function schedWinImportRender() {
+  const host = schedWinEl('sw-import-panel'); if (!host) return;
+  const imp = schedWin.imp;
+  if (!imp) { host.style.display = 'none'; host.textContent = ''; return; }
+  host.style.display = '';
+  let html = `<div class="sw-imp-head"><b>Import preview</b> · ${schedWinEsc(imp.name)} <button class="btn btn-ghost btn-sm" onclick="schedWinImportClose()">Close</button></div>`;
+  if (!imp.parsed && !imp.error) html += '<div class="sw-dim">Reading the file…</div>';
+  if (imp.error) html += `<div class="sw-err">${schedWinEsc(imp.error)}</div>`;
+  if (imp.payload) {
+    const s = schedWinImportSummary(imp.payload), p = imp.parsed.project, own = schedWin.job && p.uid && p.uid === schedWin.job.id && p.manager !== SCHED_WIN_MARKER;
+    html += `<div class="sw-imp-sum">${schedWinEsc(s.phases)} phase${s.phases === 1 ? '' : 's'} · ${schedWinEsc(s.tasks)} task${s.tasks === 1 ? '' : 's'} (${schedWinEsc(s.milestones)} milestone${s.milestones === 1 ? '' : 's'}, ${schedWinEsc(s.summaries)} summary) · ` +
+      `${schedWinEsc(s.links)} link${s.links === 1 ? '' : 's'} (FS ${schedWinEsc(s.types.FS)}, SS ${schedWinEsc(s.types.SS)}, FF ${schedWinEsc(s.types.FF)}, SF ${schedWinEsc(s.types.SF)}) · ${schedWinEsc(s.resources)} resource${s.resources === 1 ? '' : 's'}</div>`;
+    html += `<div class="sw-imp-src">${own ? 'Exported from this work order: Merge, Append and Replace would be available.' : 'Not exported from this work order (or exported without stable IDs): only Append and Replace would be available.'}</div>`;
+    const warns = imp.payload.warnings || [];
+    if (warns.length) html += '<ul class="sw-imp-warn">' + warns.map(x => `<li>${schedWinEsc(x.message)}${x.count > 1 ? ' (' + schedWinEsc(x.count) + ')' : ''}</li>`).join('') + '</ul>';
+    const all = imp.payload.phases.map(x => ({ kind: 'Phase', name: x.name })).concat(imp.payload.tasks.map(x => ({ kind: x.is_milestone ? 'Milestone' : x.is_summary ? 'Summary' : 'Task', name: x.name, start: x.start_date, end: x.end_date, pct: x.progress, links: x.links.length })));
+    html += '<div class="sw-imp-tbl"><table class="dyn-table"><thead><tr><th style="width:90px">Type</th><th>Name</th><th style="width:96px">Start</th><th style="width:96px">End</th><th style="width:60px">Done</th><th style="width:60px">Links</th></tr></thead><tbody>' +
+      all.slice(0, 200).map(x => `<tr><td>${schedWinEsc(x.kind)}</td><td>${schedWinEsc(x.name)}</td><td>${x.start ? schedWinEsc(jcKpiFmtDate(x.start)) : ''}</td><td>${x.end ? schedWinEsc(jcKpiFmtDate(x.end)) : ''}</td><td>${x.pct != null ? schedWinEsc(x.pct) + '%' : ''}</td><td>${x.links ? schedWinEsc(x.links) : ''}</td></tr>`).join('') +
+      '</tbody></table>' + (all.length > 200 ? `<div class="sw-dim">… and ${schedWinEsc(all.length - 200)} more rows</div>` : '') + '</div>';
+    html += '<div class="sw-imp-apply"><button class="btn btn-primary btn-sm" disabled>Apply import</button> <span class="sw-dim">Applying an import is not available yet: it needs the schedule database upgrade (a later step). This preview only checks the file.</span></div>';
+  }
+  host.innerHTML = html;
+}
+// ── END SCHEDULE WINDOW ──
 // ── SCHEDULE TASK TABLE ──
 // Phase A (Schedule v2), staff UI: data layer + task table of the per-job Schedule card. Loads phases and predecessor links
 // next to the tasks and DEGRADES to the v1 table (one depends_on select, no phases) when job_phases / job_task_links are

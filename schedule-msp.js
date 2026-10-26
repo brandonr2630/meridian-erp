@@ -196,7 +196,8 @@ const MspCodec = (function () {
     const cals = readCalendars(proj), calUid = num(proj, 'CalendarUID');
     const cal = calUid != null ? resolveCalendar(cals, calUid) : null;
     const useCal = !!cal && !cal.allDays;                        // a 7-day calendar keeps "the file's dates are authoritative"
-    const project = { name: clean(txt(proj, 'Name') || txt(proj, 'Title') || ''), title: clean(txt(proj, 'Title') || ''), minutesPerDay,
+    const project = { uid: clean(txt(proj, 'UID') || '', 64) || null, manager: clean(txt(proj, 'Manager') || '', 80) || null,   // Project/UID = jobs.id when Meridian wrote the file
+      name: clean(txt(proj, 'Name') || txt(proj, 'Title') || ''), title: clean(txt(proj, 'Title') || ''), minutesPerDay,
       calendar: cal ? (cal.allDays ? 'seven-day' : 'working-days') : 'none', saveVersion: num(proj, 'SaveVersion') };
 
     // ---- tasks (document order is the outline order)
