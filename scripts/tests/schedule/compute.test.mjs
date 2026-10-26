@@ -36,7 +36,7 @@ const run = (input) => plain(M.jcSchedCompute(input));
 function toInput(c) {
   return {
     tasks: c.tasks.map((t) => ({ id: t.key, sort_order: t.sort_order, start_date: t.start_date, end_date: t.end_date, progress: t.progress,
-      is_milestone: t.is_milestone, weight: t.weight, baseline_start: t.baseline_start, baseline_end: t.baseline_end, phase_id: null })),
+      is_milestone: t.is_milestone, weight: t.weight, baseline_start: t.baseline_start, baseline_end: t.baseline_end, phase_id: null, parent_task_id: t.parent ?? null })),
     links: c.links.map((l) => ({ task_id: l.task, predecessor_id: l.pred, lag_days: l.lag, link_type: l.type })),
     phases: [], job: { status: c.job.status, due_date: c.job.due_date, baselineLocked: c.baselineLocked }, today: c.today,
   };
@@ -100,6 +100,76 @@ test("A2 link types: a missing or unknown type behaves as FS", () => {
     const alt = toInput(c); alt.links = alt.links.map((l) => ({ ...l, link_type: t }));
     assert.deepEqual(run(alt), fs);
   }
+});
+
+// ---------- A2 hierarchy (parent_task_id): summaries are derived, weightless and never critical ----------
+test("A2 hierarchy: critical sets and slack", () => {
+  assert.deepEqual(critOf("A2 hierarchy: FS from a summary"), ["C2", "X"]);
+  assert.deepEqual(run(toInput(caseByName("A2 hierarchy: FS from a summary"))).slackByTask, { C1: 3, C2: 0, X: 0 });
+  assert.deepEqual(critOf("A2 hierarchy: FS into a summary"), ["C2", "P"]);
+  assert.deepEqual(run(toInput(caseByName("A2 hierarchy: FS into a summary"))).slackByTask, { P: 0, C1: 1, C2: 0 });
+});
+const hin = (tasks, links = []) => ({ tasks, links, phases: [], job: { status: "In Progress", due_date: null, baselineLocked: false }, today: "2026-03-02" });
+const ht = (id, start, end, progress, parent, extra = {}) => ({ id, start_date: start, end_date: end, progress, parent_task_id: parent ?? null, phase_id: null,
+  is_milestone: false, weight: null, baseline_start: null, baseline_end: null, sort_order: 0, ...extra });
+test("A2 hierarchy: nested summaries roll up their leaves (span and weighted %)", () => {
+  const r = run(hin([ht("S1", "2026-03-20", "2026-03-30", 0, null), ht("S2", "2026-03-20", "2026-03-30", 0, "S1"),
+    ht("C1", "2026-03-01", "2026-03-04", 100, "S2"), ht("C2", "2026-03-09", "2026-03-12", 0, "S1")]));
+  assert.deepEqual(r.summaries.S2, { leafCount: 1, overall: 100, overallDisplay: 100, start: "2026-03-01", end: "2026-03-04" });
+  assert.deepEqual(r.summaries.S1, { leafCount: 2, overall: 50, overallDisplay: 50, start: "2026-03-01", end: "2026-03-12" });
+  assert.equal(r.overall, 50);                                                 // leaves only: (4*100 + 4*0) / 8
+  assert.deepEqual(r.warnings, []);
+  assert.ok(!r.crit.includes("S1") && !r.crit.includes("S2"));
+  assert.deepEqual(plain(M.jcSchedCompute(hin([ht("A", "2026-03-01", "2026-03-04", 0, null)])).summaries), {});   // no hierarchy: no summaries
+});
+test("A2 hierarchy: SS from a summary uses its earliest leaf start (and warns that the backward bound is approximate)", () => {
+  // C1 started 03-01 (es=d0-1, rem 1, ef=d0), C2 not started (es=d0). Summary start = d0-1. X (dur 2) SS lag 3: es = d0+2, ef = d0+4 = 03-06.
+  const r = run(hin([ht("S", "2026-03-01", "2026-03-12", 0, null), ht("C1", "2026-03-01", "2026-03-02", 50, "S"), ht("C2", "2026-03-09", "2026-03-11", 0, "S"),
+    ht("X", "2026-03-09", "2026-03-10", 0, null)], [{ task_id: "X", predecessor_id: "S", lag_days: 3, link_type: "SS" }]));
+  assert.equal(r.forecastEnd, "2026-03-06");
+  assert.deepEqual(r.warnings, ["summary-link-approx"]);
+});
+test("A2 hierarchy: FF into a summary is ignored with a warning; a parent cycle is cut with a warning", () => {
+  const r = run(hin([ht("P", "2026-03-09", "2026-03-12", 0, null), ht("S", "2026-03-09", "2026-03-12", 0, null), ht("C", "2026-03-09", "2026-03-10", 0, "S")],
+    [{ task_id: "S", predecessor_id: "P", lag_days: 0, link_type: "FF" }]));
+  assert.deepEqual(r.warnings, ["summary-link-approx"]);
+  assert.equal(r.forecastEnd, "2026-03-06");                                   // P (dur 4) from today; C is not pushed
+  const c = run(hin([ht("A", "2026-03-09", "2026-03-10", 0, "B"), ht("B", "2026-03-09", "2026-03-10", 0, "A")]));
+  assert.deepEqual(c.warnings, ["hierarchy-cycle"]);
+});
+
+test("A2 hierarchy: SS into a summary delays every leaf; FF from a summary is exact", () => {
+  // P (dur 4) es=d0. SS lag 1 into S: every leaf starts >= d0+1. C1 (dur 5): d0+1..d0+6 = forecast 03-08.
+  const a = run(hin([ht("P", "2026-03-09", "2026-03-12", 0, null), ht("S", "2026-03-09", "2026-03-13", 0, null), ht("C1", "2026-03-09", "2026-03-13", 0, "S")],
+    [{ task_id: "S", predecessor_id: "P", lag_days: 1, link_type: "SS" }]));
+  assert.equal(a.forecastEnd, "2026-03-08");
+  assert.deepEqual(a.warnings, []);
+  // FF from summary S{C1 dur 2, C2 dur 5} to X (dur 3): X ends with the summary (d0+5), so X runs d0+2..d0+5. Slack C1 3, C2 0, X 0.
+  const b = run(hin([ht("S", "2026-03-09", "2026-03-13", 0, null), ht("C1", "2026-03-09", "2026-03-10", 0, "S"), ht("C2", "2026-03-09", "2026-03-13", 0, "S"),
+    ht("X", "2026-03-09", "2026-03-11", 0, null)], [{ task_id: "X", predecessor_id: "S", lag_days: 0, link_type: "FF" }]));
+  assert.equal(b.forecastEnd, "2026-03-07");
+  assert.deepEqual(b.slackByTask, { C1: 3, C2: 0, X: 0 });
+  assert.deepEqual(b.warnings, []);
+});
+test("A2 hierarchy: a summary with a completed leaf is not done; a self-parent is a plain leaf", () => {
+  // C1 done (ends 03-02 = d0), C2 dur 3 from today: summary ends d0+3. X (dur 2) FS after S: d0+3..d0+5 = 03-07. C2 is critical, C1 (done) is not.
+  const r = run(hin([ht("S", "2026-03-01", "2026-03-12", 0, null), ht("C1", "2026-03-01", "2026-03-02", 100, "S"), ht("C2", "2026-03-09", "2026-03-11", 0, "S"),
+    ht("X", "2026-03-09", "2026-03-10", 0, null)], [{ task_id: "X", predecessor_id: "S", lag_days: 0, link_type: "FS" }]));
+  assert.equal(r.forecastEnd, "2026-03-07");
+  assert.deepEqual(r.crit.slice().sort(), ["C2", "X"]);
+  const self = run(hin([ht("A", "2026-03-09", "2026-03-10", 0, "A")]));
+  assert.deepEqual(self.summaries, {});
+  assert.deepEqual(self.warnings, []);
+  assert.equal(self.forecastEnd, "2026-03-04");
+});
+
+test("a completed successor does not constrain its incomplete predecessor", () => {
+  // A (dur 3, not started) -> B (done, ended 03-02). Forward: A d0..d0+3. Backward: the link is skipped, so A keeps slack 0.
+  const r = run(hin([ht("A", "2026-03-09", "2026-03-11", 0, null), ht("B", "2026-03-01", "2026-03-02", 100, null)],
+    [{ task_id: "B", predecessor_id: "A", lag_days: 0, link_type: "FS" }]));
+  assert.equal(r.forecastEnd, "2026-03-05");
+  assert.deepEqual(r.slackByTask, { A: 0 });
+  assert.deepEqual(r.crit, ["A"]);
 });
 
 // ---------- helpers ----------
