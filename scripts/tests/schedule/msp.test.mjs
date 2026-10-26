@@ -257,6 +257,10 @@ test("round trip: build, parse, toPayload gives back every mapped field", () => 
   assert.equal(parsed.project.calendar, "seven-day");
   assert.deepEqual(plain(codes(parsed)), []);                                  // our own file produces no warnings
   assert.equal(parsed.project.minutesPerDay, 480);
+  assert.equal(parsed.project.uid, m.project.id);                              // the identity an import uses to tell "from this job" from a foreign file
+  assert.equal(parsed.project.manager, null);
+  assert.equal(C.parse(C.build(m, { manager: "meridian-readonly-export" })).project.manager, "meridian-readonly-export");
+  assert.equal(parseFx("01-simple-fs.xml").project.uid, null);                 // ProjectLibre files carry no Meridian identity
 });
 test("round trip does not depend on input order", () => {
   const a = model(), b = model();
