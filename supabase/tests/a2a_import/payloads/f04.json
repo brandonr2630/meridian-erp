@@ -1,0 +1,224 @@
+{
+ "project": {
+  "uid": null,
+  "manager": "BTR",
+  "name": "04-hierarchy-deep",
+  "title": "04-hierarchy-deep",
+  "minutesPerDay": 480,
+  "calendar": "working-days",
+  "saveVersion": 14
+ },
+ "phases": [
+  {
+   "uid": 1,
+   "name": "Project",
+   "sort_order": 10
+  }
+ ],
+ "tasks": [
+  {
+   "uid": 2,
+   "name": "Phase A",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-21",
+   "end_date": "2026-11-03",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": true,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 10,
+   "links": []
+  },
+  {
+   "uid": 3,
+   "name": "WP1",
+   "phase_uid": 1,
+   "parent_uid": 2,
+   "start_date": "2026-10-21",
+   "end_date": "2026-10-27",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": true,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 20,
+   "links": []
+  },
+  {
+   "uid": 4,
+   "name": "Task A1",
+   "phase_uid": 1,
+   "parent_uid": 3,
+   "start_date": "2026-10-21",
+   "end_date": "2026-10-22",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 30,
+   "links": []
+  },
+  {
+   "uid": 5,
+   "name": "Task A2",
+   "phase_uid": 1,
+   "parent_uid": 3,
+   "start_date": "2026-10-23",
+   "end_date": "2026-10-27",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 40,
+   "links": [
+    {
+     "pred_uid": 4,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 6,
+   "name": "WP2",
+   "phase_uid": 1,
+   "parent_uid": 2,
+   "start_date": "2026-10-28",
+   "end_date": "2026-11-03",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": true,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 50,
+   "links": []
+  },
+  {
+   "uid": 7,
+   "name": "Task B1",
+   "phase_uid": 1,
+   "parent_uid": 6,
+   "start_date": "2026-10-28",
+   "end_date": "2026-10-29",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 60,
+   "links": [
+    {
+     "pred_uid": 5,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 8,
+   "name": "Task B2",
+   "phase_uid": 1,
+   "parent_uid": 6,
+   "start_date": "2026-10-30",
+   "end_date": "2026-11-03",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 70,
+   "links": [
+    {
+     "pred_uid": 7,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 9,
+   "name": "Phase B",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-11-04",
+   "end_date": "2026-11-10",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": true,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 80,
+   "links": []
+  },
+  {
+   "uid": 10,
+   "name": "WP3",
+   "phase_uid": 1,
+   "parent_uid": 9,
+   "start_date": "2026-11-04",
+   "end_date": "2026-11-10",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": true,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 90,
+   "links": []
+  },
+  {
+   "uid": 11,
+   "name": "Task C1",
+   "phase_uid": 1,
+   "parent_uid": 10,
+   "start_date": "2026-11-04",
+   "end_date": "2026-11-05",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 100,
+   "links": [
+    {
+     "pred_uid": 8,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 12,
+   "name": "Task C2",
+   "phase_uid": 1,
+   "parent_uid": 10,
+   "start_date": "2026-11-06",
+   "end_date": "2026-11-10",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 110,
+   "links": [
+    {
+     "pred_uid": 11,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  }
+ ],
+ "resources": [],
+ "assignments": [],
+ "warnings": [
+  {
+   "code": "calendar-working-days",
+   "message": "The file uses a working-day calendar; Meridian schedules in calendar days, so task spans may look longer here than in the file.",
+   "count": 1
+  }
+ ]
+}

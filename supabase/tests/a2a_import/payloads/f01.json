@@ -1,0 +1,301 @@
+{
+ "project": {
+  "uid": null,
+  "manager": "B Rampersad",
+  "name": "01-simple-fs",
+  "title": "01-simple-fs",
+  "minutesPerDay": 480,
+  "calendar": "working-days",
+  "saveVersion": 14
+ },
+ "phases": [
+  {
+   "uid": 1,
+   "name": "Motor Repairs",
+   "sort_order": 10
+  }
+ ],
+ "tasks": [
+  {
+   "uid": 2,
+   "name": "Receive Motor",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-21",
+   "end_date": "2026-10-21",
+   "progress": 100,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 10,
+   "links": []
+  },
+  {
+   "uid": 3,
+   "name": "Inspect Motor",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-21",
+   "end_date": "2026-10-21",
+   "progress": 60,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 20,
+   "links": [
+    {
+     "pred_uid": 2,
+     "link_type": "SS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 4,
+   "name": "Report Findings of Inspection",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-21",
+   "end_date": "2026-10-22",
+   "progress": 10,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 30,
+   "links": [
+    {
+     "pred_uid": 3,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 5,
+   "name": "Disassemble Motor",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-22",
+   "end_date": "2026-10-22",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 40,
+   "links": [
+    {
+     "pred_uid": 4,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 6,
+   "name": "Change Bearings",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-22",
+   "end_date": "2026-10-22",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 50,
+   "links": [
+    {
+     "pred_uid": 5,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 7,
+   "name": "Clean Stator",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-22",
+   "end_date": "2026-10-22",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 60,
+   "links": [
+    {
+     "pred_uid": 6,
+     "link_type": "SS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 8,
+   "name": "Re-varnish Stator",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-22",
+   "end_date": "2026-10-23",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 70,
+   "links": [
+    {
+     "pred_uid": 7,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 9,
+   "name": "Check Runout on Rotor Shaft",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-23",
+   "end_date": "2026-10-23",
+   "progress": 0,
+   "is_milestone": true,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 80,
+   "links": [
+    {
+     "pred_uid": 8,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 10,
+   "name": "Reassemble Motor",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-22",
+   "end_date": "2026-10-23",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 90,
+   "links": [
+    {
+     "pred_uid": 9,
+     "link_type": "FF",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 11,
+   "name": "Test & Certify",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-23",
+   "end_date": "2026-10-23",
+   "progress": 0,
+   "is_milestone": true,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 100,
+   "links": [
+    {
+     "pred_uid": 10,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 12,
+   "name": "Paint",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-23",
+   "end_date": "2026-10-26",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 110,
+   "links": [
+    {
+     "pred_uid": 11,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 13,
+   "name": "Stage",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-26",
+   "end_date": "2026-10-27",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 120,
+   "links": [
+    {
+     "pred_uid": 12,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 14,
+   "name": "Deliver",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-27",
+   "end_date": "2026-10-27",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 130,
+   "links": [
+    {
+     "pred_uid": 13,
+     "link_type": "SF",
+     "lag_days": 1
+    }
+   ]
+  }
+ ],
+ "resources": [],
+ "assignments": [],
+ "warnings": [
+  {
+   "code": "constraint-ignored",
+   "message": "Scheduling constraints other than the Meridian date pin were ignored.",
+   "count": 1
+  },
+  {
+   "code": "calendar-working-days",
+   "message": "The file uses a working-day calendar; Meridian schedules in calendar days, so task spans may look longer here than in the file.",
+   "count": 1
+  }
+ ]
+}
