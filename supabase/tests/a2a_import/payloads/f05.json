@@ -1,0 +1,174 @@
+{
+ "project": {
+  "uid": null,
+  "manager": null,
+  "name": "05-resources-baseline",
+  "title": "05-resources-baseline",
+  "minutesPerDay": 480,
+  "calendar": "working-days",
+  "saveVersion": 14
+ },
+ "phases": [],
+ "tasks": [
+  {
+   "uid": 1,
+   "name": "Deliver",
+   "phase_uid": null,
+   "parent_uid": null,
+   "start_date": "2026-10-21",
+   "end_date": "2026-10-22",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": "2026-10-21",
+   "baseline_end": "2026-10-22",
+   "sort_order": 10,
+   "links": []
+  },
+  {
+   "uid": 2,
+   "name": "Receive",
+   "phase_uid": null,
+   "parent_uid": null,
+   "start_date": "2026-10-22",
+   "end_date": "2026-10-23",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": "2026-10-22",
+   "baseline_end": "2026-10-23",
+   "sort_order": 20,
+   "links": [
+    {
+     "pred_uid": 1,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 3,
+   "name": "Repair",
+   "phase_uid": null,
+   "parent_uid": null,
+   "start_date": "2026-10-26",
+   "end_date": "2026-10-30",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": "2026-10-23",
+   "baseline_end": "2026-10-28",
+   "sort_order": 30,
+   "links": [
+    {
+     "pred_uid": 2,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 4,
+   "name": "Test",
+   "phase_uid": null,
+   "parent_uid": null,
+   "start_date": "2026-11-02",
+   "end_date": "2026-11-06",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": "2026-10-28",
+   "baseline_end": "2026-11-03",
+   "sort_order": 40,
+   "links": [
+    {
+     "pred_uid": 3,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 5,
+   "name": "Reassemble",
+   "phase_uid": null,
+   "parent_uid": null,
+   "start_date": "2026-11-06",
+   "end_date": "2026-11-13",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": "2026-11-03",
+   "baseline_end": "2026-11-10",
+   "sort_order": 50,
+   "links": [
+    {
+     "pred_uid": 4,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  }
+ ],
+ "resources": [
+  {
+   "uid": 1,
+   "name": "Technician 1",
+   "kind": "work",
+   "materialLike": false,
+   "materialLabel": null
+  },
+  {
+   "uid": 2,
+   "name": "Technician 2",
+   "kind": "work",
+   "materialLike": false,
+   "materialLabel": null
+  },
+  {
+   "uid": 3,
+   "name": "Bearing",
+   "kind": "work",
+   "materialLike": false,
+   "materialLabel": null
+  }
+ ],
+ "assignments": [
+  {
+   "taskUid": 1,
+   "resourceUid": 1,
+   "units": 1,
+   "workHours": 12
+  },
+  {
+   "taskUid": 2,
+   "resourceUid": 1,
+   "units": 1,
+   "workHours": 12
+  },
+  {
+   "taskUid": 2,
+   "resourceUid": 2,
+   "units": 0.5,
+   "workHours": 6
+  },
+  {
+   "taskUid": 3,
+   "resourceUid": 3,
+   "units": 1,
+   "workHours": 40
+  }
+ ],
+ "warnings": [
+  {
+   "code": "calendar-working-days",
+   "message": "The file uses a working-day calendar; Meridian schedules in calendar days, so task spans may look longer here than in the file.",
+   "count": 1
+  },
+  {
+   "code": "resource-rates-dropped",
+   "message": "Resource rates were not imported.",
+   "count": 3
+  }
+ ]
+}

@@ -1,0 +1,459 @@
+[
+ {
+  "name": "scoped atoms: role in ANY company counts",
+  "find": "JOIN erp_user_company_roles ucr ON ucr.user_id = eu.id AND ucr.company_id = p_company",
+  "replace": "JOIN erp_user_company_roles ucr ON ucr.user_id = eu.id"
+ },
+ {
+  "name": "write permission not checked",
+  "find": "IF NOT import_sched_has_atom(v_company, 'ops:work-orders:write') THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "atom must be strictly true: any non-null value counts",
+  "find": "(r.permissions ->> p_atom) = 'true'",
+  "replace": "(r.permissions ->> p_atom) IS NOT NULL"
+ },
+ {
+  "name": "replace does not need approve",
+  "find": "IF NOT v_approver THEN RAISE EXCEPTION 'permission denied: ops:work-orders:approve required for replace'",
+  "replace": "IF false THEN RAISE EXCEPTION 'permission denied: ops:work-orders:approve required for replace'"
+ },
+ {
+  "name": "replace reason not required",
+  "find": "IF v_reason = '' THEN RAISE EXCEPTION 'replace requires a reason'",
+  "replace": "IF false THEN RAISE EXCEPTION 'replace requires a reason'"
+ },
+ {
+  "name": "reason not cleaned before the blank test",
+  "find": "v_reason := left(import_sched_clean(coalesce(p_reason, '')), 500);",
+  "replace": "v_reason := left(btrim(coalesce(p_reason, '')), 500);"
+ },
+ {
+  "name": "company membership not required",
+  "find": "FROM jobs j WHERE j.id = p_job_id AND j.company_id IN (SELECT my_company_ids());",
+  "replace": "FROM jobs j WHERE j.id = p_job_id;"
+ },
+ {
+  "name": "mode not validated",
+  "find": "IF p_mode IS NULL OR p_mode NOT IN ('append', 'merge', 'replace') THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "merge allowed for foreign files",
+  "find": "IF p_mode = 'merge' AND (v_temp OR v_puid IS DISTINCT FROM lower(p_job_id::text)) THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "temporary uid marker ignored",
+  "find": "v_temp := coalesce(import_sched_bool(p_payload, 'temporary_uids', 'payload'), false) OR v_pm = 'meridian-readonly-export';",
+  "replace": "v_temp := false;"
+ },
+ {
+  "name": "project.uid not read (only top-level project_uid)",
+  "find": "v_puid := coalesce(v_puid, v_t);",
+  "replace": "NULL;"
+ },
+ {
+  "name": "merge matches tasks on name",
+  "find": "UPDATE pg_temp.imp_t it SET id = t.id, matched = true FROM job_tasks t WHERE t.job_id = p_job_id AND t.msp_uid = it.uid;",
+  "replace": "UPDATE pg_temp.imp_t it SET id = t.id, matched = true FROM job_tasks t WHERE t.job_id = p_job_id AND t.task_name = it.name;"
+ },
+ {
+  "name": "merge matches across jobs",
+  "find": "UPDATE pg_temp.imp_t it SET id = t.id, matched = true FROM job_tasks t WHERE t.job_id = p_job_id AND t.msp_uid = it.uid;",
+  "replace": "UPDATE pg_temp.imp_t it SET id = t.id, matched = true FROM job_tasks t WHERE t.msp_uid = it.uid;"
+ },
+ {
+  "name": "imported tasks are published",
+  "find": "coalesce(it.is_milestone, false), false, false, it.new_uid",
+  "replace": "coalesce(it.is_milestone, false), false, true, it.new_uid"
+ },
+ {
+  "name": "imported phases are published",
+  "find": "ip.name, ip.new_uid, false",
+  "replace": "ip.name, ip.new_uid, true"
+ },
+ {
+  "name": "baseline setting never switched on",
+  "find": "PERFORM set_config('app.baseline_rpc', 'on', true);",
+  "replace": "PERFORM 1;"
+ },
+ {
+  "name": "baseline setting left on",
+  "find": "PERFORM set_config('app.baseline_rpc', 'off', true);",
+  "replace": "PERFORM 1;"
+ },
+ {
+  "name": "non-approver may write baselines",
+  "find": "v_bl_ok := v_approver AND v_has_bl AND NOT v_locked;",
+  "replace": "v_bl_ok := v_has_bl AND NOT v_locked;"
+ },
+ {
+  "name": "locked baseline not respected",
+  "find": "v_bl_ok := v_approver AND v_has_bl AND NOT v_locked;",
+  "replace": "v_bl_ok := v_approver AND v_has_bl;"
+ },
+ {
+  "name": "replace cannot re-lock a baseline",
+  "find": "  IF p_mode <> 'replace' THEN\n    SELECT EXISTS (SELECT 1 FROM job_tasks WHERE job_id = p_job_id AND baseline_locked_at IS NOT NULL) INTO v_locked;\n  END IF;",
+  "replace": "  SELECT EXISTS (SELECT 1 FROM job_tasks WHERE job_id = p_job_id AND baseline_locked_at IS NOT NULL) INTO v_locked;"
+ },
+ {
+  "name": "partial baselines are kept",
+  "find": "IF (v_bs IS NULL) <> (v_be IS NULL) THEN n_bl_partial := n_bl_partial + 1; v_bs := NULL; v_be := NULL; END IF;",
+  "replace": "NULL;"
+ },
+ {
+  "name": "baseline_locked audit row dropped",
+  "find": "IF v_nb > 0 THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "stale check removed",
+  "find": "IF date_trunc('milliseconds', v_cur) IS DISTINCT FROM date_trunc('milliseconds', v_based) AND (v_cur IS NOT NULL OR v_based IS NOT NULL) THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "stale check exact to the microsecond",
+  "find": "IF date_trunc('milliseconds', v_cur) IS DISTINCT FROM date_trunc('milliseconds', v_based) AND",
+  "replace": "IF v_cur IS DISTINCT FROM v_based AND"
+ },
+ {
+  "name": "based_on optional",
+  "find": "IF v_cur IS NOT NULL AND v_based IS NULL THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "advisory lock removed",
+  "find": "PERFORM pg_advisory_xact_lock(hashtext(p_job_id::text));",
+  "replace": "PERFORM 1;"
+ },
+ {
+  "name": "advisory lock on another key",
+  "find": "PERFORM pg_advisory_xact_lock(hashtext(p_job_id::text));",
+  "replace": "PERFORM pg_advisory_xact_lock(hashtext(p_job_id::text || 'x'));"
+ },
+ {
+  "name": "payload cycle not checked",
+  "find": "IF EXISTS (SELECT 1 FROM pg_temp.imp_e) THEN RAISE EXCEPTION 'dependency cycle in the imported schedule'",
+  "replace": "IF false THEN RAISE EXCEPTION 'dependency cycle in the imported schedule'"
+ },
+ {
+  "name": "stored links left out of the cycle graph",
+  "find": "INSERT INTO pg_temp.imp_e SELECT lk.task_id, lk.predecessor_id FROM job_task_links lk WHERE lk.job_id = p_job_id;",
+  "replace": "NULL;"
+ },
+ {
+  "name": "hierarchy depth cap raised",
+  "find": "WHERE m.depth + CASE WHEN z.has_phase THEN 1 ELSE 0 END > k_max_depth) THEN",
+  "replace": "WHERE m.depth + CASE WHEN z.has_phase THEN 1 ELSE 0 END > k_max_depth + 1) THEN"
+ },
+ {
+  "name": "phase not counted as a level",
+  "find": "WHERE m.depth + CASE WHEN z.has_phase THEN 1 ELSE 0 END > k_max_depth) THEN",
+  "replace": "WHERE m.depth > k_max_depth) THEN"
+ },
+ {
+  "name": "stored rows left out of the depth graph",
+  "find": "INSERT INTO pg_temp.imp_n SELECT t.id, t.parent_task_id, t.phase_id IS NOT NULL FROM job_tasks t",
+  "replace": "INSERT INTO pg_temp.imp_n SELECT t.id, NULL::uuid, t.phase_id IS NOT NULL FROM job_tasks t"
+ },
+ {
+  "name": "parent cycle test dropped",
+  "find": "SELECT 1 FROM up WHERE up.cur = up.id) THEN",
+  "replace": "SELECT 1 FROM up WHERE false) THEN"
+ },
+ {
+  "name": "missing link endpoint tolerated",
+  "find": "IF EXISTS (SELECT 1 FROM pg_temp.imp_l l WHERE NOT EXISTS (SELECT 1 FROM pg_temp.imp_t t WHERE t.uid = l.pred_uid)) THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "self link tolerated",
+  "find": "IF EXISTS (SELECT 1 FROM pg_temp.imp_l l WHERE l.task_uid = l.pred_uid) THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "duplicate uids tolerated",
+  "find": "IF EXISTS (SELECT 1 FROM pg_temp.imp_p GROUP BY uid HAVING count(*) > 1) OR EXISTS (SELECT 1 FROM pg_temp.imp_t GROUP BY uid HAVING count(*) > 1) THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "phase/task uid clash tolerated",
+  "find": "IF EXISTS (SELECT 1 FROM pg_temp.imp_p a JOIN pg_temp.imp_t b ON b.uid = a.uid) THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "parent outside payload tolerated",
+  "find": "AND (t.parent_uid = t.uid OR NOT EXISTS (SELECT 1 FROM pg_temp.imp_t p WHERE p.uid = t.parent_uid))) THEN",
+  "replace": "AND (t.parent_uid = t.uid AND false)) THEN"
+ },
+ {
+  "name": "parent in another phase tolerated",
+  "find": "WHERE p.phase_uid IS DISTINCT FROM c.phase_uid) THEN",
+  "replace": "WHERE false) THEN"
+ },
+ {
+  "name": "phase uid 0 allowed",
+  "find": "v_uid := import_sched_int(r.e, 'uid', w, 1, 100000000, true);",
+  "replace": "v_uid := import_sched_int(r.e, 'uid', w, 0, 100000000, true);"
+ },
+ {
+  "name": "task count cap doubled",
+  "find": "IF jsonb_array_length(v_tasks) > k_max_tasks THEN",
+  "replace": "IF jsonb_array_length(v_tasks) > k_max_tasks * 2 THEN"
+ },
+ {
+  "name": "link count cap doubled",
+  "find": "IF n_total_links + n_links > k_max_links THEN",
+  "replace": "IF n_total_links + n_links > k_max_links * 2 THEN"
+ },
+ {
+  "name": "payload size cap removed",
+  "find": "IF octet_length(p_payload::text) > k_max_bytes THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "string length cap loosened",
+  "find": "IF char_length(s) > p_max THEN",
+  "replace": "IF char_length(s) > p_max * 10 THEN"
+ },
+ {
+  "name": "control characters kept",
+  "find": "'[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]'",
+  "replace": "'[\\u0001-\\u0002]'"
+ },
+ {
+  "name": "bidi override not stripped",
+  "find": "\\u2028-\\u202e",
+  "replace": "\\u2028-\\u202d"
+ },
+ {
+  "name": "line breaks not turned into spaces",
+  "find": "regexp_replace(p_s, '[\\t\\n\\r\\f\\v]+', ' ', 'g')",
+  "replace": "p_s"
+ },
+ {
+  "name": "dates: year ceiling removed",
+  "find": "d > DATE '2100-12-31'",
+  "replace": "d > DATE '9100-12-31'"
+ },
+ {
+  "name": "dates: format not enforced",
+  "find": "IF s !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "progress range widened",
+  "find": "import_sched_int(r.e, 'progress', w, 0, 100, false)",
+  "replace": "import_sched_int(r.e, 'progress', w, 0, 1000, false)"
+ },
+ {
+  "name": "lag range widened",
+  "find": "import_sched_int(lrec.e, 'lag_days', lw, -30, 365, false)",
+  "replace": "import_sched_int(lrec.e, 'lag_days', lw, -30, 3650, false)"
+ },
+ {
+  "name": "fractional numbers accepted",
+  "find": "IF n <> trunc(n) THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "link type not validated",
+  "find": "IF v_t NOT IN ('FS', 'SS', 'FF', 'SF') THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "string type not enforced",
+  "find": "IF jsonb_typeof(v) <> 'string' THEN RAISE EXCEPTION 'invalid payload: %.% must be a string'",
+  "replace": "IF false THEN RAISE EXCEPTION 'invalid payload: %.% must be a string'"
+ },
+ {
+  "name": "number type not enforced",
+  "find": "IF jsonb_typeof(v) <> 'number' THEN RAISE EXCEPTION 'invalid payload: %.% must be a number'",
+  "replace": "IF false THEN RAISE EXCEPTION 'invalid payload: %.% must be a number'"
+ },
+ {
+  "name": "payload type not enforced",
+  "find": "IF p_payload IS NULL OR jsonb_typeof(p_payload) <> 'object' THEN",
+  "replace": "IF p_payload IS NULL THEN"
+ },
+ {
+  "name": "empty payload allowed",
+  "find": "IF jsonb_array_length(v_tasks) + jsonb_array_length(v_phases) = 0 THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "milestone dates not checked",
+  "find": "IF coalesce(v_ms, false) AND v_sd IS NOT NULL AND v_ed IS NOT NULL AND v_sd <> v_ed THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "end before start not checked",
+  "find": "IF v_sd IS NOT NULL AND v_ed IS NOT NULL AND v_ed < v_sd THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "phase names not truncated",
+  "find": "IF char_length(v_name) > 80 THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "empty names not defaulted (phase)",
+  "find": "IF v_name = '' THEN v_name := '(unnamed)'; n_defaulted := n_defaulted + 1; END IF;\n    IF char_length(v_name) > 80",
+  "replace": "IF char_length(v_name) > 80"
+ },
+ {
+  "name": "top-level links accepted",
+  "find": "AND (jsonb_typeof(p_payload -> 'links') <> 'array' OR jsonb_array_length(p_payload -> 'links') > 0) THEN",
+  "replace": "AND false THEN"
+ },
+ {
+  "name": "replace keeps old rows",
+  "find": "DELETE FROM job_tasks      WHERE job_id = p_job_id;  GET DIAGNOSTICS v_del_t = ROW_COUNT;",
+  "replace": "DELETE FROM job_tasks      WHERE job_id = p_job_id AND false;  GET DIAGNOSTICS v_del_t = ROW_COUNT;"
+ },
+ {
+  "name": "replace keeps old phases",
+  "find": "DELETE FROM job_phases     WHERE job_id = p_job_id;  GET DIAGNOSTICS v_del_p = ROW_COUNT;",
+  "replace": "DELETE FROM job_phases     WHERE job_id = p_job_id AND false;  GET DIAGNOSTICS v_del_p = ROW_COUNT;"
+ },
+ {
+  "name": "replace deletes another job's rows too",
+  "find": "DELETE FROM job_task_links WHERE job_id = p_job_id;  GET DIAGNOSTICS v_del_l = ROW_COUNT;",
+  "replace": "DELETE FROM job_task_links WHERE job_id = p_job_id OR true;  GET DIAGNOSTICS v_del_l = ROW_COUNT;"
+ },
+ {
+  "name": "replace without recovery metadata",
+  "find": "'recovery', v_recovery));",
+  "replace": "'recovery', NULL::jsonb));"
+ },
+ {
+  "name": "recovery keeps names only (no published flag)",
+  "find": "jsonb_build_array(t.id, t.task_name, t.phase_id, t.parent_task_id, t.msp_uid, t.client_visible)",
+  "replace": "jsonb_build_array(t.id, t.task_name, t.phase_id, t.parent_task_id, t.msp_uid, false)"
+ },
+ {
+  "name": "uids reused in the same job",
+  "find": "SET new_uid = v_base + s.rn FROM",
+  "replace": "SET new_uid = s.rn FROM"
+ },
+ {
+  "name": "counter ignores uids of the old schedule on replace",
+  "find": "SELECT coalesce(max(m), 0) INTO v_base FROM",
+  "replace": "SELECT 0 * coalesce(max(m), 0) INTO v_base FROM"
+ },
+ {
+  "name": "task uids overlap phase uids",
+  "find": "SET new_uid = v_base + v_new_p + s.rn FROM",
+  "replace": "SET new_uid = v_base + s.rn FROM"
+ },
+ {
+  "name": "merge deletes",
+  "find": "UPDATE job_phases p SET name = ip.name, sort_order = coalesce(ip.sort_order, p.sort_order)",
+  "replace": "DELETE FROM job_tasks WHERE job_id = p_job_id AND msp_uid IS NULL; UPDATE job_phases p SET name = ip.name, sort_order = coalesce(ip.sort_order, p.sort_order)"
+ },
+ {
+  "name": "kept count wrong",
+  "find": "ELSE (v_ex_p + v_ex_t) - v_matched END",
+  "replace": "ELSE 0 END"
+ },
+ {
+  "name": "skipped count wrong",
+  "find": "v_skipped := greatest(v_matched - v_updated, 0);",
+  "replace": "v_skipped := 0;"
+ },
+ {
+  "name": "parent-only change not counted as update",
+  "find": "AND (t.task_name, t.start_date, t.end_date, t.progress, t.is_milestone, t.assignee, t.phase_id, t.sort_order, t.parent_task_id)",
+  "replace": "AND (t.task_name, t.start_date, t.end_date, t.progress, t.is_milestone, t.assignee, t.phase_id, t.sort_order, NULL::uuid)"
+ },
+ {
+  "name": "merge ignores the file when it has no dates (overwrites with NULL)",
+  "find": "start_date = CASE WHEN it.start_date IS NOT NULL AND it.end_date IS NOT NULL THEN it.start_date ELSE t.start_date END,",
+  "replace": "start_date = it.start_date,"
+ },
+ {
+  "name": "merge keeps is_critical",
+  "find": "phase_id = ph.id, sort_order = coalesce(it.sort_order, t.sort_order), is_critical = false",
+  "replace": "phase_id = ph.id, sort_order = coalesce(it.sort_order, t.sort_order), is_critical = t.is_critical"
+ },
+ {
+  "name": "links not upserted",
+  "find": "ON CONFLICT (task_id, predecessor_id) DO UPDATE SET link_type = EXCLUDED.link_type, lag_days = EXCLUDED.lag_days",
+  "replace": "ON CONFLICT (task_id, predecessor_id) DO NOTHING"
+ },
+ {
+  "name": "link type always FS",
+  "find": "SELECT v_company, p_job_id, a.id, b.id, l.link_type, l.lag",
+  "replace": "SELECT v_company, p_job_id, a.id, b.id, 'FS', l.lag"
+ },
+ {
+  "name": "depends_on mirrors non-FS links",
+  "find": "CASE WHEN l.link_type = 'FS' THEN b.id END AS pred_id",
+  "replace": "b.id AS pred_id"
+ },
+ {
+  "name": "hierarchy not stored",
+  "find": "UPDATE job_tasks t SET parent_task_id = it.parent_id FROM pg_temp.imp_t it\n   WHERE it.id = t.id AND t.job_id = p_job_id AND it.parent_id IS NOT NULL",
+  "replace": "UPDATE job_tasks t SET parent_task_id = it.parent_id FROM pg_temp.imp_t it\n   WHERE it.id = t.id AND t.job_id = p_job_id AND false"
+ },
+ {
+  "name": "audit action renamed",
+  "find": "VALUES (p_job_id, v_job_no, auth.uid(), v_username, 'schedule_imported'",
+  "replace": "VALUES (p_job_id, v_job_no, auth.uid(), v_username, 'schedule_import'"
+ },
+ {
+  "name": "audit file name not stored",
+  "find": "jsonb_build_object('mode', p_mode, 'file_name', v_file,",
+  "replace": "jsonb_build_object('mode', p_mode, 'file_name', NULL::text,"
+ },
+ {
+  "name": "audit user not recorded",
+  "find": "VALUES (p_job_id, v_job_no, auth.uid(), v_username, 'schedule_imported'",
+  "replace": "VALUES (p_job_id, v_job_no, NULL, v_username, 'schedule_imported'"
+ },
+ {
+  "name": "file warnings dropped",
+  "find": "v_warn := import_sched_warn(v_warn, v_wcode,",
+  "replace": "v_warn := import_sched_warn(v_warn, 'dropped',"
+ },
+ {
+  "name": "warning code not validated",
+  "find": "IF v_wcode IS NULL OR v_wcode !~ '^[A-Za-z0-9_-]{1,64}$' THEN CONTINUE; END IF;",
+  "replace": "IF v_wcode IS NULL THEN CONTINUE; END IF;"
+ },
+ {
+  "name": "definer removed",
+  "find": "RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$\nDECLARE\n  k_max_tasks",
+  "replace": "RETURNS jsonb LANGUAGE plpgsql SET search_path = public, pg_temp AS $$\nDECLARE\n  k_max_tasks"
+ },
+ {
+  "name": "search_path not pinned",
+  "find": "RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$\nDECLARE\n  k_max_tasks",
+  "replace": "RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER AS $$\nDECLARE\n  k_max_tasks"
+ },
+ {
+  "name": "RPC executable by anon",
+  "find": "REVOKE ALL ON FUNCTION import_job_schedule(uuid, text, jsonb, text) FROM PUBLIC, anon;",
+  "replace": "REVOKE ALL ON FUNCTION import_job_schedule(uuid, text, jsonb, text) FROM PUBLIC;"
+ },
+ {
+  "name": "RPC not executable by authenticated",
+  "find": "GRANT EXECUTE ON FUNCTION import_job_schedule(uuid, text, jsonb, text) TO authenticated;",
+  "replace": "GRANT EXECUTE ON FUNCTION import_job_schedule(uuid, text, jsonb, text) TO service_role;",
+  "equivalent": true,
+  "reason": "Supabase default privileges (ALTER DEFAULT PRIVILEGES ... GRANT EXECUTE TO authenticated) already grant EXECUTE at creation, so the explicit GRANT is documentation; it cannot be observed on a database with those defaults"
+ },
+ {
+  "name": "helpers executable by API roles",
+  "find": "  FROM PUBLIC, anon, authenticated, service_role;",
+  "replace": "  FROM PUBLIC;"
+ },
+ {
+  "name": "dynamic SQL introduced",
+  "find": "PERFORM pg_advisory_xact_lock(hashtext(p_job_id::text));",
+  "replace": "PERFORM pg_advisory_xact_lock(hashtext(p_job_id::text)); EXECUTE 'SELECT 1';"
+ }
+]

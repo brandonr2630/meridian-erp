@@ -1,0 +1,190 @@
+{
+ "project": {
+  "uid": null,
+  "manager": "B Rampersad",
+  "name": "06-calendar-monfri",
+  "title": "06-calendar-monfri",
+  "minutesPerDay": 480,
+  "calendar": "working-days",
+  "saveVersion": 14
+ },
+ "phases": [],
+ "tasks": [
+  {
+   "uid": 1,
+   "name": "Receive",
+   "phase_uid": null,
+   "parent_uid": null,
+   "start_date": "2026-10-26",
+   "end_date": "2026-10-26",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 10,
+   "links": []
+  },
+  {
+   "uid": 2,
+   "name": "Test",
+   "phase_uid": null,
+   "parent_uid": null,
+   "start_date": "2026-10-27",
+   "end_date": "2026-10-30",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 20,
+   "links": [
+    {
+     "pred_uid": 1,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 3,
+   "name": "Disassemble",
+   "phase_uid": null,
+   "parent_uid": null,
+   "start_date": "2026-10-30",
+   "end_date": "2026-11-02",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 30,
+   "links": [
+    {
+     "pred_uid": 2,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 4,
+   "name": "Repair",
+   "phase_uid": null,
+   "parent_uid": null,
+   "start_date": "2026-11-03",
+   "end_date": "2026-11-03",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 40,
+   "links": [
+    {
+     "pred_uid": 3,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 5,
+   "name": "Reassemble",
+   "phase_uid": null,
+   "parent_uid": null,
+   "start_date": "2026-11-04",
+   "end_date": "2026-11-04",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 50,
+   "links": [
+    {
+     "pred_uid": 4,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 6,
+   "name": "Paint",
+   "phase_uid": null,
+   "parent_uid": null,
+   "start_date": "2026-11-05",
+   "end_date": "2026-11-06",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 60,
+   "links": [
+    {
+     "pred_uid": 5,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 7,
+   "name": "Test",
+   "phase_uid": null,
+   "parent_uid": null,
+   "start_date": "2026-11-09",
+   "end_date": "2026-11-10",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 70,
+   "links": [
+    {
+     "pred_uid": 6,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 8,
+   "name": "Deliver",
+   "phase_uid": null,
+   "parent_uid": null,
+   "start_date": "2026-11-10",
+   "end_date": "2026-11-10",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 80,
+   "links": [
+    {
+     "pred_uid": 7,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  }
+ ],
+ "resources": [],
+ "assignments": [],
+ "warnings": [
+  {
+   "code": "finish-recomputed",
+   "message": "Finish dates were recomputed from the file's working calendar (the stored finish was stale or inconsistent).",
+   "count": 1
+  },
+  {
+   "code": "calendar-working-days",
+   "message": "The file uses a working-day calendar; Meridian schedules in calendar days, so task spans may look longer here than in the file.",
+   "count": 1
+  }
+ ]
+}
