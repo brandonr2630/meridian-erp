@@ -1,6 +1,6 @@
 # Project Portal — Roadmap, Decisions and Risks
 
-*Status: draft for owner review · 2026-10-19 · assembles [00-overview.md](00-overview.md) (contract and binding decisions X1–X23) and the four phase specs. All SQL in the specs is **desk-checked only**: nothing has been executed against a database.*
+*Status: draft for owner review · 2026-10-19 · assembles [00-overview.md](00-overview.md) (contract and binding decisions X1–X30) and the four phase specs. All SQL in the specs is **desk-checked only**: nothing has been executed against a database.*
 
 ## Summary
 
@@ -17,6 +17,7 @@ Good news from the same checks: every table has RLS enabled, no view bypasses RL
 |---|---|---|---|
 | D0 | [phase-d-client-portal.md](phase-d-client-portal.md) (D0 section) | Staff-only and tenant-scoped security hardening, storage policies, function hardening | Everyone |
 | A | [phase-a-schedule-v2.md](phase-a-schedule-v2.md) | Grouped Gantt, phases, milestones, baseline, weighted progress, schedule status, shared publish guard | Staff |
+| A2 | [phase-a2-projectlibre.md](phase-a2-projectlibre.md) | MS Project / ProjectLibre XML import and export, link types (FS, SS, FF, SF), task hierarchy, the schedule window; later resources with job-card actuals (A2b) and undo/redo (A2c) | Staff (clients get a download through D) |
 | B | [phase-b-quality.md](phase-b-quality.md) | ITP, hold points, NCRs, document register and approvals | Staff |
 | C | [phase-c-updates-progress.md](phase-c-updates-progress.md) | Site and workshop updates with photos, progress snapshots, S-curve | Staff |
 | D | [phase-d-client-portal.md](phase-d-client-portal.md) | Separate client app, client login, function-only client access, messages, notifications | Clients |
@@ -30,6 +31,9 @@ Binding order (X23): **owner prerequisites, D0a, A, B, C, D0c, D core, D reads, 
 | 0 | **Owner prerequisites** (dashboard): disable public sign-up and anonymous sign-ins; enable `pg_cron` and `pg_net`; store the service key in Vault; auth settings checklist (Phase D, pre-pilot gate) | none | everything | Checklist ticked and recorded in the D0 PR |
 | 1 | **D0a**: `is_erp_staff()`, RESTRICTIVE staff-only policy on the 21 open tables plus `notification_types`, tenant-scoped `job-drawings` and locked `company-logos` storage policies, `next_job_no` staff check and anon revokes, `search_path` pinning; then **D0b** edge function to ban the auth user when staff are removed or deactivated | step 0 | A development | Real `operations_tech` and `viewer` login tested; storage test as a staff JWT and a non-staff JWT; ERP unchanged for staff |
 | 2 | **Phase A** migration and the custom Gantt with KPI tiles (also creates the shared functions: `job_visibility_guard`, `job_task_weight`, `job_task_planned_pct`, `job_schedule_status`, `job_task_client_visible`, `lock_job_baseline`) | none | D0a, B development | Fixture test (JS and SQL progress agree) passes; live test on a real job |
+| 2a | **Phase A2a** (after A): engine with link types and hierarchy (JS done 2026-10-26, PRs #175 and #176), codec `schedule-msp.js` (done, #176), read-only schedule window with export and import preview (done, #177). **Still to do:** A2 migration (`link_type`, `msp_uid`, `parent_task_id`, cycle and depth guards), `job_schedule_status` with the same link and hierarchy rules, `prepare_schedule_export`, `import_job_schedule`, window editing and Apply import | A applied; Docker for the throwaway-Postgres suite | B, C | The 55-case shared fixture passes on JS and SQL; throwaway-Postgres suite plus mutation checks; independent attack review of the import RPC; manual ProjectLibre interop; simulated-identity verification on prod |
+| 2b | **Phase A2b**: resources and assignments, `task_id` on labour and equipment entries (a change to the job-card save), actuals roll-up, MSPDI resources | A2a | C | Throwaway-Postgres suite; no rate or resource name reaches a client file; job-card save keeps `task_id` |
+| 2c | **Phase A2c**: undo and redo in the schedule window | A2a | A2b, B, C | Inverse replay, stack clearing, non-undoable actions (publish, baseline lock, import) |
 | 3 | **Phase B** quality tables and guards, Quality card; applied **after A** (its visibility triggers call A's guard) | A applied | C development | Live RLS test as viewer and as operations_tech; forged INSERT of an approved document rejected |
 | 4 | **Phase C** updates, photos, snapshots, S-curve; applied after A | A applied, `pg_cron` enabled | B | First nightly snapshot lands; same-day double save succeeds; staff S-curve loads |
 | 5 | **D0c**: per-family tenant- and permission-scoped RLS replacing the restrictive stopgap (`job_audit_log`, `*_entries`, `jobs`, `employees`/`config_*`/`notification_types`, bill tables), one pull request per family | D0a | A to C | Each ERP screen still loads as each role; cross-company read returns nothing |
@@ -83,6 +87,8 @@ Defaults apply if you do not object.
 | 21 | Photo retention after a job closes | C | Keep; revisit at 70 percent of plan storage |
 | 22 | Who gets the new atoms: portal atoms to super_admin, company_admin, Office Admin (and operations_tech, sales_rep, viewer for read); quality atoms to super_admin, company_admin, operations_tech; `quality:ncr:close` to admins only | B, D | As written |
 | 23 | **Drawing access will narrow** (D0a, X23): today any logged-in user can read every drawing; afterwards only holders of `ops:work-orders:read` (select) and `ops:work-orders:write` (insert), company admins for delete. `sales_rep`, `finance_manager` and `Office Admin` do not hold those atoms and would lose access to drawings. Run the atom-coverage query in the Phase D spec first | D0 | Intended; grant the atom to any role that needs drawings, before applying D0a |
+| 24 | A2 split into A2a, A2b, A2c, with the ProjectLibre fixtures as the precondition for A2a (N11) | A2 | Approved 2026-10-26; fixtures merged 2026-10-21 |
+| 25 | Client release / user agreement: text, versioning and whether the legal-proceedings clause is enforceable in your jurisdiction (N8) | D | Your lawyer drafts it; the mechanism is fixed (every client user accepts each version, X29) |
 
 ## Cross-phase rules the roadmap enforces
 
@@ -95,6 +101,8 @@ Defaults apply if you do not object.
 | Guard bypass for client RPCs is `app.portal_rpc='1' AND current_user <> 'authenticated'`, with SECURITY INVOKER guards and definer RPCs owned by `postgres` | B documents, D references (X6) |
 | `created_by` omitted or its FK target verified live; `updated_at` uses `set_updated_at()` | Every new table |
 | Migrations are additive with a `-- down` section, except D0 which is the staged, rollback-backed exception | All phases |
+| One schedule interchange format and one codec; link types defined once | A2 defines (X24, X25); D calls the same codec through a copy that a script verifies |
+| No schedule data reaches a client before they accept the current agreement version | D enforces (X29); every acceptance and export is audited |
 
 ## Risks
 
@@ -110,6 +118,9 @@ Defaults apply if you do not object.
 | Single Supabase project for staging and production | Medium | Dark-launch plan; Pro upgrade; kill-switch through `project_clients.revoked_at` |
 | Photos expose other clients' equipment or people | Medium | Default internal, per-photo release, EXIF stripped by canvas re-encode |
 | Quotas on the current plan (storage, email) | Low | Client-side photo downscaling; digest notifications |
+| An imported MS Project file corrupts or deletes a job's schedule | High | Codec rejects DOCTYPE and enforces size and count caps; the server re-validates everything and imports atomically; replace needs an approver and a reason; recovery data in the audit log; dry-run preview first; independent attack review before it goes live |
+| A client uses a schedule file or its baseline dates in a dispute | Medium | Agreement gate (X29), ownership notice inside the file, every export audited; wording is the lawyer's |
+| The SQL link-type and hierarchy rules drift from the JS ones | Medium | One shared fixture (55 cases) runs on both; mutation checks on each side |
 
 ## Effort (rough planning estimates, single developer with Claude, focused calendar days)
 
@@ -117,6 +128,7 @@ Defaults apply if you do not object.
 |---|---|---|
 | D0 (a, b, c) | 6 to 9 days | 22 tables, storage, functions, edge function, six D0c families; most time is testing each family with real role logins |
 | A | 6 to 9 days | Custom Gantt renderer plus the shared functions and fixture harness |
+| A2 (a, b, c) | A2a: JS side, codec and read-only window done; SQL, import and editing about 5 to 8 more days. A2b about 5 to 8 days, A2c about 3 to 5 days | The SQL needs Docker for the throwaway-Postgres suite; A2b changes the job-card save, so it needs its own regression tests |
 | B | 6 to 9 days | Three tables, guard triggers, bridge from `qc_state` |
 | C | 5 to 8 days | Photo upload, chart renderer, `pg_cron` |
 | D build | 15 to 20 days | New app, five edge functions, functions and RPCs, invites, messages, notifications, sweep and CI scripts |
