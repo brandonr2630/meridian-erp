@@ -10,7 +10,8 @@ Desktop.ini
 *.user
 
 # Claude Code
-.claude/
+.claude/*
+!.claude/settings.json
 
 # Node (local tooling/scratch — app has no build system)
 node_modules/
