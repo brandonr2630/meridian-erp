@@ -1,0 +1,123 @@
+[
+ {
+  "name": "forward FS uses the predecessor start instead of its end",
+  "find": "WHEN 'FS' THEN ef[p] + llag[j]",
+  "replace": "WHEN 'FS' THEN es[p] + llag[j]"
+ },
+ {
+  "name": "forward SS uses the predecessor end instead of its start",
+  "find": "WHEN 'SS' THEN es[p] + llag[j]",
+  "replace": "WHEN 'SS' THEN ef[p] + llag[j]"
+ },
+ {
+  "name": "forward FF forgets to subtract the successor duration",
+  "find": "WHEN 'FF' THEN ef[p] + llag[j] - rem[c]",
+  "replace": "WHEN 'FF' THEN ef[p] + llag[j]"
+ },
+ {
+  "name": "forward SF forgets to subtract the successor duration",
+  "find": "ELSE           es[p] + llag[j] - rem[c] END;",
+  "replace": "ELSE           es[p] + llag[j] END;"
+ },
+ {
+  "name": "backward FS adds the lag instead of subtracting it",
+  "find": "WHEN 'FS' THEN ls[t] - llag[j]",
+  "replace": "WHEN 'FS' THEN ls[t] + llag[j]"
+ },
+ {
+  "name": "backward SS forgets the remaining duration of the predecessor",
+  "find": "WHEN 'SS' THEN ls[t] - llag[j] + rem[c]",
+  "replace": "WHEN 'SS' THEN ls[t] - llag[j]"
+ },
+ {
+  "name": "backward FF bounds by the successor late start instead of its late finish",
+  "find": "WHEN 'FF' THEN lf[t] - llag[j]",
+  "replace": "WHEN 'FF' THEN ls[t] - llag[j]"
+ },
+ {
+  "name": "backward SF forgets the remaining duration of the predecessor",
+  "find": "ELSE           lf[t] - llag[j] + rem[c] END;",
+  "replace": "ELSE           lf[t] - llag[j] END;"
+ },
+ {
+  "name": "an unknown link_type is not coerced to FS",
+  "find": "THEN r.link_type ELSE 'FS' END",
+  "replace": "THEN r.link_type ELSE r.link_type END"
+ },
+ {
+  "name": "summaries counted in overall / planned",
+  "find": "WHERE w > 0 AND NOT (x.id = ANY (sumids));",
+  "replace": "WHERE w > 0;"
+ },
+ {
+  "name": "a summary can be late and critical on its own",
+  "find": "IF NOT is_sum[i] AND NOT done[i] AND endd[i] IS NOT NULL",
+  "replace": "IF NOT done[i] AND endd[i] IS NOT NULL"
+ },
+ {
+  "name": "a summary is part of the forecast end",
+  "find": "WHERE sched[g.ix] AND NOT is_sum[g.ix];\n  v_deadline",
+  "replace": "WHERE sched[g.ix];\n  v_deadline",
+  "equivalent": true,
+  "reason": "a summary is only scheduled when some kid is, and deriveFwd then sets its end to the latest kid end, so it can never exceed the leaves: the forecast is identical"
+ },
+ {
+  "name": "parent cycle cut at the wrong edge",
+  "find": "IF nx = ANY (seen) THEN par[k] := 0; EXIT; END IF;",
+  "replace": "IF nx = ANY (seen) THEN par[i] := 0; EXIT; END IF;"
+ },
+ {
+  "name": "SS into a summary is ignored like a finish-bound link",
+  "find": "IF is_sum[t] AND ty NOT IN ('FS', 'SS') THEN CONTINUE; END IF;",
+  "replace": "IF is_sum[t] AND ty NOT IN ('FS') THEN CONTINUE; END IF;"
+ },
+ {
+  "name": "FF into a summary is applied to its leaves",
+  "find": "IF is_sum[t] AND ty NOT IN ('FS', 'SS') THEN CONTINUE; END IF;",
+  "replace": "IF is_sum[t] AND ty NOT IN ('FS', 'SS', 'FF') THEN CONTINUE; END IF;"
+ },
+ {
+  "name": "backward: FF from a summary predecessor ignored",
+  "find": "IF is_sum[p] AND ty NOT IN ('FS', 'FF') THEN CONTINUE; END IF;",
+  "replace": "IF is_sum[p] AND ty NOT IN ('FS') THEN CONTINUE; END IF;"
+ },
+ {
+  "name": "summaries not processed deepest first",
+  "find": "ORDER BY depth[g.ix] DESC, g.ix",
+  "replace": "ORDER BY g.ix"
+ },
+ {
+  "name": "a summary is never done (all-kids-done rule dropped)",
+  "find": "done[s] := v_all; sched[s] := v_any;",
+  "replace": "done[s] := false; sched[s] := v_any;",
+  "equivalent": true,
+  "reason": "a done summary only matters as a link endpoint; as successor ls[t] is NULL (no incomplete kid) and is skipped, as predecessor every target leaf is done and skipped: identical output"
+ },
+ {
+  "name": "a summary is scheduled even when no kid is",
+  "find": "done[s] := v_all; sched[s] := v_any;",
+  "replace": "done[s] := v_all; sched[s] := true;"
+ },
+ {
+  "name": "the parent column is ignored (no hierarchy at all)",
+  "find": "IF k IS NOT NULL AND k <> i THEN par[i] := k; END IF;",
+  "replace": "IF FALSE THEN par[i] := k; END IF;"
+ },
+ {
+  "name": "a pass that does not settle raises instead of stopping",
+  "find": "IF pass > n + 1 THEN EXIT; END IF;",
+  "replace": "IF pass > n + 1 THEN RAISE EXCEPTION 'dependency cycle in job %', p_job_id; END IF;"
+ },
+ {
+  "name": "summary leaf targets include nested summaries",
+  "find": "IF is_sum[c] THEN CONTINUE; END IF;",
+  "replace": "IF FALSE THEN CONTINUE; END IF;",
+  "equivalent": true,
+  "reason": "a nested summary hit as a target has its es/ef re-derived from its kids at the start of the next pass, so only wasted passes change, never a leaf or the output"
+ },
+ {
+  "name": "undated link participants no longer scheduled (Phase A rule)",
+  "find": "IF NOT (done[t] AND endd[t] IS NULL) THEN sched[t] := true; END IF;",
+  "replace": "NULL;"
+ }
+]
