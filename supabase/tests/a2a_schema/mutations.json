@@ -1,0 +1,151 @@
+[
+ {
+  "name": "guard: same-job and same-company check dropped",
+  "find": "IF v_pj IS DISTINCT FROM NEW.job_id OR v_pc IS DISTINCT FROM NEW.company_id THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "guard: company half of the check dropped",
+  "find": "IF v_pj IS DISTINCT FROM NEW.job_id OR v_pc IS DISTINCT FROM NEW.company_id THEN",
+  "replace": "IF v_pj IS DISTINCT FROM NEW.job_id THEN"
+ },
+ {
+  "name": "guard: job half of the check dropped",
+  "find": "IF v_pj IS DISTINCT FROM NEW.job_id OR v_pc IS DISTINCT FROM NEW.company_id THEN",
+  "replace": "IF v_pc IS DISTINCT FROM NEW.company_id THEN"
+ },
+ {
+  "name": "guard: depth cap off by one (6)",
+  "find": "c_max_depth CONSTANT integer := 5;",
+  "replace": "c_max_depth CONSTANT integer := 6;"
+ },
+ {
+  "name": "guard: depth cap off by one (4)",
+  "find": "c_max_depth CONSTANT integer := 5;",
+  "replace": "c_max_depth CONSTANT integer := 4;"
+ },
+ {
+  "name": "guard: depth check dropped entirely",
+  "find": "IF v_anc + v_height > c_max_depth THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "guard: cycle check skipped",
+  "find": "IF v_cycle THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "guard: ancestor walk stops after the parent (no real walk)",
+  "find": "JOIN up u ON t.id = u.parent_id WHERE u.lvl < 50",
+  "replace": "JOIN up u ON t.id = u.parent_id WHERE u.lvl < 1"
+ },
+ {
+  "name": "guard: subtree depth check skipped on re-parenting",
+  "find": "  IF TG_OP = 'UPDATE' THEN\n    WITH RECURSIVE down",
+  "replace": "  IF false THEN\n    WITH RECURSIVE down"
+ },
+ {
+  "name": "guard: subtree height uses min instead of max",
+  "find": "SELECT max(lvl) INTO v_height FROM down;",
+  "replace": "SELECT min(lvl) INTO v_height FROM down;"
+ },
+ {
+  "name": "guard: subtree walk only sees direct children",
+  "find": "FROM job_tasks c JOIN down d ON c.parent_task_id = d.id WHERE d.lvl < 50",
+  "replace": "FROM job_tasks c JOIN down d ON c.parent_task_id = d.id WHERE d.lvl < 2"
+ },
+ {
+  "name": "guard: self-parent check removed",
+  "find": "IF NEW.parent_task_id = NEW.id THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "guard: missing-parent check removed",
+  "find": "IF NOT FOUND THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "guard: job/company change rule removed",
+  "find": "AND (OLD.parent_task_id IS NOT NULL OR EXISTS (SELECT 1 FROM job_tasks c WHERE c.parent_task_id = OLD.id)) THEN",
+  "replace": "AND false THEN"
+ },
+ {
+  "name": "guard: job change ignores tasks that have children",
+  "find": "(OLD.parent_task_id IS NOT NULL OR EXISTS (SELECT 1 FROM job_tasks c WHERE c.parent_task_id = OLD.id))",
+  "replace": "(OLD.parent_task_id IS NOT NULL)"
+ },
+ {
+  "name": "guard: job change ignores tasks that have a parent",
+  "find": "(OLD.parent_task_id IS NOT NULL OR EXISTS (SELECT 1 FROM job_tasks c WHERE c.parent_task_id = OLD.id))",
+  "replace": "(EXISTS (SELECT 1 FROM job_tasks c WHERE c.parent_task_id = OLD.id))"
+ },
+ {
+  "name": "guard: early return also skips job/company changes",
+  "find": "     AND NEW.job_id = OLD.job_id AND NEW.company_id = OLD.company_id THEN",
+  "replace": "     THEN"
+ },
+ {
+  "name": "guard: trigger no longer fires on job_id / company_id updates",
+  "find": "BEFORE INSERT OR UPDATE OF parent_task_id, job_id, company_id ON job_tasks",
+  "replace": "BEFORE INSERT OR UPDATE OF parent_task_id ON job_tasks"
+ },
+ {
+  "name": "guard: trigger fires on UPDATE only (inserts unguarded)",
+  "find": "BEFORE INSERT OR UPDATE OF parent_task_id, job_id, company_id ON job_tasks",
+  "replace": "BEFORE UPDATE OF parent_task_id, job_id, company_id ON job_tasks"
+ },
+ {
+  "name": "link_type: CHECK accepts an extra value",
+  "find": "CHECK (link_type IN ('FS', 'SS', 'FF', 'SF'))",
+  "replace": "CHECK (link_type IN ('FS', 'SS', 'FF', 'SF', 'XX'))"
+ },
+ {
+  "name": "link_type: CHECK drops SF",
+  "find": "CHECK (link_type IN ('FS', 'SS', 'FF', 'SF'))",
+  "replace": "CHECK (link_type IN ('FS', 'SS', 'FF'))"
+ },
+ {
+  "name": "link_type: default is SS",
+  "find": "NOT NULL DEFAULT 'FS' CHECK",
+  "replace": "NOT NULL DEFAULT 'SS' CHECK"
+ },
+ {
+  "name": "link_type: column nullable",
+  "find": "link_type text NOT NULL DEFAULT 'FS'",
+  "replace": "link_type text DEFAULT 'FS'"
+ },
+ {
+  "name": "msp_uid: task uniqueness widened to the whole table",
+  "find": "ON job_tasks  (job_id, msp_uid) WHERE msp_uid IS NOT NULL;",
+  "replace": "ON job_tasks  (msp_uid) WHERE msp_uid IS NOT NULL;"
+ },
+ {
+  "name": "msp_uid: phase uniqueness dropped to non-unique",
+  "find": "CREATE UNIQUE INDEX IF NOT EXISTS job_phases_msp_uid_uq",
+  "replace": "CREATE INDEX IF NOT EXISTS job_phases_msp_uid_uq"
+ },
+ {
+  "name": "msp_uid: phase unique index loses its NOT NULL predicate (NULLs collide)",
+  "equivalent": true,
+  "reason": "Postgres unique indexes treat NULLs as distinct, so the partial predicate only saves index space; behaviour is identical",
+  "find": "ON job_phases (job_id, msp_uid) WHERE msp_uid IS NOT NULL;",
+  "replace": "ON job_phases (job_id, msp_uid);"
+ },
+ {
+  "name": "msp_uid: task CHECK allows zero",
+  "find": "ALTER TABLE job_tasks  ADD COLUMN IF NOT EXISTS msp_uid integer CHECK (msp_uid IS NULL OR msp_uid > 0);",
+  "replace": "ALTER TABLE job_tasks  ADD COLUMN IF NOT EXISTS msp_uid integer CHECK (msp_uid IS NULL OR msp_uid >= 0);"
+ },
+ {
+  "name": "parent_task_id: FK is ON DELETE CASCADE",
+  "find": "REFERENCES job_tasks(id) ON DELETE SET NULL;",
+  "replace": "REFERENCES job_tasks(id) ON DELETE CASCADE;"
+ },
+ {
+  "name": "guard: advisory lock removed",
+  "equivalent": true,
+  "reason": "serialises concurrent hierarchy writes of one job; the single-session test harness cannot interleave two transactions, so removing it is not observable here (covered by review, not by a test)",
+  "find": "PERFORM pg_advisory_xact_lock(hashtextextended('job_tasks_parent:' || NEW.job_id::text, 0));",
+  "replace": "NULL;"
+ }
+]
