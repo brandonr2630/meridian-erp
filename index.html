@@ -8946,22 +8946,29 @@ function jcGanttLayout(model, opts) {
     }
   }
 
-  // ---- dependency connectors (finish of predecessor -> start of successor), only between visible, drawn rows ----
+  // ---- dependency connectors, only between visible, drawn rows. By link type (A2, X24): FS predecessor finish -> successor start (the
+  // Phase A drawing, byte for byte unchanged), SS start -> start, FF finish -> finish, SF start -> finish. The arrow leaves its bar on the
+  // side it is anchored to and arrives at the successor from the matching side; when that would double back it detours through the gap
+  // between the two rows. A missing or unknown type is FS. ----
   const connectors = [], seen = new Set(), gap = 6;
   for (const l of (Array.isArray(model.links) ? model.links : [])) {
     if (!l || l.task_id == null || l.predecessor_id == null || l.task_id === l.predecessor_id) continue;
-    const k = l.predecessor_id + '>' + l.task_id; if (seen.has(k)) continue; seen.add(k);
+    const ty = l.link_type === 'SS' || l.link_type === 'FF' || l.link_type === 'SF' ? l.link_type : 'FS';
+    const k = l.predecessor_id + '>' + l.task_id + '>' + ty; if (seen.has(k)) continue; seen.add(k);
     const a = anchors.get(l.predecessor_id), b = anchors.get(l.task_id);
     if (!a || !b || a.y === b.y) continue;
     const critical = critSet.has(l.predecessor_id) && critSet.has(l.task_id);
     if (!critical && !showAll) continue;
-    const x1 = a.x1, y1 = a.y, x2 = b.x0, y2 = b.y;
+    const startBound = ty === 'SS' || ty === 'SF', endBound = ty === 'FF' || ty === 'SF';
+    const x1 = startBound ? a.x0 : a.x1, y1 = a.y, x2 = endBound ? b.x1 : b.x0, y2 = b.y;
+    const out = startBound ? -1 : 1, side = endBound ? 1 : -1;           // direction it leaves the predecessor; side of the target it arrives from
+    const xo = x1 + out * gap, xv = side < 0 ? Math.min(xo, x2 - gap) : Math.max(xo, x2 + gap);
     let d;
-    if (x2 - x1 >= 2 * gap) d = 'M' + jcGanttNum(x1) + ' ' + jcGanttNum(y1) + 'H' + jcGanttNum(x1 + gap) + 'V' + jcGanttNum(y2) + 'H' + jcGanttNum(x2);
-    else { const ym = y2 > y1 ? y1 + cy0 : y1 - cy0;       // successor starts before the predecessor finishes: route round the bars
-      d = 'M' + jcGanttNum(x1) + ' ' + jcGanttNum(y1) + 'H' + jcGanttNum(x1 + gap) + 'V' + jcGanttNum(ym) + 'H' + jcGanttNum(x2 - gap) + 'V' + jcGanttNum(y2) + 'H' + jcGanttNum(x2); }
-    connectors.push({ from: l.predecessor_id, to: l.task_id, critical, lag: jcSchedNum(l.lag_days) ?? 0, d,
-      head: jcGanttNum(x2) + ',' + jcGanttNum(y2) + ' ' + jcGanttNum(x2 - 5) + ',' + jcGanttNum(y2 - 3) + ' ' + jcGanttNum(x2 - 5) + ',' + jcGanttNum(y2 + 3) });
+    if (out * (xv - xo) >= 0) d = 'M' + jcGanttNum(x1) + ' ' + jcGanttNum(y1) + 'H' + jcGanttNum(xv) + 'V' + jcGanttNum(y2) + 'H' + jcGanttNum(x2);
+    else { const ym = y2 > y1 ? y1 + cy0 : y1 - cy0;                       // would double back: route round the bars
+      d = 'M' + jcGanttNum(x1) + ' ' + jcGanttNum(y1) + 'H' + jcGanttNum(xo) + 'V' + jcGanttNum(ym) + 'H' + jcGanttNum(xv) + 'V' + jcGanttNum(y2) + 'H' + jcGanttNum(x2); }
+    connectors.push({ from: l.predecessor_id, to: l.task_id, type: ty, critical, lag: jcSchedNum(l.lag_days) ?? 0, d,
+      head: jcGanttNum(x2) + ',' + jcGanttNum(y2) + ' ' + jcGanttNum(x2 + side * 5) + ',' + jcGanttNum(y2 - 3) + ' ' + jcGanttNum(x2 + side * 5) + ',' + jcGanttNum(y2 + 3) });
   }
 
   const todayIn = T != null && T >= minDay && T <= maxDay;
