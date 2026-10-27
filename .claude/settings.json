@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "git fetch -q origin master 2>/dev/null; n=$(git rev-list --count HEAD..origin/master 2>/dev/null); if [ \"${n:-0}\" -gt 0 ]; then echo \"WARNING: this checkout is $n commit(s) behind origin/master. handoff.md and code here may be stale. Branch from origin/master or run: git merge --ff-only origin/master\"; fi"
+          }
+        ]
+      }
+    ]
+  }
+}
