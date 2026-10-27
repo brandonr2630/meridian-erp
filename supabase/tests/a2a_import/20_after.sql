@@ -139,7 +139,7 @@ BEGIN
     left(t_imp('authenticated', t_u('wrt'), ja, 'merge', (p - 'project_uid') || jsonb_build_object('project', jsonb_build_object('uid', ja::text))), 3), 'ok:');
   -- that merge applied the edits already: restore the starting state so the numbers below are about one clean merge
   UPDATE job_tasks SET task_name = 'Survey', client_visible = true WHERE job_id = ja AND task_name = 'Survey v2';
-  UPDATE job_tasks SET task_name = 'Design', progress = 0, start_date = '2026-05-06', end_date = '2026-05-10', client_visible = true WHERE job_id = ja AND msp_uid = dv;
+  UPDATE job_tasks SET task_name = 'Design', progress = 0, start_date = '2026-05-06', end_date = '2026-05-10', client_visible = true, is_critical = true WHERE job_id = ja AND msp_uid = dv;
   DELETE FROM job_tasks WHERE job_id = ja AND msp_uid > 6;
   DELETE FROM job_audit_log WHERE job_id = ja AND action_type = 'visibility_changed';
   p := p || jsonb_build_object('based_on', t_based(ja));
@@ -153,6 +153,7 @@ BEGIN
     (SELECT count(*)::text FROM job_tasks WHERE job_id = ja AND task_name = 'Meridian only'), '2');
   PERFORM t_expect('merge: rows absent from the file are kept (Loose and the second Assess phase tasks)', (SELECT count(*)::text FROM job_tasks WHERE job_id = ja AND task_name IN ('Loose', 'Survey 2')), '2');
   PERFORM t_expect('merge: edited name arrived and fields updated', (SELECT task_name || '|' || progress || '|' || start_date FROM job_tasks WHERE job_id = ja AND msp_uid = dv), 'Design|40|2026-05-07');
+  PERFORM t_expect('merge: is_critical is cleared on an updated row (recomputed by the next UI save)', (SELECT is_critical::text FROM job_tasks WHERE job_id = ja AND msp_uid = dv), 'false');
   PERFORM t_expect('merge: a published task whose name changed is auto-unpublished',
     (SELECT task_name || client_visible::text FROM job_tasks WHERE job_id = ja AND msp_uid = sv), 'Survey v2false');
   PERFORM t_expect('merge: a published task edited in dates/progress only stays published',
@@ -669,6 +670,37 @@ BEGIN
   PERFORM t_expect('roundtrip: the added row got the next uid', (SELECT msp_uid::text FROM job_tasks WHERE job_id = j AND task_name = 'Added in ProjectLibre'), ((m ->> 'base_phases')::int + (m ->> 'base_tasks')::int + 1)::text);
   PERFORM t_expect('roundtrip: the same edited file again changes nothing (idempotent)',
     (SELECT t_res(r, 'created') || '/' || t_res(r, 'updated') FROM (SELECT t_imp('authenticated', t_u('wrt'), j, 'merge', own || jsonb_build_object('based_on', t_based(j))) r) s), '1/0');
+END $$;
+
+-- ===== 15. gaps found by the mutation run =====
+DO $$
+DECLARE jq uuid := t_job(130); ja uuid := t_job(131); res text; p jsonb; sv int;
+BEGIN
+  PERFORM t_expect('gap: a phase uid of 0 is refused', left(t_imp('authenticated', t_u('ops'), jq, 'append', t_pl(jsonb_build_array(t_ph(0, 'P')), jsonb_build_array(t_tk(2, 'A')))), 15), 'invalid payload');
+  PERFORM t_expect('gap: an end date after 2100 is refused', left(t_imp('authenticated', t_u('ops'), jq, 'append', t_pl('[]', jsonb_build_array(jsonb_set(t_tk(2, 'A'), '{end_date}', '"2101-01-01"')))), 15), 'invalid payload');
+  PERFORM t_expect('gap: an end date after 2100 is refused (no start)', left(t_imp('authenticated', t_u('ops'), jq, 'append', t_pl('[]', jsonb_build_array(t_tk(2, 'A', NULL, NULL, NULL, '2101-01-01')))), 15), 'invalid payload');
+  res := t_imp('authenticated', t_u('ops'), jq, 'append', t_pl(jsonb_build_array(t_ph(1, chr(1))), '[]'));
+  PERFORM t_expect('gap: a phase with an empty name is called (unnamed) and reported', t_warn(res, 'name-defaulted') || '|' || (SELECT name FROM job_phases WHERE job_id = jq), '1|(unnamed)');
+  -- merge: a matched task whose file row has no dates keeps its stored dates
+  PERFORM t_expect('gap setup', left(t_imp('authenticated', t_u('ops'), ja, 'append', t_pl('[]', jsonb_build_array(t_tk(1, 'Dated', NULL, NULL, '2026-05-01', '2026-05-09')))), 3), 'ok:');
+  res := t_imp('authenticated', t_u('ops'), ja, 'merge', jsonb_build_object('project_uid', ja::text, 'based_on', t_based(ja), 'phases', '[]'::jsonb,
+    'tasks', jsonb_build_array(t_tk(1, 'Dated renamed', NULL, NULL, NULL, NULL))));
+  PERFORM t_expect('gap: merge with no dates in the file keeps the stored dates', (SELECT task_name || '|' || start_date || '|' || end_date FROM job_tasks WHERE job_id = ja), 'Dated renamed|2026-05-01|2026-05-09');
+  res := t_imp('authenticated', t_u('ops'), ja, 'merge', jsonb_build_object('project_uid', ja::text, 'based_on', t_based(ja), 'phases', '[]'::jsonb,
+    'tasks', jsonb_build_array(t_tk(1, 'Dated renamed', NULL, NULL, '2027-01-01', NULL))));
+  PERFORM t_expect('gap: merge with one date only keeps both stored dates', left(res, 3) || (SELECT start_date || '|' || end_date FROM job_tasks WHERE job_id = ja), 'ok:2026-05-01|2026-05-09');
+END $$;
+
+-- an atom present but not true does not count (role permissions are compared strictly)
+DO $$
+DECLARE jr uuid := t_job(132);
+BEGIN
+  INSERT INTO erp_roles (id, name, permissions) VALUES ('a0000000-0000-0000-0000-000000000030', 'imp_false_atoms',
+    '{"ops:work-orders:read": true, "ops:work-orders:write": false, "ops:work-orders:approve": "yes"}');
+  INSERT INTO erp_users (id, auth_user_id, full_name, is_active) VALUES ('e0000000-0000-0000-0000-000000000030', '30303030-3030-3030-3030-303030303030', 'false atoms', true);
+  INSERT INTO erp_user_company_roles (user_id, company_id, role_id) VALUES ('e0000000-0000-0000-0000-000000000030', 'c1000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000030');
+  PERFORM t_expect('atoms: write=false is not write', t_imp('authenticated', '30303030-3030-3030-3030-303030303030', jr, 'append', t_pl('[]', jsonb_build_array(t_tk(1, 'x')))),
+    'permission denied: ops:work-orders:write required');
 END $$;
 
 ROLLBACK;

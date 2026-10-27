@@ -26,7 +26,7 @@ LANGUAGE sql IMMUTABLE SET search_path = public, pg_temp AS $$
   SELECT btrim(regexp_replace(
            regexp_replace(
              regexp_replace(p_s, '[\t\n\r\f\v]+', ' ', 'g'),
-             '[\u0001-\u001f\u007f-\u009f­​-‏ -‮⁠-⁩﻿]', '', 'g'),
+             '[\u0001-\u001f\u007f-\u009f\u00ad\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]', '', 'g'),
            ' {2,}', ' ', 'g'))
 $$;
 
