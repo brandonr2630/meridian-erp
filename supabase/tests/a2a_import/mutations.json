@@ -146,12 +146,12 @@
  },
  {
   "name": "hierarchy depth cap raised",
-  "find": "WHERE m.depth + CASE WHEN z.has_phase THEN 1 ELSE 0 END > k_max_depth) THEN",
-  "replace": "WHERE m.depth + CASE WHEN z.has_phase THEN 1 ELSE 0 END > k_max_depth + 1) THEN"
+  "find": "WHERE m.depth + 1 > k_max_depth) THEN",
+  "replace": "WHERE m.depth + 1 > k_max_depth + 1) THEN"
  },
  {
-  "name": "phase not counted as a level",
-  "find": "WHERE m.depth + CASE WHEN z.has_phase THEN 1 ELSE 0 END > k_max_depth) THEN",
+  "name": "implicit phase level not counted",
+  "find": "WHERE m.depth + 1 > k_max_depth) THEN",
   "replace": "WHERE m.depth > k_max_depth) THEN"
  },
  {

@@ -391,10 +391,10 @@ BEGIN
   PERFORM t_expect('depth: D1 is a direct child of the phase', (SELECT (phase_id IS NOT NULL AND parent_task_id IS NULL)::text FROM job_tasks WHERE job_id = jh AND task_name = 'D1'), 'true');
   tasks := '[]'; FOR i IN 1..6 LOOP tasks := tasks || t_tk(i + 1, 'E' || i, 1, CASE WHEN i = 1 THEN NULL ELSE i END); END LOOP;
   PERFORM t_expect('depth: phase + 6 nested tasks (7 levels) is rejected', t_imp('authenticated', t_u('ops'), t_job(68), 'append', t_pl(ph, tasks)), 'task hierarchy is deeper than 6 levels');
-  tasks := '[]'; FOR i IN 1..6 LOOP tasks := tasks || t_tk(i, 'F' || i, NULL, CASE WHEN i = 1 THEN NULL ELSE i - 1 END); END LOOP;
-  PERFORM t_expect('depth: 6 nested tasks without a phase (6 levels) is accepted', left(t_imp('authenticated', t_u('ops'), t_job(69), 'append', t_pl('[]', tasks)), 3), 'ok:');
-  tasks := '[]'; FOR i IN 1..7 LOOP tasks := tasks || t_tk(i, 'G' || i, NULL, CASE WHEN i = 1 THEN NULL ELSE i - 1 END); END LOOP;
-  PERFORM t_expect('depth: 7 nested tasks without a phase is rejected', t_imp('authenticated', t_u('ops'), t_job(70), 'append', t_pl('[]', tasks)), 'task hierarchy is deeper than 6 levels');
+  tasks := '[]'; FOR i IN 1..5 LOOP tasks := tasks || t_tk(i, 'F' || i, NULL, CASE WHEN i = 1 THEN NULL ELSE i - 1 END); END LOOP;
+  PERFORM t_expect('depth: 5 nested tasks without a phase is accepted (same cap as the parent trigger)', left(t_imp('authenticated', t_u('ops'), t_job(69), 'append', t_pl('[]', tasks)), 3), 'ok:');
+  tasks := '[]'; FOR i IN 1..6 LOOP tasks := tasks || t_tk(i, 'G' || i, NULL, CASE WHEN i = 1 THEN NULL ELSE i - 1 END); END LOOP;
+  PERFORM t_expect('depth: 6 nested tasks without a phase is rejected', t_imp('authenticated', t_u('ops'), t_job(70), 'append', t_pl('[]', tasks)), 'task hierarchy is deeper than 6 levels');
   PERFORM t_expect('depth: rejected files wrote nothing', t_state(t_jid(68)) || t_state(t_jid(70)) || (SELECT count(*)::text FROM job_audit_log WHERE job_id IN (t_jid(68), t_jid(70))), '0/0/00/0/00');
 END $$;
 
@@ -402,19 +402,19 @@ END $$;
 DO $$
 DECLARE jh uuid := t_job(71); tasks jsonb; res text; p jsonb; r2 uuid; c3 uuid; d1 uuid;
 BEGIN
-  PERFORM t_expect('depth setup: R1>C1>C2>C3>C4 and R2>D1 (no phase)', left(t_imp('authenticated', t_u('ops'), jh, 'append', t_pl('[]', jsonb_build_array(
-    t_tk(1, 'R1'), t_tk(2, 'C1', NULL, 1), t_tk(3, 'C2', NULL, 2), t_tk(4, 'C3', NULL, 3), t_tk(5, 'C4', NULL, 4), t_tk(6, 'R2'), t_tk(7, 'D1', NULL, 6)))), 3), 'ok:');
-  tasks := jsonb_build_array(t_tk(1, 'R1'), t_tk(2, 'C1', NULL, 1), t_tk(3, 'C2', NULL, 2), t_tk(4, 'C3', NULL, 3), t_tk(5, 'C4', NULL, 4), t_tk(6, 'R2', NULL, 5));
+  PERFORM t_expect('depth setup: R1>C1>C2>C3 and R2>D1 (no phase)', left(t_imp('authenticated', t_u('ops'), jh, 'append', t_pl('[]', jsonb_build_array(
+    t_tk(1, 'R1'), t_tk(2, 'C1', NULL, 1), t_tk(3, 'C2', NULL, 2), t_tk(4, 'C3', NULL, 3), t_tk(5, 'R2'), t_tk(6, 'D1', NULL, 5)))), 3), 'ok:');
+  tasks := jsonb_build_array(t_tk(1, 'R1'), t_tk(2, 'C1', NULL, 1), t_tk(3, 'C2', NULL, 2), t_tk(4, 'C3', NULL, 3), t_tk(5, 'R2', NULL, 4));
   p := jsonb_build_object('project_uid', jh::text, 'based_on', t_based(jh), 'phases', '[]'::jsonb, 'tasks', tasks);
-  PERFORM t_expect('depth: R2 under C4 would put the stored D1 at level 7: rejected', t_imp('authenticated', t_u('ops'), jh, 'merge', p), 'task hierarchy is deeper than 6 levels');
+  PERFORM t_expect('depth: R2 under C3 would put the stored D1 at task depth 6: rejected', t_imp('authenticated', t_u('ops'), jh, 'merge', p), 'task hierarchy is deeper than 6 levels');
   PERFORM t_expect('depth: nothing moved', (SELECT parent_task_id IS NULL FROM job_tasks WHERE job_id = jh AND task_name = 'R2')::text, 'true');
-  tasks := jsonb_set(tasks, '{5,parent_uid}', '4');
+  tasks := jsonb_set(tasks, '{4,parent_uid}', '3');
   p := jsonb_build_object('project_uid', jh::text, 'based_on', t_based(jh), 'phases', '[]'::jsonb, 'tasks', tasks);
   res := t_imp('authenticated', t_u('ops'), jh, 'merge', p);
-  PERFORM t_expect('depth: R2 under C3 keeps D1 at level 6: accepted', t_res(res, 'updated') || '|' || t_res(res, 'kept'), '1|1');
+  PERFORM t_expect('depth: R2 under C2 keeps D1 at task depth 5: accepted', t_res(res, 'updated') || '|' || t_res(res, 'kept'), '1|1');
   PERFORM t_expect('depth: R2 now hangs under C3, D1 still under R2',
     (SELECT (SELECT task_name FROM job_tasks x WHERE x.id = r.parent_task_id) || '|' || (SELECT (SELECT task_name FROM job_tasks y WHERE y.id = d.parent_task_id) FROM job_tasks d WHERE d.job_id = jh AND d.task_name = 'D1')
-       FROM job_tasks r WHERE r.job_id = jh AND r.task_name = 'R2'), 'C3|R2');
+       FROM job_tasks r WHERE r.job_id = jh AND r.task_name = 'R2'), 'C2|R2');
 END $$;
 
 DO $$

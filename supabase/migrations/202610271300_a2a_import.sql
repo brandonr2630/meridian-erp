@@ -343,7 +343,7 @@ BEGIN
                            (SELECT ph.id FROM pg_temp.imp_p ph WHERE ph.uid = it.phase_uid), coalesce(it.sort_order, t.sort_order), it.parent_id);
   SELECT (SELECT count(*) FROM pg_temp.imp_p WHERE changed) + (SELECT count(*) FROM pg_temp.imp_t WHERE changed) INTO v_updated;
 
-  -- the whole final graph (stored rows that stay + payload rows) must be acyclic and at most 6 levels deep, BEFORE any write
+  -- the whole final graph (stored rows that stay + payload rows) must be acyclic and at most 6 levels deep (the phase is level 1 even when absent, matching the job_tasks_parent_guard trigger: a task chain is at most 5), BEFORE any write
   CREATE TEMP TABLE imp_e (t uuid NOT NULL, p uuid NOT NULL) ON COMMIT DROP;
   CREATE TEMP TABLE imp_n (id uuid NOT NULL, parent uuid, has_phase boolean NOT NULL) ON COMMIT DROP;
   IF p_mode <> 'replace' THEN
@@ -374,7 +374,7 @@ BEGIN
       UNION ALL
       SELECT up.id, y.parent, up.d + 1 FROM up JOIN pg_temp.imp_n y ON y.id = up.cur WHERE up.d < 9)
     SELECT 1 FROM (SELECT up.id, max(up.d) AS depth FROM up GROUP BY up.id) m JOIN pg_temp.imp_n z ON z.id = m.id
-     WHERE m.depth + CASE WHEN z.has_phase THEN 1 ELSE 0 END > k_max_depth) THEN
+     WHERE m.depth + 1 > k_max_depth) THEN
     RAISE EXCEPTION 'task hierarchy is deeper than % levels', k_max_depth USING ERRCODE = '23514';
   END IF;
 
