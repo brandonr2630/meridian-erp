@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-27 · Session 72*
+*Last updated: 2026-10-27 · Session 73*
 
 ---
 
@@ -30,6 +30,7 @@
 8. Older: PO module live click-through (S48) and PO list search/pagination (S49); `www.erp` alias/cert (S51); rotate the ERP password; confirm the BMS Bar Stock cost in Job Config; watch for GreenGeeks WAF block recurrence (S47).
 
 **Claude-side, waiting on a go-ahead or a trigger:**
+- **A2a SQL (S73): built and tested on throwaway Postgres on LOCAL branches, NOT merged, NOT pushed, NOT applied.** An independent attack review found a High (cross-company planting); its fixes are paused on `feature/a2a-sql-fixes`. See Session 73 for branches, results, open decisions and the pre-apply checks. Docker is now installed and working.
 - **A2a, JS side DONE and merged (S71)**: link types FS/SS/FF/SF and task hierarchy in `jcSchedCompute` (PRs #175, #176), the MSPDI codec `schedule-msp.js` (#176), the read-only schedule window with Export XML and an import dry run (#177), and (S72) **Gantt arrows by link type** (#180, dormant until the migration adds `link_type`). **A2a still open:** (1) the SQL side, which needs **Docker** (not installed on the machine used in S71; install it first): the A2 migration (`link_type`, `msp_uid`, `parent_task_id` + cycle guard, depth cap), `job_schedule_status` rewritten with the same link-type and hierarchy rules as the JS (the 52+3 shared fixture cases must pass on SQL too: update `scripts/tests/schedule/sql-fixture-runner.mjs`, which does not pass `link_type` or the new `parent` key yet, so the new cases fail loudly against the old SQL), `prepare_schedule_export`, `import_job_schedule` (needs an independent attack review like D0d), all proven on throwaway Postgres with mutation checks and then applied to prod one step at a time; (2) window editing and Apply import once the RPCs exist; (3) audit row per export; (4) Gantt nesting by `parent_task_id` (summary rows, indent, collapse) once that column exists. Then **A2b** (resources, `task_id` on labour and equipment entries, `jcSaveJobData` change) and **A2c** (undo/redo).
 - A2 spec accepted (S71) and **recorded 2026-10-27 (S72, PR #179)**: roadmap row, sequencing steps 2a/2b/2c, decisions 24-25, risks, effort, X1 amendment and rules X24-X30 are in `00-overview.md` / `99-roadmap.md`, and the shared-codec note is at the top of `phase-d-client-portal.md`. Still to settle in the specs when their SQL is written: names of the Phase D agreement tables (X29), and the A2b table names are only reserved (`job_resources`, `job_task_assignments`).
 - Pre-existing, not from S72: `node scripts/verify-spec.mjs phase-a-schedule-v2.md` fails on master ("DROP in up-migration without a -- down section"; the Phase A spec embeds the migration executed in Session 61). Decide whether to fix the spec text or relax the check.
@@ -38,6 +39,47 @@
 - Parked: staging deploy gate (S52, blocked on the Supabase project cap); Supabase Branching `main` record stuck in `MIGRATIONS_FAILED` (S52, not the prod database).
 
 **Gotcha:** Edit/Write are blocked on the base repo's worktrees. Write the file to the scratchpad and `cp` it in. Pull or branch from `origin/master` before reading this file (a stale checkout once stopped at Session 51).
+
+---
+
+## Session 73 - A2a SQL built on throwaway Postgres in four parallel leaves; independent attack review found a High; fixes PAUSED (2026-10-27)
+
+**Nothing from this session is merged, pushed or applied to prod.** All of it is on LOCAL branches in worktrees under `.worktrees/` on the Z: checkout. Docker now works (Docker Desktop must be running; open a new session after starting it).
+
+**Branches (all local):**
+- `feature/a2a-sql` (4819ba1) = integration branch: base contract + the four leaves merged + one integration fix + `supabase/tests/a2a_all/run.sh`. This is the one to continue from.
+- Leaves (already merged into the integration branch, kept for reference): `feature/a2a-sql-schema` (42a8179), `-status` (92e3123), `-export` (468b2eb), `-import` (fc0145c).
+- `feature/a2a-sql-fixes` (worktree `.worktrees/a2a-sql-fixes`): fixes for the attack review, **paused mid-work**. Whatever is committed or uncommitted there is partial and unverified: run `git -C .worktrees/a2a-sql-fixes status` and `git log feature/a2a-sql..feature/a2a-sql-fixes` before trusting any of it. Re-run all gates before merging.
+
+**What was built (new migrations, none applied):**
+- `202610271000_a2a_schema.sql`: `job_task_links.link_type`, `msp_uid` on phases and tasks (unique per job), `job_tasks.parent_task_id` (ON DELETE SET NULL) plus the `job_tasks_parent_guard` trigger: same job and company, no self-parent, no cycle, a task chain at most 5 deep (phase is level 1, cap 6), subtree-depth check on re-parent, job/company change rejected while a task has a parent or children. Error classes A2H01-A2H06.
+- `202610271100_a2a_status.sql`: `job_schedule_status` honours the four link types and the hierarchy and mirrors `jcSchedCompute`. Shared fixture passes 55/55 on SQL (was 48/55). A pass that does not settle stops and carries on like the JS instead of raising (ruling: a raising function would break the dashboard and nightly snapshot for that job).
+- `202610271200_a2a_export.sql`: `prepare_schedule_export(job, kind)` (public wrapper, refuses non-staff kinds to API sessions) over `schedule_export_core`; stable uids max+1 across phases and tasks, writers only, advisory lock (real two-session test), audit row `schedule_exported`. Phase D must call `schedule_export_core(job,'client')` from its definer.
+- `202610271300_a2a_import.sql`: `import_job_schedule(job, mode, payload, reason)` (append/merge/replace) plus 7 helpers. Accepts exactly what `schedule-msp.js toPayload` emits (links nested in `tasks[].links`; `project.uid`, `project.manager` marker).
+
+**Tests (integration branch, run from the repo root with Git Bash):** `bash supabase/tests/d0c_common/run.sh <family>` for `phase_a_sql` (10/381/21), `a2a_schema` (6/101/6), `a2a_status` (9/122/13), `a2a_export` (5/90/6), `a2a_import` (5/483/5); `node supabase/tests/d0c_common/mutate.mjs <family>`: schema 27/27, status 20/20, export 28/28, import 90/90 (serial, run before the fixes); `bash supabase/tests/phase_a_sql/run-fixture.sh` 55/55; `bash supabase/tests/a2a_export/concurrency.sh`; `bash supabase/tests/a2a_all/run.sh` (all four migrations together, fixture, reverse rollbacks twice, re-apply). JS suite unchanged, 273/273. `d0c_common/run.sh` gained an optional per-family `requires.txt` (migrations applied before the family stub).
+
+**Integration finding (fixed on `feature/a2a-sql`):** the import accepted 6 nested unphased tasks while the parent trigger caps a chain at 5; the import now counts the implicit phase level.
+
+**Attack review of `import_job_schedule` (independent security-reviewer agent, every finding proven on throwaway Postgres):**
+- **HIGH:** policies on `job_phases`, `job_tasks` and `job_task_links` check only `company_id`, not that `job_id` belongs to that company (Phase A and the older job_tasks policy). A writer in company C2 who knows a C1 job id (it is the Project UID in exports and in the `#/schedule/<job_id>` route) can plant rows in the C1 job. A merge then copies C1 names and dates into C2-readable rows, and a planted `msp_uid` 2000000000 or `updated_at` in 2099 blocks the C1 user's append and replace permanently. Export has the same job_id-only scoping. **Planned fix (not finished):** a company-matches-job trigger on the three tables (in the schema migration), `company_id = job company` on every stored-row predicate in import and export, and an import check that raises if foreign-company rows exist. **Prod pre-check needed before applying:** count rows whose `company_id` differs from their job's company in the three tables.
+- MEDIUM: the cycle check re-scans all stored links (10 s with a ~10k-task chain, over the 8 s timeout); check only the payload edges. MEDIUM: a writer can set `msp_uid` near 2147483647 and block imports or overflow export; add CHECK `msp_uid <= 100000000`.
+- LOW: a merge can make a published task client-visible by dropping its phase (set `client_visible=false` when `phase_id` changes); replace recovery keeps ids and names only (store `to_jsonb(row)` and lock the rows before copying); invisible characters (U+061C, U+3164, tag range) survive the name cleaner; `ATTACK_NOTES.md` R1 is wrong (audit-log UPDATE/DELETE are revoked; the real risk is a forged `schedule_imported` row) and R3 has a small window.
+- Held up: grants and anon, search_path, no dynamic SQL, company-scoped atoms, payload type confusion, baseline-guard bypass, concurrent appends.
+
+**Decisions still open for the owner:**
+1. Uid reuse: `max+1` can reuse a uid if the highest row was deleted, but X26 says never reused. Recommend a per-job high-water mark (a design change).
+2. The JS side must send `file_name` and `based_on` (= max `updated_at` over the job's phases, tasks and links; required when the job already has rows; a mismatch raises 40001). `toPayload` emits neither. The spec's payload JSON differs from `toPayload` (nested links, key names); `toPayload` wins and the spec text should be amended.
+3. Prod pre-checks before ANY apply: the cross-company row count above; the live `job_audit_log.action_type` CHECK (none in the stubs, live not seen); ownership of the new functions equals the `lock_job_baseline` owner; apply one migration at a time with simulated-identity verification (the D0/Phase A method).
+4. Push the local branches (nothing is on GitHub yet) and open PRs once the fixes are verified.
+
+**Gotchas learned:**
+- In Windows PowerShell plain `bash` is WSL's bash (no distro installed): use `& "C:\Program Files\Git\bin\bash.exe" supabase/tests/...` from `Z:\09-DevPro\projects\meridian-erp`. The old `phase_a_sql/run.sh` named in S72 does not exist; the baseline is `bash supabase/tests/d0c_common/run.sh phase_a_sql`.
+- `git worktree add` with a relative path from inside another worktree nests it wrongly (`.worktrees/.worktrees/...`): run it from the repo root.
+- Parallel leaves that each pass alone can still conflict on merge (the depth cap): always run the combined stack (`a2a_all/run.sh`) and every family on the merged branch.
+- Stray containers from killed mutation runs (`d0c-*`, `impdbg`, `dbgpg`) can be removed with `docker rm -f`; `open-webui` is unrelated.
+
+**Next:** (1) resume `feature/a2a-sql-fixes`: verify what is there, finish H1, M2, M3 and L4-L7 test-first, re-run every gate including the import mutants; (2) re-run the attack review on the fixed import; (3) decide uid reuse; (4) run the prod pre-checks (read-only); (5) push, PR, then apply to prod one migration at a time; (6) JS: add `based_on` and `file_name` to the import call and the Apply path in the schedule window; (7) A2b and A2c after that.
 
 ---
 
@@ -50,7 +92,7 @@
 **State at the end of the session:** master f91c553; 273 tests pass (`node --test scripts/tests/ui/*.test.mjs scripts/tests/schedule/*.test.mjs`); mutation harnesses: compute 67/67, codec 57/57, window 44/44, Gantt 62/62. No open PRs.
 
 **Not done (unchanged from S71):**
-- **Docker is still not installed.** Windows 11 Home steps given to the owner: check virtualization in Task Manager, `wsl --install` (admin PowerShell) and restart, install Docker Desktop (WSL 2 backend), then verify with `docker --version`, `docker run --rm hello-world` and `docker run --rm postgres:17-alpine postgres --version` (the runner `supabase/tests/d0c_common/run.sh` uses `postgres:17-alpine`). Open a NEW session afterwards so the app picks up the command, run `bash supabase/tests/phase_a_sql/run.sh` as a baseline (before 10, after 381, rollback 21), then write the A2 SQL.
+- (Resolved in S73: Docker works.) Old text: Docker was not installed. Windows 11 Home steps given to the owner: check virtualization in Task Manager, `wsl --install` (admin PowerShell) and restart, install Docker Desktop (WSL 2 backend), then verify with `docker --version`, `docker run --rm hello-world` and `docker run --rm postgres:17-alpine postgres --version` (the runner `supabase/tests/d0c_common/run.sh` uses `postgres:17-alpine`). Open a NEW session afterwards so the app picks up the command, run `bash supabase/tests/phase_a_sql/run.sh` as a baseline (before 10, after 381, rollback 21), then write the A2 SQL.
 - Owner item 9 (try **Open schedule** on a real work order and the ProjectLibre interop) and the lawyer items.
 - Gantt nesting by `parent_task_id` (waits for the column).
 
