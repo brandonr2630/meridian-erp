@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-26 · Session 71*
+*Last updated: 2026-10-27 · Session 72*
 
 ---
 
@@ -30,14 +30,36 @@
 8. Older: PO module live click-through (S48) and PO list search/pagination (S49); `www.erp` alias/cert (S51); rotate the ERP password; confirm the BMS Bar Stock cost in Job Config; watch for GreenGeeks WAF block recurrence (S47).
 
 **Claude-side, waiting on a go-ahead or a trigger:**
-- **A2a, JS side DONE and merged (S71)**: link types FS/SS/FF/SF and task hierarchy in `jcSchedCompute` (PRs #175, #176), the MSPDI codec `schedule-msp.js` (#176), and the read-only schedule window with Export XML and an import dry run (#177). **A2a still open:** (1) the SQL side, which needs **Docker** (not installed on the machine used in S71; install it first): the A2 migration (`link_type`, `msp_uid`, `parent_task_id` + cycle guard, depth cap), `job_schedule_status` rewritten with the same link-type and hierarchy rules as the JS (the 52+3 shared fixture cases must pass on SQL too: update `scripts/tests/schedule/sql-fixture-runner.mjs`, which does not pass `link_type` or the new `parent` key yet, so the new cases fail loudly against the old SQL), `prepare_schedule_export`, `import_job_schedule` (needs an independent attack review like D0d), all proven on throwaway Postgres with mutation checks and then applied to prod one step at a time; (2) window editing and Apply import once the RPCs exist; (3) audit row per export. Then **A2b** (resources, `task_id` on labour and equipment entries, `jcSaveJobData` change) and **A2c** (undo/redo).
-- A2 spec is accepted (S71): still to do: add the roadmap row, cross-phase rules X24-X30 (X29 agreement gate and X30 job-card actuals are proposed) and the X1 summary-task amendment to `00-overview.md` / `99-roadmap.md`, and the Phase D note that `portal_schedule` feeds the shared codec. Not done yet.
-- On A2 acceptance (original wording): add the roadmap row, cross-phase rules X24-X30 (X29 agreement gate and X30 job-card actuals are proposed in S70) and the X1 summary-task amendment.
+- **A2a, JS side DONE and merged (S71)**: link types FS/SS/FF/SF and task hierarchy in `jcSchedCompute` (PRs #175, #176), the MSPDI codec `schedule-msp.js` (#176), the read-only schedule window with Export XML and an import dry run (#177), and (S72) **Gantt arrows by link type** (#180, dormant until the migration adds `link_type`). **A2a still open:** (1) the SQL side, which needs **Docker** (not installed on the machine used in S71; install it first): the A2 migration (`link_type`, `msp_uid`, `parent_task_id` + cycle guard, depth cap), `job_schedule_status` rewritten with the same link-type and hierarchy rules as the JS (the 52+3 shared fixture cases must pass on SQL too: update `scripts/tests/schedule/sql-fixture-runner.mjs`, which does not pass `link_type` or the new `parent` key yet, so the new cases fail loudly against the old SQL), `prepare_schedule_export`, `import_job_schedule` (needs an independent attack review like D0d), all proven on throwaway Postgres with mutation checks and then applied to prod one step at a time; (2) window editing and Apply import once the RPCs exist; (3) audit row per export; (4) Gantt nesting by `parent_task_id` (summary rows, indent, collapse) once that column exists. Then **A2b** (resources, `task_id` on labour and equipment entries, `jcSaveJobData` change) and **A2c** (undo/redo).
+- A2 spec accepted (S71) and **recorded 2026-10-27 (S72, PR #179)**: roadmap row, sequencing steps 2a/2b/2c, decisions 24-25, risks, effort, X1 amendment and rules X24-X30 are in `00-overview.md` / `99-roadmap.md`, and the shared-codec note is at the top of `phase-d-client-portal.md`. Still to settle in the specs when their SQL is written: names of the Phase D agreement tables (X29), and the A2b table names are only reserved (`job_resources`, `job_task_assignments`).
+- Pre-existing, not from S72: `node scripts/verify-spec.mjs phase-a-schedule-v2.md` fails on master ("DROP in up-migration without a -- down section"; the Phase A spec embeds the migration executed in Session 61). Decide whether to fix the spec text or relax the check.
 - Roadmap: Phase B (quality: ITP, hold points, NCRs), then C (progress, S-curve, snapshots), then D (client portal). D0 prerequisites are done. Needs owner go-ahead.
-- Housekeeping: remove merged worktrees under `.worktrees/` with `git worktree remove` (S71 added `spec-a2-n1-n11`, `a2a-engine`, `a2a-hier`, `a2a-window`, `handoff-s71`, all merged once their PRs land).
+- Housekeeping: remove merged worktrees under `.worktrees/` with `git worktree remove` (S71: `spec-a2-n1-n11`, `a2a-engine`, `a2a-hier`, `a2a-window`, `handoff-s71`; S72: `a2-roadmap`, `a2-gantt`, `handoff-s72`; all merged once their PRs land).
 - Parked: staging deploy gate (S52, blocked on the Supabase project cap); Supabase Branching `main` record stuck in `MIGRATIONS_FAILED` (S52, not the prod database).
 
 **Gotcha:** Edit/Write are blocked on the base repo's worktrees. Write the file to the scratchpad and `cp` it in. Pull or branch from `origin/master` before reading this file (a stale checkout once stopped at Session 51).
+
+---
+
+## Session 72 - A2 recorded in the specs; Gantt arrows by link type (2026-10-27)
+
+**Merged to master:**
+- **#179 (docs):** X1 amended (summary rows weight 0) and rules **X24-X30** added to `00-overview.md` section 8; A2 added to the phases list and reserved table names; `99-roadmap.md` gained the A2 phase row, sequencing steps 2a/2b/2c (with what is already done), decisions 24-25, three risks, a rough effort row and two cross-phase rules; `phase-d-client-portal.md` got an amendment (client download goes through the shared codec and `prepare_schedule_export(..., 'client')`); the A2 spec is marked accepted and its "files to update" list marked done. verify-spec (A2, B, C, D, overview), verify-roadmap and verify-guards pass.
+- **#180:** the Gantt draws arrows by link type: FS unchanged byte for byte, SS start to start, FF finish to finish, SF start to finish, with the matching approach side and a detour through the gap between rows when an arrow would double back. Missing or unknown type = FS; the same pair with different types draws both. 44 Gantt tests, mutation harness 62/62. Looked at in the real page with stubbed data. Dormant on the live page until `link_type` exists.
+
+**State at the end of the session:** master f91c553; 273 tests pass (`node --test scripts/tests/ui/*.test.mjs scripts/tests/schedule/*.test.mjs`); mutation harnesses: compute 67/67, codec 57/57, window 44/44, Gantt 62/62. No open PRs.
+
+**Not done (unchanged from S71):**
+- **Docker is still not installed.** Windows 11 Home steps given to the owner: check virtualization in Task Manager, `wsl --install` (admin PowerShell) and restart, install Docker Desktop (WSL 2 backend), then verify with `docker --version`, `docker run --rm hello-world` and `docker run --rm postgres:17-alpine postgres --version` (the runner `supabase/tests/d0c_common/run.sh` uses `postgres:17-alpine`). Open a NEW session afterwards so the app picks up the command, run `bash supabase/tests/phase_a_sql/run.sh` as a baseline (before 10, after 381, rollback 21), then write the A2 SQL.
+- Owner item 9 (try **Open schedule** on a real work order and the ProjectLibre interop) and the lawyer items.
+- Gantt nesting by `parent_task_id` (waits for the column).
+
+**Gotchas:**
+- The Gantt mutation harness (`scripts/tests/ui/schedule-gantt-mutate.mjs`) requires each pattern to occur exactly once in `index.html`; when you change the connector code, update the mutants that quote it (two had to be rewritten in S72).
+- A background `node` server started for a visual check reports "failed, exit 127" when it is killed afterwards; that is the expected result of stopping it (Stop-Process on the listening port).
+- An auto-fix monitor was switched on for PRs in the S72 session; no CI exists on this repo, so it has nothing to react to.
+
+**Next:** install Docker and start a new session; then the SQL half of A2a (see the Claude-side list); in parallel the owner checks above.
 
 ---
 
