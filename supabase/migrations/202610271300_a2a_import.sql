@@ -18,6 +18,13 @@
 -- Security model: SECURITY DEFINER, owner = the owner of lock_job_baseline (checked at the end of this file), fixed search_path, no dynamic SQL,
 -- authorisation inside (company membership + company-scoped atoms), baseline columns written only with app.baseline_rpc='on' around the
 -- single baseline UPDATE. The helpers below are SECURITY INVOKER and revoked from every API role.
+--
+-- Independent attack review fixes (see ATTACK_NOTES.md "Review findings"): H1 every stored-row predicate is scoped to the job's company and a
+-- schedule that already contains rows of another company is refused (SQLSTATE A2C01; the a2a_schema trigger stops new ones); M2 the cycle check
+-- looks only at the part of the graph reachable from edges that are new in the file; M3 uids are 1..100000000 and stored uids above that are
+-- ignored; L4 a merge that moves a published task to another phase unpublishes it; L5 replace locks the rows first, copies the full deleted rows
+-- (to_jsonb) into the audit metadata and audits a replaced locked baseline as 'baseline_reset'; L6 the name cleaner strips more invisible characters.
+-- Prod pre-check for H1 (read-only, expect 0 0 0) is in the a2a_schema migration header.
 
 -- ===== helpers (pure / invoker; called only from the definer function, which runs them as its owner) =====
 -- Strip control characters, line breaks become spaces, bidi/zero-width controls removed, runs of spaces collapsed, trimmed.
@@ -26,7 +33,7 @@ LANGUAGE sql IMMUTABLE SET search_path = public, pg_temp AS $$
   SELECT btrim(regexp_replace(
            regexp_replace(
              regexp_replace(p_s, '[\t\n\r\f\v]+', ' ', 'g'),
-             '[\u0001-\u001f\u007f-\u009f\u00ad\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]', '', 'g'),
+             '[\u0001-\u001f\u007f-\u009f\u00ad\u061c\u115f\u1160\u180e\u200b-\u200f\u2028-\u202e\u2060-\u206f\u3164\ufeff\uffa0\ufff9-\ufffb\U000e0000-\U000e007f]', '', 'g'),
            ' {2,}', ' ', 'g'))
 $$;
 
@@ -122,6 +129,7 @@ DECLARE
   k_max_tasks constant integer := 2000;   k_max_phases constant integer := 500;
   k_max_links constant integer := 5000;   k_max_job_tasks constant integer := 10000;
   k_max_depth constant integer := 6;      k_max_bytes constant integer := 6000000;
+  k_uid_cap constant integer := 100000000;   -- msp_uid CHECK range (a2a_schema, M3); the payload uid range is the same
   v_job_no text; v_company uuid; v_approver boolean; v_reason text; v_username text;
   v_file text; v_based timestamptz; v_puid text; v_pm text; v_temp boolean := false;
   v_phases jsonb; v_tasks jsonb; r record; lrec record; w text; lw text;
@@ -134,6 +142,8 @@ DECLARE
   v_created integer := 0; v_updated integer := 0; v_kept integer := 0; v_skipped integer := 0; n integer;
   v_has_bl boolean; v_locked boolean := false; v_bl_ok boolean := false; v_nb integer := 0;
   v_recovery jsonb := NULL; v_del_p integer := 0; v_del_t integer := 0; v_del_l integer := 0; v_links_written integer := 0;
+  v_rec_p jsonb; v_rec_t jsonb; v_rec_l jsonb; v_prior_bl boolean := false;
+  v_front uuid[]; v_done integer; v_nodes integer;
 BEGIN
   -- ---- 1. cheap argument checks and authorisation (nothing below runs for an unauthorised caller)
   IF p_mode IS NULL OR p_mode NOT IN ('append', 'merge', 'replace') THEN
@@ -205,6 +215,7 @@ BEGIN
   -- ---- 3. row validation into working tables (no write to a real table yet)
   DROP TABLE IF EXISTS pg_temp.imp_p;  DROP TABLE IF EXISTS pg_temp.imp_t;  DROP TABLE IF EXISTS pg_temp.imp_l;
   DROP TABLE IF EXISTS pg_temp.imp_e;  DROP TABLE IF EXISTS pg_temp.imp_n;
+  DROP TABLE IF EXISTS pg_temp.imp_a;  DROP TABLE IF EXISTS pg_temp.imp_r;  DROP TABLE IF EXISTS pg_temp.imp_g;  DROP TABLE IF EXISTS pg_temp.imp_d;
   CREATE TEMP TABLE imp_p (idx integer NOT NULL, uid integer NOT NULL, name text NOT NULL, sort_order integer,
     id uuid NOT NULL DEFAULT gen_random_uuid(), matched boolean NOT NULL DEFAULT false, changed boolean NOT NULL DEFAULT false, new_uid integer) ON COMMIT DROP;
   CREATE TEMP TABLE imp_t (idx integer NOT NULL, uid integer NOT NULL, name text NOT NULL, phase_uid integer, parent_uid integer,
@@ -303,9 +314,24 @@ BEGIN
 
   -- ---- 4. serialise on the job, then the checks that depend on the stored schedule
   PERFORM pg_advisory_xact_lock(hashtext(p_job_id::text));
-  SELECT max(u) INTO v_cur FROM (SELECT max(updated_at) AS u FROM job_tasks WHERE job_id = p_job_id
-                                 UNION ALL SELECT max(updated_at) FROM job_phases WHERE job_id = p_job_id
-                                 UNION ALL SELECT max(updated_at) FROM job_task_links WHERE job_id = p_job_id) s;
+  -- H1: rows of ANOTHER company that carry this job's id (the a2a_schema trigger now stops them being written; this guards a database that
+  -- already has some) would leak into this company's rows through merge and could block the job (uid 100000000, updated_at in the future).
+  -- Refuse instead of guessing; every stored-row predicate below is ALSO scoped to the job's company.
+  IF EXISTS (SELECT 1 FROM job_phases WHERE job_id = p_job_id AND company_id <> v_company)
+     OR EXISTS (SELECT 1 FROM job_tasks WHERE job_id = p_job_id AND company_id <> v_company)
+     OR EXISTS (SELECT 1 FROM job_task_links WHERE job_id = p_job_id AND company_id <> v_company) THEN
+    RAISE EXCEPTION 'schedule contains rows of another company' USING ERRCODE = 'A2C01';
+  END IF;
+  -- L5: replace takes row locks on the whole stored schedule BEFORE the stale check and before anything is copied or deleted, so a
+  -- concurrent UI edit either lands before the check (and makes it fail) or waits until this transaction ends. Fixed order: phases, tasks, links.
+  IF p_mode = 'replace' THEN
+    PERFORM p.id FROM job_phases p WHERE p.job_id = p_job_id AND p.company_id = v_company ORDER BY p.id FOR UPDATE OF p;
+    PERFORM t.id FROM job_tasks t WHERE t.job_id = p_job_id AND t.company_id = v_company ORDER BY t.id FOR UPDATE OF t;
+    PERFORM k.id FROM job_task_links k WHERE k.job_id = p_job_id AND k.company_id = v_company ORDER BY k.id FOR UPDATE OF k;
+  END IF;
+  SELECT max(u) INTO v_cur FROM (SELECT max(updated_at) AS u FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company
+                                 UNION ALL SELECT max(updated_at) FROM job_phases WHERE job_id = p_job_id AND company_id = v_company
+                                 UNION ALL SELECT max(updated_at) FROM job_task_links WHERE job_id = p_job_id AND company_id = v_company) s;
   IF v_cur IS NOT NULL AND v_based IS NULL THEN
     RAISE EXCEPTION 'invalid payload: based_on is required for a job that already has a schedule' USING ERRCODE = '22023';
   END IF;
@@ -313,27 +339,27 @@ BEGIN
     RAISE EXCEPTION 'schedule changed since preview' USING ERRCODE = '40001';
   END IF;
 
-  SELECT count(*) INTO v_ex_p FROM job_phases WHERE job_id = p_job_id;
-  SELECT count(*) INTO v_ex_t FROM job_tasks  WHERE job_id = p_job_id;
+  SELECT count(*) INTO v_ex_p FROM job_phases WHERE job_id = p_job_id AND company_id = v_company;
+  SELECT count(*) INTO v_ex_t FROM job_tasks  WHERE job_id = p_job_id AND company_id = v_company;
   IF p_mode <> 'replace' AND v_ex_t + (SELECT count(*) FROM pg_temp.imp_t) > k_max_job_tasks THEN
     RAISE EXCEPTION 'the schedule would exceed % tasks', k_max_job_tasks USING ERRCODE = '22023';
   END IF;
 
   -- merge: match on msp_uid only (the payload belongs to this job, checked above); a phase never matches a task row and vice versa
   IF p_mode = 'merge' THEN
-    UPDATE pg_temp.imp_p ip SET id = p.id, matched = true FROM job_phases p WHERE p.job_id = p_job_id AND p.msp_uid = ip.uid;
-    UPDATE pg_temp.imp_t it SET id = t.id, matched = true FROM job_tasks t WHERE t.job_id = p_job_id AND t.msp_uid = it.uid;
-    SELECT (SELECT count(*) FROM pg_temp.imp_p ip WHERE NOT ip.matched AND EXISTS (SELECT 1 FROM job_tasks t WHERE t.job_id = p_job_id AND t.msp_uid = ip.uid))
-         + (SELECT count(*) FROM pg_temp.imp_t it WHERE NOT it.matched AND EXISTS (SELECT 1 FROM job_phases p WHERE p.job_id = p_job_id AND p.msp_uid = it.uid))
+    UPDATE pg_temp.imp_p ip SET id = p.id, matched = true FROM job_phases p WHERE p.job_id = p_job_id AND p.company_id = v_company AND p.msp_uid = ip.uid;
+    UPDATE pg_temp.imp_t it SET id = t.id, matched = true FROM job_tasks t WHERE t.job_id = p_job_id AND t.company_id = v_company AND t.msp_uid = it.uid;
+    SELECT (SELECT count(*) FROM pg_temp.imp_p ip WHERE NOT ip.matched AND EXISTS (SELECT 1 FROM job_tasks t WHERE t.job_id = p_job_id AND t.company_id = v_company AND t.msp_uid = ip.uid))
+         + (SELECT count(*) FROM pg_temp.imp_t it WHERE NOT it.matched AND EXISTS (SELECT 1 FROM job_phases p WHERE p.job_id = p_job_id AND p.company_id = v_company AND p.msp_uid = it.uid))
       INTO n_kind;
   END IF;
   SELECT (SELECT count(*) FROM pg_temp.imp_p WHERE matched) + (SELECT count(*) FROM pg_temp.imp_t WHERE matched) INTO v_matched;
   UPDATE pg_temp.imp_t c SET parent_id = p.id FROM pg_temp.imp_t p WHERE p.uid = c.parent_uid;
   -- which matched rows really differ from what is stored (name, dates, progress, flags, assignee, phase, order or parent)
   UPDATE pg_temp.imp_p ip SET changed = true FROM job_phases p
-   WHERE ip.matched AND p.id = ip.id AND p.job_id = p_job_id AND (p.name, p.sort_order) IS DISTINCT FROM (ip.name, coalesce(ip.sort_order, p.sort_order));
+   WHERE ip.matched AND p.id = ip.id AND p.job_id = p_job_id AND p.company_id = v_company AND (p.name, p.sort_order) IS DISTINCT FROM (ip.name, coalesce(ip.sort_order, p.sort_order));
   UPDATE pg_temp.imp_t it SET changed = true FROM job_tasks t
-   WHERE it.matched AND t.id = it.id AND t.job_id = p_job_id
+   WHERE it.matched AND t.id = it.id AND t.job_id = p_job_id AND t.company_id = v_company
      AND (t.task_name, t.start_date, t.end_date, t.progress, t.is_milestone, t.assignee, t.phase_id, t.sort_order, t.parent_task_id)
          IS DISTINCT FROM (it.name,
                            CASE WHEN it.start_date IS NOT NULL AND it.end_date IS NOT NULL THEN it.start_date ELSE t.start_date END,
@@ -344,22 +370,57 @@ BEGIN
   SELECT (SELECT count(*) FROM pg_temp.imp_p WHERE changed) + (SELECT count(*) FROM pg_temp.imp_t WHERE changed) INTO v_updated;
 
   -- the whole final graph (stored rows that stay + payload rows) must be acyclic and at most 6 levels deep (the phase is level 1 even when absent, matching the job_tasks_parent_guard trigger: a task chain is at most 5), BEFORE any write
-  CREATE TEMP TABLE imp_e (t uuid NOT NULL, p uuid NOT NULL) ON COMMIT DROP;
+  CREATE TEMP TABLE imp_e (t uuid NOT NULL, p uuid NOT NULL) ON COMMIT DROP;       -- the payload's edges (task, predecessor)
   CREATE TEMP TABLE imp_n (id uuid NOT NULL, parent uuid, has_phase boolean NOT NULL) ON COMMIT DROP;
   IF p_mode <> 'replace' THEN
-    INSERT INTO pg_temp.imp_e SELECT lk.task_id, lk.predecessor_id FROM job_task_links lk WHERE lk.job_id = p_job_id;
     INSERT INTO pg_temp.imp_n SELECT t.id, t.parent_task_id, t.phase_id IS NOT NULL FROM job_tasks t
-      WHERE t.job_id = p_job_id AND NOT EXISTS (SELECT 1 FROM pg_temp.imp_t i WHERE i.id = t.id);
+      WHERE t.job_id = p_job_id AND t.company_id = v_company AND NOT EXISTS (SELECT 1 FROM pg_temp.imp_t i WHERE i.id = t.id);
   END IF;
   INSERT INTO pg_temp.imp_e SELECT a.id, b.id FROM pg_temp.imp_l l JOIN pg_temp.imp_t a ON a.uid = l.task_uid JOIN pg_temp.imp_t b ON b.uid = l.pred_uid;
   INSERT INTO pg_temp.imp_n SELECT i.id, i.parent_id, i.phase_uid IS NOT NULL FROM pg_temp.imp_t i;
-  CREATE INDEX ON pg_temp.imp_e (t);  CREATE INDEX ON pg_temp.imp_e (p);  CREATE INDEX ON pg_temp.imp_n (id);
-  LOOP                                     -- peel edges that leave a node with no predecessor; anything left over is a cycle
-    DELETE FROM pg_temp.imp_e e WHERE NOT EXISTS (SELECT 1 FROM pg_temp.imp_e x WHERE x.t = e.p);
-    GET DIAGNOSTICS n = ROW_COUNT;
-    EXIT WHEN n = 0;
-  END LOOP;
-  IF EXISTS (SELECT 1 FROM pg_temp.imp_e) THEN RAISE EXCEPTION 'dependency cycle in the imported schedule' USING ERRCODE = '23514'; END IF;
+  CREATE INDEX ON pg_temp.imp_e (t);  CREATE INDEX ON pg_temp.imp_n (id);
+  -- M2: the stored links were checked one by one by job_task_links_no_cycle, so a cycle must pass through an edge that is NEW in this
+  -- file. Nothing new (the usual merge of an own file, or a file without links) -> no scan at all. Otherwise only the part of the graph
+  -- reachable (through predecessors) from the new edges is looked at, and it is peeled from its sources with a worklist, so the cost
+  -- follows the size of that part, not of the whole stored schedule (a one-task append on a 10k-task chain used to cost 10 s).
+  -- append: the file's tasks are all new rows, so stored links cannot touch them; replace: the stored links are about to be deleted.
+  IF EXISTS (SELECT 1 FROM pg_temp.imp_e) THEN
+    CREATE TEMP TABLE imp_a (t uuid NOT NULL, p uuid NOT NULL) ON COMMIT DROP;     -- every edge that can matter
+    INSERT INTO pg_temp.imp_a SELECT e.t, e.p FROM pg_temp.imp_e e;
+    IF p_mode = 'merge' THEN
+      INSERT INTO pg_temp.imp_a SELECT k.task_id, k.predecessor_id FROM job_task_links k WHERE k.job_id = p_job_id AND k.company_id = v_company;
+    END IF;
+    CREATE INDEX ON pg_temp.imp_a (t);
+    CREATE TEMP TABLE imp_r (id uuid PRIMARY KEY) ON COMMIT DROP;                   -- nodes reachable from a new edge's predecessor
+    INSERT INTO pg_temp.imp_r
+      WITH RECURSIVE rch(id) AS (
+        SELECT e.p FROM pg_temp.imp_e e
+         WHERE p_mode <> 'merge' OR NOT EXISTS (SELECT 1 FROM job_task_links k WHERE k.task_id = e.t AND k.predecessor_id = e.p AND k.job_id = p_job_id AND k.company_id = v_company)
+        UNION
+        SELECT a.p FROM rch JOIN pg_temp.imp_a a ON a.t = rch.id)
+      SELECT id FROM rch;
+    -- a cycle needs a new edge (t, p) whose t is reachable from some new predecessor: if none is, the file closes no cycle and the peel is skipped
+    IF EXISTS (SELECT 1 FROM pg_temp.imp_e e JOIN pg_temp.imp_r x ON x.id = e.t) THEN
+      CREATE TEMP TABLE imp_g (t uuid NOT NULL, p uuid NOT NULL) ON COMMIT DROP;   -- the edges of that part
+      INSERT INTO pg_temp.imp_g SELECT a.t, a.p FROM pg_temp.imp_a a WHERE a.t IN (SELECT id FROM pg_temp.imp_r);
+      CREATE INDEX ON pg_temp.imp_g (p);
+      CREATE TEMP TABLE imp_d (id uuid PRIMARY KEY, deg integer NOT NULL) ON COMMIT DROP;   -- predecessors still unplaced, per node
+      INSERT INTO pg_temp.imp_d SELECT x.id, 0 FROM pg_temp.imp_r x;
+      UPDATE pg_temp.imp_d d SET deg = c.n FROM (SELECT g.t, count(*)::integer AS n FROM pg_temp.imp_g g GROUP BY g.t) c WHERE c.t = d.id;
+      SELECT count(*) INTO v_nodes FROM pg_temp.imp_d;
+      v_front := ARRAY(SELECT d.id FROM pg_temp.imp_d d WHERE d.deg = 0);
+      v_done := 0;
+      WHILE coalesce(array_length(v_front, 1), 0) > 0 LOOP                    -- place the sources, then whatever only waited for them
+        v_done := v_done + array_length(v_front, 1);
+        WITH dec AS (
+          UPDATE pg_temp.imp_d d SET deg = d.deg - c.n
+            FROM (SELECT g.t, count(*)::integer AS n FROM pg_temp.imp_g g WHERE g.p = ANY (v_front) GROUP BY g.t) c
+           WHERE d.id = c.t RETURNING d.id, d.deg)
+        SELECT coalesce(array_agg(dec.id) FILTER (WHERE dec.deg = 0), ARRAY[]::uuid[]) INTO v_front FROM dec;
+      END LOOP;
+      IF v_done < v_nodes THEN RAISE EXCEPTION 'dependency cycle in the imported schedule' USING ERRCODE = '23514'; END IF;
+    END IF;
+  END IF;
   IF EXISTS (
     WITH RECURSIVE up(id, cur, d) AS (
       SELECT x.id, x.parent, 1 FROM pg_temp.imp_n x
@@ -379,19 +440,20 @@ BEGIN
   END IF;
 
   -- ---- 5. uid assignment from the shared counter (phases and tasks of the job share one space; never 0, never reused)
-  SELECT coalesce(max(m), 0) INTO v_base FROM (SELECT max(msp_uid) AS m FROM job_phases WHERE job_id = p_job_id
-                                              UNION ALL SELECT max(msp_uid) FROM job_tasks WHERE job_id = p_job_id) s;
+  -- stored uids above the cap (impossible through the CHECK, possible only in a database that predates it) are ignored, so the
+  -- counter can never overflow integer; the new uids always stay inside 1..k_uid_cap
+  SELECT coalesce(max(m), 0) INTO v_base FROM (SELECT max(msp_uid) AS m FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap
+                                              UNION ALL SELECT max(msp_uid) FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap) s;
   SELECT count(*) INTO v_new_p FROM pg_temp.imp_p WHERE NOT matched;
   SELECT count(*) INTO v_new_t FROM pg_temp.imp_t WHERE NOT matched;
-  IF v_base::bigint + v_new_p + v_new_t > 2000000000 THEN RAISE EXCEPTION 'uid space exhausted' USING ERRCODE = '22023'; END IF;
+  IF v_base::bigint + v_new_p + v_new_t > k_uid_cap THEN RAISE EXCEPTION 'uid space exhausted' USING ERRCODE = '22023'; END IF;
   UPDATE pg_temp.imp_p ip SET new_uid = v_base + s.rn FROM (SELECT uid, row_number() OVER (ORDER BY idx) AS rn FROM pg_temp.imp_p WHERE NOT matched) s WHERE s.uid = ip.uid;
   UPDATE pg_temp.imp_t it SET new_uid = v_base + v_new_p + s.rn FROM (SELECT uid, row_number() OVER (ORDER BY idx) AS rn FROM pg_temp.imp_t WHERE NOT matched) s WHERE s.uid = it.uid;
 
   -- ---- 6. baseline decision (Baseline on import): approver, >= 1 complete baseline, and no baseline locked yet unless replacing
   SELECT EXISTS (SELECT 1 FROM pg_temp.imp_t WHERE bstart IS NOT NULL AND bend IS NOT NULL) INTO v_has_bl;
-  IF p_mode <> 'replace' THEN
-    SELECT EXISTS (SELECT 1 FROM job_tasks WHERE job_id = p_job_id AND baseline_locked_at IS NOT NULL) INTO v_locked;
-  END IF;
+  SELECT EXISTS (SELECT 1 FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND baseline_locked_at IS NOT NULL) INTO v_prior_bl;
+  IF p_mode <> 'replace' THEN v_locked := v_prior_bl; END IF;
   v_bl_ok := v_approver AND v_has_bl AND NOT v_locked;
   IF v_has_bl AND NOT v_bl_ok THEN
     SELECT count(*) INTO n_bl_ignored FROM pg_temp.imp_t WHERE bstart IS NOT NULL AND bend IS NOT NULL;
@@ -399,14 +461,18 @@ BEGIN
 
   -- ---- 7. writes (everything above this line has changed nothing)
   IF p_mode = 'replace' THEN
+    -- L5: the recovery copy is the full row (to_jsonb) of exactly the rows this DELETE removes (DELETE ... RETURNING), so nothing can
+    -- slip in between copy and delete, and every column (dates, baseline, flags, weight, hierarchy, uids) can be restored from it.
+    -- Bounded by the 10000-task cap. The rows were locked in section 4.
+    WITH d AS (DELETE FROM job_task_links WHERE job_id = p_job_id AND company_id = v_company RETURNING to_jsonb(job_task_links.*) AS j)
+      SELECT coalesce(jsonb_agg(d.j ORDER BY d.j ->> 'created_at', d.j ->> 'id'), '[]'::jsonb), count(*)::integer INTO v_rec_l, v_del_l FROM d;
+    WITH d AS (DELETE FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company RETURNING to_jsonb(job_tasks.*) AS j)
+      SELECT coalesce(jsonb_agg(d.j ORDER BY (d.j ->> 'sort_order')::integer, d.j ->> 'id'), '[]'::jsonb), count(*)::integer INTO v_rec_t, v_del_t FROM d;
+    WITH d AS (DELETE FROM job_phases WHERE job_id = p_job_id AND company_id = v_company RETURNING to_jsonb(job_phases.*) AS j)
+      SELECT coalesce(jsonb_agg(d.j ORDER BY (d.j ->> 'sort_order')::integer, d.j ->> 'id'), '[]'::jsonb), count(*)::integer INTO v_rec_p, v_del_p FROM d;
     v_recovery := jsonb_build_object(
-      'note', 'compact copy taken before replace: phases [id,name,msp_uid,client_visible]; tasks [id,name,phase_id,parent_id,msp_uid,client_visible]; links [task_id,predecessor_id,type,lag]',
-      'phases', (SELECT coalesce(jsonb_agg(jsonb_build_array(p.id, p.name, p.msp_uid, p.client_visible) ORDER BY p.sort_order, p.id), '[]'::jsonb) FROM job_phases p WHERE p.job_id = p_job_id),
-      'tasks',  (SELECT coalesce(jsonb_agg(jsonb_build_array(t.id, t.task_name, t.phase_id, t.parent_task_id, t.msp_uid, t.client_visible) ORDER BY t.sort_order, t.id), '[]'::jsonb) FROM job_tasks t WHERE t.job_id = p_job_id),
-      'links',  (SELECT coalesce(jsonb_agg(jsonb_build_array(k.task_id, k.predecessor_id, k.link_type, k.lag_days) ORDER BY k.created_at, k.id), '[]'::jsonb) FROM job_task_links k WHERE k.job_id = p_job_id));
-    DELETE FROM job_task_links WHERE job_id = p_job_id;  GET DIAGNOSTICS v_del_l = ROW_COUNT;
-    DELETE FROM job_tasks      WHERE job_id = p_job_id;  GET DIAGNOSTICS v_del_t = ROW_COUNT;
-    DELETE FROM job_phases     WHERE job_id = p_job_id;  GET DIAGNOSTICS v_del_p = ROW_COUNT;
+      'note', 'full rows (to_jsonb) of what replace deleted: phases, tasks, links (task_id, predecessor_id, link_type, lag_days); written by the RPC itself',
+      'phases', v_rec_p, 'tasks', v_rec_t, 'links', v_rec_l);
   END IF;
 
   INSERT INTO job_phases (id, company_id, job_id, sort_order, name, msp_uid, client_visible)
@@ -414,7 +480,7 @@ BEGIN
       FROM pg_temp.imp_p ip WHERE NOT ip.matched ORDER BY ip.idx;
   GET DIAGNOSTICS n = ROW_COUNT;  v_created := v_created + n;
   UPDATE job_phases p SET name = ip.name, sort_order = coalesce(ip.sort_order, p.sort_order)
-    FROM pg_temp.imp_p ip WHERE ip.matched AND ip.changed AND p.id = ip.id AND p.job_id = p_job_id;
+    FROM pg_temp.imp_p ip WHERE ip.matched AND ip.changed AND p.id = ip.id AND p.job_id = p_job_id AND p.company_id = v_company;
 
   INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, start_date, end_date, progress, assignee, phase_id, is_milestone, is_critical, client_visible, msp_uid)
     SELECT it.id, v_company, p_job_id, coalesce(it.sort_order, it.idx * 10), it.name, it.start_date, it.end_date, coalesce(it.progress, 0), it.assignee,
@@ -428,14 +494,17 @@ BEGIN
       end_date   = CASE WHEN it.start_date IS NOT NULL AND it.end_date IS NOT NULL THEN it.end_date   ELSE t.end_date   END,
       progress = coalesce(it.progress, t.progress), is_milestone = coalesce(it.is_milestone, t.is_milestone),
       assignee = CASE WHEN it.has_assignee THEN it.assignee ELSE t.assignee END,
-      phase_id = ph.id, sort_order = coalesce(it.sort_order, t.sort_order), is_critical = false
+      phase_id = ph.id, sort_order = coalesce(it.sort_order, t.sort_order), is_critical = false,
+      -- L4: a published task that moves to another phase (or out of its phase) must not become visible through the new phase's flag:
+      -- it is unpublished in the same UPDATE, and job_visibility_guard writes the audit row; the editor re-publishes with the atom.
+      client_visible = CASE WHEN t.phase_id IS DISTINCT FROM ph.id THEN false ELSE t.client_visible END
     FROM pg_temp.imp_t it LEFT JOIN pg_temp.imp_p ph ON ph.uid = it.phase_uid
-   WHERE it.matched AND it.changed AND t.id = it.id AND t.job_id = p_job_id;
+   WHERE it.matched AND it.changed AND t.id = it.id AND t.job_id = p_job_id AND t.company_id = v_company;
   -- hierarchy: detach first (so a swap never passes through a cycle), then attach
   UPDATE job_tasks t SET parent_task_id = NULL FROM pg_temp.imp_t it
-   WHERE it.id = t.id AND t.job_id = p_job_id AND t.parent_task_id IS NOT NULL AND t.parent_task_id IS DISTINCT FROM it.parent_id;
+   WHERE it.id = t.id AND t.job_id = p_job_id AND t.company_id = v_company AND t.parent_task_id IS NOT NULL AND t.parent_task_id IS DISTINCT FROM it.parent_id;
   UPDATE job_tasks t SET parent_task_id = it.parent_id FROM pg_temp.imp_t it
-   WHERE it.id = t.id AND t.job_id = p_job_id AND it.parent_id IS NOT NULL AND t.parent_task_id IS DISTINCT FROM it.parent_id;
+   WHERE it.id = t.id AND t.job_id = p_job_id AND t.company_id = v_company AND it.parent_id IS NOT NULL AND t.parent_task_id IS DISTINCT FROM it.parent_id;
 
   -- links: new pairs inserted, an existing pair takes the file's type and lag (merge never deletes a link)
   INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, link_type, lag_days)
@@ -449,13 +518,13 @@ BEGIN
     FROM (SELECT DISTINCT ON (l.task_uid) l.task_uid, CASE WHEN l.link_type = 'FS' THEN b.id END AS pred_id
             FROM pg_temp.imp_l l JOIN pg_temp.imp_t b ON b.uid = l.pred_uid ORDER BY l.task_uid, l.ord) f
          JOIN pg_temp.imp_t a ON a.uid = f.task_uid
-   WHERE t.id = a.id AND t.depends_on IS DISTINCT FROM f.pred_id;
+   WHERE t.id = a.id AND t.job_id = p_job_id AND t.company_id = v_company AND t.depends_on IS DISTINCT FROM f.pred_id;
 
   -- baseline: the only place the baseline columns are written, and only with the setting on for exactly this statement
   IF v_bl_ok THEN
     PERFORM set_config('app.baseline_rpc', 'on', true);
     UPDATE job_tasks t SET baseline_start = it.bstart, baseline_end = it.bend, baseline_locked_at = now()
-      FROM pg_temp.imp_t it WHERE t.id = it.id AND t.job_id = p_job_id AND it.bstart IS NOT NULL AND it.bend IS NOT NULL;
+      FROM pg_temp.imp_t it WHERE t.id = it.id AND t.job_id = p_job_id AND t.company_id = v_company AND it.bstart IS NOT NULL AND it.bend IS NOT NULL;
     GET DIAGNOSTICS v_nb = ROW_COUNT;
     PERFORM set_config('app.baseline_rpc', 'off', true);
   END IF;
@@ -478,9 +547,13 @@ BEGIN
                              'warnings', v_warn, 'reason', nullif(v_reason, ''), 'links_written', v_links_written, 'baseline_tasks', v_nb,
                              'deleted', CASE WHEN p_mode = 'replace' THEN jsonb_build_object('phases', v_del_p, 'tasks', v_del_t, 'links', v_del_l) END,
                              'recovery', v_recovery));
-  IF v_nb > 0 THEN
+  -- L5: replace that deletes a LOCKED baseline is a re-baseline whatever the new file carries: 'baseline_reset', the action name
+  -- lock_job_baseline() (Phase A) uses for every lock after the first; a first lock stays 'baseline_locked'.
+  IF v_nb > 0 OR (p_mode = 'replace' AND v_prior_bl) THEN
     INSERT INTO job_audit_log (job_id, job_no, user_id, username, action_type, description, metadata)
-    VALUES (p_job_id, v_job_no, auth.uid(), v_username, 'baseline_locked', 'Schedule baseline locked by import',
+    VALUES (p_job_id, v_job_no, auth.uid(), v_username,
+            CASE WHEN p_mode = 'replace' AND v_prior_bl THEN 'baseline_reset' ELSE 'baseline_locked' END,
+            CASE WHEN p_mode = 'replace' AND v_prior_bl THEN 'Schedule re-baselined by import (replace): ' || v_reason ELSE 'Schedule baseline locked by import' END,
             jsonb_build_object('tasks', v_nb, 'source', 'import', 'mode', p_mode, 'file_name', v_file, 'reason', nullif(v_reason, '')));
   END IF;
 

@@ -230,17 +230,18 @@ BEGIN
   PERFORM t_expect('replace: imported rows are unpublished', (SELECT count(*)::text FROM job_tasks WHERE job_id = jb AND client_visible), '0');
   PERFORM t_expect('replace: recovery metadata holds the old ids and names',
     (SELECT jsonb_array_length(metadata -> 'recovery' -> 'phases') || '/' || jsonb_array_length(metadata -> 'recovery' -> 'tasks') || '/' || jsonb_array_length(metadata -> 'recovery' -> 'links')
-            || '|' || (metadata -> 'recovery' -> 'phases' -> 0 ->> 1) || '|' || (SELECT string_agg(x ->> 1, ',' ORDER BY x ->> 1) FROM jsonb_array_elements(metadata -> 'recovery' -> 'tasks') x)
+            || '|' || (metadata -> 'recovery' -> 'phases' -> 0 ->> 'name') || '|' || (SELECT string_agg(x ->> 'task_name', ',' ORDER BY x ->> 'task_name') FROM jsonb_array_elements(metadata -> 'recovery' -> 'tasks') x)
        FROM job_audit_log WHERE job_id = jb AND action_type = 'schedule_imported' AND metadata ->> 'mode' = 'replace'), '1/3/2|Old phase|Old A,Old B,Old C');
   PERFORM t_expect('replace: recovery ids are the real old row ids and keep the published flag',
-    (SELECT (jsonb_typeof(x -> 0) = 'string' AND (x -> 5)::text = 'true')::text FROM (SELECT t.x FROM job_audit_log a, jsonb_array_elements(a.metadata -> 'recovery' -> 'tasks') t(x) WHERE a.job_id = jb AND a.action_type = 'schedule_imported' AND a.metadata ->> 'mode' = 'replace' AND t.x ->> 1 = 'Old B') s), 'true');
+    (SELECT (jsonb_typeof(x -> 'id') = 'string' AND (x -> 'client_visible')::text = 'true')::text FROM (SELECT t.x FROM job_audit_log a, jsonb_array_elements(a.metadata -> 'recovery' -> 'tasks') t(x) WHERE a.job_id = jb AND a.action_type = 'schedule_imported' AND a.metadata ->> 'mode' = 'replace' AND t.x ->> 'task_name' = 'Old B') s), 'true');
   PERFORM t_expect('replace: audit says what was deleted, the reason and the file',
     (SELECT (metadata -> 'deleted' ->> 'phases') || (metadata -> 'deleted' ->> 'tasks') || (metadata -> 'deleted' ->> 'links') || '|' || (metadata ->> 'reason') || '|' || (metadata ->> 'file_name')
        FROM job_audit_log WHERE job_id = jb AND action_type = 'schedule_imported' AND metadata ->> 'mode' = 'replace'), '132|client sent a new programme|test.xml');
   PERFORM t_expect('replace: an append audit row has no recovery and no deleted counts',
     (SELECT (metadata -> 'recovery' = 'null'::jsonb)::text || (metadata -> 'deleted' = 'null'::jsonb)::text FROM job_audit_log WHERE job_id = jb AND action_type = 'schedule_imported' AND metadata ->> 'mode' = 'append'), 'truetrue');
   PERFORM t_expect('replace: a baseline in the file is written in replace mode (approver)', (SELECT baseline_start::text FROM job_tasks WHERE job_id = jb AND task_name = 'New A'), '2026-06-01');
-  PERFORM t_expect('replace: two baseline_locked rows now (first import, replace)', (SELECT count(*)::text FROM job_audit_log WHERE job_id = jb AND action_type = 'baseline_locked'), '2');
+  PERFORM t_expect('replace: first import locked the baseline, the replace over a locked baseline is a baseline_reset (Phase A name for a re-baseline)',
+    (SELECT count(*)::text FROM job_audit_log WHERE job_id = jb AND action_type = 'baseline_locked') || '/' || (SELECT count(*)::text FROM job_audit_log WHERE job_id = jb AND action_type = 'baseline_reset'), '1/1');
 END $$;
 
 -- ===== 5. baseline rules =====
@@ -701,6 +702,250 @@ BEGIN
   INSERT INTO erp_user_company_roles (user_id, company_id, role_id) VALUES ('e0000000-0000-0000-0000-000000000030', 'c1000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000030');
   PERFORM t_expect('atoms: write=false is not write', t_imp('authenticated', '30303030-3030-3030-3030-303030303030', jr, 'append', t_pl('[]', jsonb_build_array(t_tk(1, 'x')))),
     'permission denied: ops:work-orders:write required');
+END $$;
+
+
+-- ===== 16. independent review: H1 (foreign-company rows), M2 (cycle check cost), L4, L5, L6 =====
+-- H1: rows of ANOTHER company that carry this job's id. The a2a_schema trigger stops the API from writing them; they are planted here as the
+-- table owner with triggers off (session_replication_role = replica), which is how a database that predates the trigger could look.
+DO $$
+DECLARE
+  c1 constant uuid := 'c1000000-0000-0000-0000-000000000001'; c2 constant uuid := 'c2000000-0000-0000-0000-000000000002';
+  j uuid := t_job(150); jt uuid := t_job(151); jl uuid := t_job(152); res text; p jsonb; own jsonb;
+BEGIN
+  p := t_pl(jsonb_build_array(t_ph(1, 'P')), jsonb_build_array(t_tk(2, 'A', 1)), j);
+  PERFORM t_expect('h1: API path: a C2 writer cannot plant a task row with the C1 job id',
+    t_dml_api('authenticated', t_u('ops2'), format('INSERT INTO job_tasks (company_id, job_id, task_name, msp_uid) VALUES (%L, %L, ''planted'', 100000000)', c2, j)), 'err:A2C01');
+  PERFORM t_expect('h1: API path: nor a phase row', t_dml_api('authenticated', t_u('ops2'), format('INSERT INTO job_phases (company_id, job_id, name) VALUES (%L, %L, ''planted'')', c2, j)), 'err:A2C01');
+
+  -- a foreign phase with the largest valid uid and an updated_at in 2099
+  SET LOCAL session_replication_role = replica;
+  INSERT INTO job_phases (id, company_id, job_id, name, msp_uid, updated_at) VALUES ('f9000000-0000-0000-0000-000000000001', c2, j, 'planted', 100000000, '2099-01-01');
+  SET LOCAL session_replication_role = origin;
+  PERFORM t_expect('h1: foreign phase: append is refused with a clear error',
+    t_imp('authenticated', t_u('ops'), j, 'append', p || jsonb_build_object('based_on', '2099-01-01T00:00:00Z')), 'schedule contains rows of another company');
+  PERFORM t_expect('h1: foreign phase: append without based_on is refused the same way', t_imp('authenticated', t_u('ops'), j, 'append', p - 'based_on'), 'schedule contains rows of another company');
+  PERFORM t_expect('h1: foreign phase: replace is refused too (nothing is deleted)',
+    t_imp('authenticated', t_u('ops'), j, 'replace', p, 'reason') || '|' || t_state(j), 'schedule contains rows of another company|1/0/0');
+  own := jsonb_build_object('project_uid', j::text, 'based_on', t_based(j), 'phases', '[]'::jsonb, 'tasks', jsonb_build_array(t_tk(5, 'x')));
+  PERFORM t_expect('h1: foreign phase: merge is refused too', t_imp('authenticated', t_u('ops'), j, 'merge', own), 'schedule contains rows of another company');
+  PERFORM t_expect('h1: foreign phase: SQLSTATE is A2C01 (same class as the schema trigger)',
+    t_val('authenticated', t_u('ops'), format('SELECT import_job_schedule(%L, ''append'', %L::jsonb)::text', j, p::text)), 'err:A2C01');
+  PERFORM t_expect('h1: the refusals wrote no audit row and no rows', (SELECT count(*)::text FROM job_audit_log WHERE job_id = j) || '|' || t_state(j), '0|1/0/0');
+  PERFORM t_expect('h1: the owner can clean the planted row, then the import works and the planted uid and date no longer matter',
+    (SELECT count(*)::text FROM (SELECT 1 FROM job_phases WHERE id = 'f9000000-0000-0000-0000-000000000001') s), '1');
+  DELETE FROM job_phases WHERE id = 'f9000000-0000-0000-0000-000000000001';
+  PERFORM t_expect('h1: after cleaning, append succeeds', left(t_imp('authenticated', t_u('ops'), j, 'append', t_pl(jsonb_build_array(t_ph(1, 'P')), jsonb_build_array(t_tk(2, 'A', 1)), j)), 3), 'ok:');
+
+  -- a foreign task row
+  SET LOCAL session_replication_role = replica;
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f9000000-0000-0000-0000-000000000002', c2, jt, 1, 'planted task', 2);
+  SET LOCAL session_replication_role = origin;
+  PERFORM t_expect('h1: foreign task: append refused', t_imp('authenticated', t_u('ops'), jt, 'append', t_pl(jsonb_build_array(t_ph(1, 'P')), '[]', jt)), 'schedule contains rows of another company');
+  PERFORM t_expect('h1: foreign task: replace refused (reason given)', t_imp('authenticated', t_u('ops'), jt, 'replace', t_pl(jsonb_build_array(t_ph(1, 'P')), '[]', jt), 'why'), 'schedule contains rows of another company');
+
+  -- a foreign link row between two legitimate tasks of the job
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES
+    ('f9000000-0000-0000-0000-000000000003', c1, jl, 1, 'own 1'), ('f9000000-0000-0000-0000-000000000004', c1, jl, 2, 'own 2');
+  SET LOCAL session_replication_role = replica;
+  INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id) VALUES (c2, jl, 'f9000000-0000-0000-0000-000000000004', 'f9000000-0000-0000-0000-000000000003');
+  SET LOCAL session_replication_role = origin;
+  PERFORM t_expect('h1: foreign link: append refused', t_imp('authenticated', t_u('ops'), jl, 'append', t_pl(jsonb_build_array(t_ph(1, 'P')), '[]', jl)), 'schedule contains rows of another company');
+  PERFORM t_expect('h1: foreign link: replace refused and nothing deleted',
+    t_imp('authenticated', t_u('ops'), jl, 'replace', t_pl(jsonb_build_array(t_ph(1, 'P')), '[]', jl), 'why') || '|' || t_state(jl), 'schedule contains rows of another company|0/2/1');
+  -- a legit job of the OTHER company is not affected by rows planted with a C1 job id
+  PERFORM t_expect('h1: other jobs of the same company are not affected', left(t_imp('authenticated', t_u('ops'), t_job(153), 'append', t_pl(jsonb_build_array(t_ph(1, 'P')), '[]')), 3), 'ok:');
+END $$;
+
+-- M2: the cycle check must not re-scan every stored link. A 9000-task stored chain (made as the owner, triggers off, for speed).
+DO $$
+DECLARE
+  c1 constant uuid := 'c1000000-0000-0000-0000-000000000001';
+  j uuid := t_job(155); jm uuid := t_job(156); res text; t0 timestamptz; dt interval; own jsonb;
+BEGIN
+  SET LOCAL session_replication_role = replica;
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, start_date, end_date, msp_uid)
+    SELECT ('f8000000-0000-0000-0000-' || lpad(g::text, 12, '0'))::uuid, c1, j, g, 't' || g, DATE '2026-05-01', DATE '2026-05-05', g FROM generate_series(1, 9000) g;
+  INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id)
+    SELECT c1, j, ('f8000000-0000-0000-0000-' || lpad(g::text, 12, '0'))::uuid, ('f8000000-0000-0000-0000-' || lpad((g - 1)::text, 12, '0'))::uuid FROM generate_series(2, 9000) g;
+  SET LOCAL session_replication_role = origin;
+  PERFORM t_expect('m2: fixture: a stored chain of 9000 tasks and 8999 links', t_state(j), '0/9000/8999');
+  t0 := clock_timestamp();
+  res := t_imp('authenticated', t_u('ops'), j, 'append', t_pl('[]', jsonb_build_array(t_tk(99000, 'one more')), j));
+  dt := clock_timestamp() - t0;
+  RAISE NOTICE 'm2: a one-task append on a 9000-task chain took %', dt;
+  PERFORM t_expect('m2: a one-task append on a stored 9000-task chain succeeds', left(res, 3) || '|' || t_state(j), 'ok:|0/9001/8999');
+  PERFORM t_expect('m2: ... and finishes in under 2 seconds (it used to re-scan every stored link)', (dt < interval '2 seconds')::text, 'true');
+
+  -- merge on a stored chain: the cost follows the part of the graph reachable from a NEW edge (about 0.3 ms per level), so these use a 3000 chain
+  SET LOCAL session_replication_role = replica;
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, start_date, end_date, msp_uid)
+    SELECT ('f8100000-0000-0000-0000-' || lpad(g::text, 12, '0'))::uuid, c1, jm, g, 't' || g, DATE '2026-05-01', DATE '2026-05-05', g FROM generate_series(1, 3000) g;
+  INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id)
+    SELECT c1, jm, ('f8100000-0000-0000-0000-' || lpad(g::text, 12, '0'))::uuid, ('f8100000-0000-0000-0000-' || lpad((g - 1)::text, 12, '0'))::uuid FROM generate_series(2, 3000) g;
+  SET LOCAL session_replication_role = origin;
+
+  -- a payload edge that closes a cycle THROUGH stored links is still rejected before any write
+  own := jsonb_build_object('project_uid', jm::text, 'based_on', t_based(jm), 'phases', '[]'::jsonb,
+    'tasks', jsonb_build_array(t_tk(1, 'renamed 1', NULL, NULL, '2026-05-01', '2026-05-05', jsonb_build_array(t_lk(3000))), t_tk(3000, 't3000')));
+  t0 := clock_timestamp();
+  res := t_imp('authenticated', t_u('ops'), jm, 'merge', own);
+  dt := clock_timestamp() - t0;
+  RAISE NOTICE 'm2: cycle rejection through a 3000 chain took %', dt;
+  PERFORM t_expect('m2: a merge whose new link closes a cycle through the stored chain is rejected', res, 'dependency cycle in the imported schedule');
+  PERFORM t_expect('m2: ... before any write (name, links, audit unchanged)',
+    (SELECT task_name FROM job_tasks WHERE job_id = jm AND msp_uid = 1) || '|' || (SELECT count(*)::text FROM job_task_links WHERE job_id = jm) || '|'
+    || (SELECT count(*)::text FROM job_audit_log WHERE job_id = jm), 't1|2999|0');
+  PERFORM t_expect('m2: ... in reasonable time (< 4 s)', (dt < interval '4 seconds')::text, 'true');
+  -- a short back edge: 10 depends on 2990, while the stored chain says 2990 depends (through 2980 others) on 10
+  own := jsonb_build_object('project_uid', jm::text, 'based_on', t_based(jm), 'phases', '[]'::jsonb,
+    'tasks', jsonb_build_array(t_tk(10, 't10', NULL, NULL, '2026-05-01', '2026-05-05', jsonb_build_array(t_lk(2990))), t_tk(2990, 't2990')));
+  PERFORM t_expect('m2: a back edge over a long stored path is rejected too',
+    t_imp('authenticated', t_u('ops'), jm, 'merge', own), 'dependency cycle in the imported schedule');
+  -- the same pair in the harmless direction (2990 depends on 10 is already stored) is not new: accepted, nothing to scan
+  own := jsonb_build_object('project_uid', jm::text, 'based_on', t_based(jm), 'phases', '[]'::jsonb,
+    'tasks', jsonb_build_array(t_tk(2990, 't2990', NULL, NULL, '2026-05-01', '2026-05-05', jsonb_build_array(t_lk(2989))) - 'sort_order', t_tk(2989, 't2989') - 'sort_order'));
+  res := t_imp('authenticated', t_u('ops'), jm, 'merge', own);
+  PERFORM t_expect('m2: re-stating an existing stored link is not a new edge: accepted, only names/dates compared', left(res, 3) || '|' || (SELECT count(*)::text FROM job_task_links WHERE job_id = jm), 'ok:|2999');
+  -- an acyclic new link onto the tail of the chain is accepted (a wide reach, no cycle) in reasonable time
+  own := jsonb_build_object('project_uid', jm::text, 'based_on', t_based(jm), 'phases', '[]'::jsonb,
+    'tasks', jsonb_build_array(t_tk(99000, 'tail', NULL, NULL, '2026-05-01', '2026-05-05', jsonb_build_array(t_lk(3000))), t_tk(3000, 't3000')));
+  t0 := clock_timestamp();
+  res := t_imp('authenticated', t_u('ops'), jm, 'merge', own);
+  dt := clock_timestamp() - t0;
+  RAISE NOTICE 'm2: acyclic merge link onto the tail of a 3000 chain took %', dt;
+  PERFORM t_expect('m2: an acyclic new link onto the end of the stored chain is accepted', left(res, 3) || '|' || (SELECT count(*)::text FROM job_task_links WHERE job_id = jm), 'ok:|3000');
+  PERFORM t_expect('m2: ... in reasonable time (< 6 s)', (dt < interval '6 seconds')::text, 'true');
+  -- merging the own file again (the new task now has the uid the counter gave it; no sort_order, so stored orders are kept): every link is already stored, nothing is new
+  own := jsonb_build_object('project_uid', jm::text, 'based_on', t_based(jm), 'phases', '[]'::jsonb,
+    'tasks', jsonb_build_array(t_tk(3001, 'tail', NULL, NULL, '2026-05-01', '2026-05-05', jsonb_build_array(t_lk(3000))) - 'sort_order', t_tk(3000, 't3000') - 'sort_order'));
+  res := t_imp('authenticated', t_u('ops'), jm, 'merge', own);
+  PERFORM t_expect('m2: an own file whose links are all already stored scans nothing and changes nothing', t_res(res, 'created') || '/' || t_res(res, 'updated'), '0/0');
+END $$;
+
+-- L4: a merge that moves a published task to another phase (or out of its phase) unpublishes it, with an audit row
+DO $$
+DECLARE
+  j uuid := t_job(160); res text; own jsonb; pb uuid;
+BEGIN
+  res := t_imp('authenticated', t_u('ops'), j, 'append', t_pl(jsonb_build_array(t_ph(1, 'P1'), t_ph(2, 'P2')),
+    jsonb_build_array(t_tk(3, 'A', 1), t_tk(4, 'B', 1), t_tk(5, 'C', 1), t_tk(6, 'D', 2)), j));
+  PERFORM t_expect('l4: setup', t_res(res, 'created'), '6');
+  PERFORM t_expect('l4: setup uids: phases 1,2 tasks 3..6', (SELECT string_agg(msp_uid::text, ',' ORDER BY msp_uid) FROM job_tasks WHERE job_id = j), '3,4,5,6');
+  -- publish P1 and tasks A, B, C, D (as the owner: the publish exemption of the visibility guard); P2 stays unpublished
+  UPDATE job_phases SET client_visible = true WHERE job_id = j AND name = 'P1';
+  UPDATE job_tasks SET client_visible = true WHERE job_id = j;
+  PERFORM t_expect('l4: setup: 4 published tasks, P1 published, P2 not',
+    (SELECT count(*)::text FROM job_tasks WHERE job_id = j AND client_visible) || (SELECT string_agg(client_visible::text, ',' ORDER BY name) FROM job_phases WHERE job_id = j), '4true,false');
+  PERFORM t_expect('l4: setup: D is published inside the UNpublished phase P2 (not client visible yet)',
+    (SELECT job_task_client_visible(id)::text FROM job_tasks WHERE job_id = j AND task_name = 'D'), 'false');
+  own := jsonb_build_object('project_uid', j::text, 'based_on', t_based(j),
+    'phases', jsonb_build_array(t_ph(1, 'P1'), t_ph(2, 'P2')),
+    'tasks', jsonb_build_array(t_tk(3, 'A', 2), t_tk(4, 'B', NULL), t_tk(5, 'C', 1), t_tk(6, 'D', NULL)));
+  res := t_imp('authenticated', t_u('wrt'), j, 'merge', own);
+  PERFORM t_expect('l4: merge moved A to P2, B and D out of any phase', t_res(res, 'updated'), '3');
+  PERFORM t_expect('l4: A (moved into an unpublished phase) is unpublished', (SELECT client_visible::text FROM job_tasks WHERE job_id = j AND task_name = 'A'), 'false');
+  PERFORM t_expect('l4: B (moved out of its phase) is unpublished', (SELECT client_visible::text FROM job_tasks WHERE job_id = j AND task_name = 'B'), 'false');
+  PERFORM t_expect('l4: D (its phase dropped: it WOULD have become visible) is unpublished and so not client visible',
+    (SELECT client_visible::text || job_task_client_visible(id)::text FROM job_tasks WHERE job_id = j AND task_name = 'D'), 'falsefalse');
+  PERFORM t_expect('l4: C (phase unchanged) stays published and client visible', (SELECT client_visible::text || job_task_client_visible(id)::text FROM job_tasks WHERE job_id = j AND task_name = 'C'), 'truetrue');
+  PERFORM t_expect('l4: each unpublish wrote a visibility_changed audit row by the importing user',
+    (SELECT count(*)::text || '|' || max(user_id::text) FROM job_audit_log WHERE job_id = j AND action_type = 'visibility_changed' AND metadata ->> 'reason' = 'unpublish'), '3|' || t_u('wrt')::text);
+  -- the importer re-merging the same file changes nothing and publishes nothing
+  res := t_imp('authenticated', t_u('wrt'), j, 'merge', own || jsonb_build_object('based_on', t_based(j)));
+  PERFORM t_expect('l4: merging the same file again is a no-op', t_res(res, 'updated') || '|' || (SELECT count(*)::text FROM job_tasks WHERE job_id = j AND client_visible), '0|1');
+END $$;
+
+-- L5: the recovery copy of replace is the full rows; a replaced locked baseline is audited as baseline_reset
+DO $$
+DECLARE
+  j uuid := t_job(165); jn uuid := t_job(166); jr uuid := t_job(167); res text; p jsonb; old_t uuid[]; old_p uuid[]; old_l uuid[]; rec jsonb;
+BEGIN
+  p := t_pl(jsonb_build_array(t_ph(1, 'Ph')),
+    jsonb_build_array(t_tk(2, 'Parent', 1) || '{"baseline_start":"2026-05-01","baseline_end":"2026-05-05","assignee":"Sam"}',
+                      t_tk(3, 'Child', 1, 2, '2026-05-06', '2026-05-09', jsonb_build_array(t_lk(2, 'FF', 1)))), j);
+  PERFORM t_expect('l5: setup', t_res(t_imp('authenticated', t_u('ops'), j, 'append', p), 'created'), '3');
+  SELECT array_agg(id ORDER BY id) INTO old_t FROM job_tasks WHERE job_id = j;
+  SELECT array_agg(id ORDER BY id) INTO old_p FROM job_phases WHERE job_id = j;
+  SELECT array_agg(id ORDER BY id) INTO old_l FROM job_task_links WHERE job_id = j;
+  res := t_imp('authenticated', t_u('ops'), j, 'replace', t_pl(jsonb_build_array(t_ph(1, 'New')), jsonb_build_array(t_tk(2, 'N')), j), 'new programme');
+  PERFORM t_expect('l5: replace ok', t_res(res, 'created'), '2');
+  SELECT metadata -> 'recovery' INTO rec FROM job_audit_log WHERE job_id = j AND action_type = 'schedule_imported' AND metadata ->> 'mode' = 'replace';
+  PERFORM t_expect('l5: recovery holds every deleted row, by id (phases, tasks, links)',
+    (SELECT (array_agg((x ->> 'id')::uuid ORDER BY (x ->> 'id')::uuid) = old_t)::text FROM jsonb_array_elements(rec -> 'tasks') x)
+    || (SELECT (array_agg((x ->> 'id')::uuid ORDER BY (x ->> 'id')::uuid) = old_p)::text FROM jsonb_array_elements(rec -> 'phases') x)
+    || (SELECT (array_agg((x ->> 'id')::uuid ORDER BY (x ->> 'id')::uuid) = old_l)::text FROM jsonb_array_elements(rec -> 'links') x), 'truetruetrue');
+  PERFORM t_expect('l5: recovery task rows carry the full columns (dates, baseline, assignee, uid, phase, parent)',
+    (SELECT (x ->> 'start_date') || '|' || (x ->> 'baseline_start') || '|' || (x ->> 'assignee') || '|' || (x ->> 'msp_uid' IS NOT NULL)::text || '|'
+         || (x ->> 'phase_id' IS NOT NULL)::text || '|' || (x ->> 'parent_task_id' IS NULL)::text || '|' || (x ->> 'baseline_locked_at' IS NOT NULL)::text
+       FROM jsonb_array_elements(rec -> 'tasks') x WHERE x ->> 'task_name' = 'Parent'), '2026-05-01|2026-05-01|Sam|true|true|true|true');
+  PERFORM t_expect('l5: recovery child row has its parent, link row its type and lag',
+    (SELECT (x ->> 'parent_task_id' IS NOT NULL)::text FROM jsonb_array_elements(rec -> 'tasks') x WHERE x ->> 'task_name' = 'Child')
+    || (SELECT (x ->> 'link_type') || (x ->> 'lag_days') FROM jsonb_array_elements(rec -> 'links') x), 'trueFF1');
+  PERFORM t_expect('l5: recovery phase row has its name', (SELECT x ->> 'name' FROM jsonb_array_elements(rec -> 'phases') x), 'Ph');
+  PERFORM t_expect('l5: deleted counts equal the recovery sizes',
+    (SELECT (metadata -> 'deleted' ->> 'phases') || (metadata -> 'deleted' ->> 'tasks') || (metadata -> 'deleted' ->> 'links') FROM job_audit_log WHERE job_id = j AND action_type = 'schedule_imported' AND metadata ->> 'mode' = 'replace'),
+    jsonb_array_length(rec -> 'phases')::text || jsonb_array_length(rec -> 'tasks')::text || jsonb_array_length(rec -> 'links')::text);
+
+  -- baseline audit action: replace over a LOCKED baseline is a baseline_reset even when the new file carries no baseline
+  PERFORM t_expect('l5: replace over a locked baseline with a file without baselines',
+    (SELECT (metadata ->> 'tasks') FROM job_audit_log WHERE job_id = j AND action_type = 'baseline_reset'), '0');
+  PERFORM t_expect('l5: ... and the first import had logged baseline_locked, not a reset',
+    (SELECT count(*)::text FROM job_audit_log WHERE job_id = j AND action_type = 'baseline_locked') || '/' || (SELECT count(*)::text FROM job_audit_log WHERE job_id = j AND action_type = 'baseline_reset'), '1/1');
+  PERFORM t_expect('l5: the baseline_reset row names the reason, the source and the user',
+    (SELECT (description LIKE '%new programme') || '|' || (metadata ->> 'source') || '|' || (metadata ->> 'reason') || '|' || user_id::text FROM job_audit_log WHERE job_id = j AND action_type = 'baseline_reset'),
+    'true|import|new programme|' || t_u('ops')::text);
+  -- no prior baseline: a replace whose file carries one is a FIRST lock (baseline_locked), no reset
+  PERFORM t_expect('l5: setup (no baseline)', t_res(t_imp('authenticated', t_u('ops'), jn, 'append', t_pl('[]', jsonb_build_array(t_tk(1, 'x')), jn)), 'created'), '1');
+  res := t_imp('authenticated', t_u('ops'), jn, 'replace', t_pl('[]', jsonb_build_array(t_tk(1, 'x') || '{"baseline_start":"2026-05-01","baseline_end":"2026-05-05"}'), jn), 'first baseline');
+  PERFORM t_expect('l5: replace without a prior baseline that writes one is baseline_locked',
+    (SELECT count(*)::text FROM job_audit_log WHERE job_id = jn AND action_type = 'baseline_locked') || '/' || (SELECT count(*)::text FROM job_audit_log WHERE job_id = jn AND action_type = 'baseline_reset'), '1/0');
+  -- no baseline anywhere: no baseline audit row at all
+  PERFORM t_expect('l5: setup 2', t_res(t_imp('authenticated', t_u('ops'), jr, 'append', t_pl('[]', jsonb_build_array(t_tk(1, 'x')), jr)), 'created'), '1');
+  res := t_imp('authenticated', t_u('ops'), jr, 'replace', t_pl('[]', jsonb_build_array(t_tk(1, 'y')), jr), 'again');
+  PERFORM t_expect('l5: replace with no baseline before or after logs no baseline row',
+    (SELECT count(*)::text FROM job_audit_log WHERE job_id = jr AND action_type IN ('baseline_locked', 'baseline_reset')), '0');
+END $$;
+
+-- L6: more invisible characters are stripped from names; real text survives
+DO $$
+DECLARE res text;
+BEGIN
+  PERFORM t_expect('l6: Arabic letter mark U+061C stripped', import_sched_clean('a' || chr(1564) || 'b'), 'ab');
+  PERFORM t_expect('l6: Hangul fillers U+115F U+1160 U+3164 U+FFA0 stripped', import_sched_clean('a' || chr(4447) || chr(4448) || chr(12644) || chr(65440) || 'b'), 'ab');
+  PERFORM t_expect('l6: Mongolian vowel separator U+180E stripped', import_sched_clean('a' || chr(6158) || 'b'), 'ab');
+  PERFORM t_expect('l6: interlinear annotation U+FFF9..U+FFFB stripped', import_sched_clean('a' || chr(65529) || chr(65530) || chr(65531) || 'b'), 'ab');
+  PERFORM t_expect('l6: the whole tag range U+E0000..U+E007F stripped (both ends and a tag letter)', import_sched_clean('a' || chr(917504) || chr(917505) || chr(917536) || chr(917631) || 'b'), 'ab');
+  PERFORM t_expect('l6: invisible formatting U+206A..U+206F stripped', import_sched_clean('a' || chr(8298) || chr(8303) || 'b'), 'ab');
+  PERFORM t_expect('l6: a name made only of invisible characters becomes empty', import_sched_clean(chr(12644) || chr(4448) || chr(917536)), '');
+  PERFORM t_expect('l6: accented, CJK, Hangul, Arabic and Cyrillic text is intact',
+    import_sched_clean('Café Ünï ñ 工程 한글 العربية Привет'), 'Café Ünï ñ 工程 한글 العربية Привет');
+  PERFORM t_expect('l6: neighbours of the stripped ranges are kept (U+FFA1, U+3165, U+1161, U+FFFC, U+E0080, U+FE0F)',
+    import_sched_clean('a' || chr(65441) || chr(12645) || chr(4449) || chr(65532) || chr(917632) || chr(65039) || 'b'), 'a' || chr(65441) || chr(12645) || chr(4449) || chr(65532) || chr(917632) || chr(65039) || 'b');
+  PERFORM t_expect('l6: emoji (outside BMP) survive', import_sched_clean('ok ' || chr(128512)), 'ok ' || chr(128512));
+  res := t_imp('authenticated', t_u('ops'), t_job(170), 'append', t_pl('[]', jsonb_build_array(t_tk(1, 'Pump' || chr(12644) || chr(917536) || ' repair' || chr(1564)))));
+  PERFORM t_expect('l6: through the RPC: a task name with hidden characters is stored clean', left(res, 3) || (SELECT task_name FROM job_tasks WHERE job_id = t_jid(170)), 'ok:Pump repair');
+END $$;
+
+-- M3: stored uids above the cap (a database that predates the CHECK) never overflow the counter; the space is 1..100000000
+DO $$
+DECLARE
+  c1 constant uuid := 'c1000000-0000-0000-0000-000000000001'; j uuid := t_job(175); jx uuid := t_job(176); res text; p jsonb;
+BEGIN
+  ALTER TABLE job_tasks DROP CONSTRAINT job_tasks_msp_uid_range;   -- simulate the old database (rolled back with the test transaction)
+  ALTER TABLE job_phases DROP CONSTRAINT job_phases_msp_uid_range;
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('fa000000-0000-0000-0000-000000000001', c1, j, 1, 'huge', 2147483647);
+  INSERT INTO job_phases (id, company_id, job_id, sort_order, name, msp_uid) VALUES ('fa000000-0000-0000-0000-0000000000f1', c1, j, 1, 'hugep', 2147483646);
+  res := t_imp('authenticated', t_u('ops'), j, 'append', t_pl(jsonb_build_array(t_ph(1, 'P')), jsonb_build_array(t_tk(2, 'A', 1)), j));
+  PERFORM t_expect('m3: stored uids of 2147483647 (task) and 2147483646 (phase) do not block or overflow the import: new rows get 1 and 2',
+    left(res, 3) || '|' || (SELECT string_agg(msp_uid::text, ',' ORDER BY msp_uid) FROM (SELECT msp_uid FROM job_phases WHERE job_id = j AND name <> 'hugep' UNION ALL SELECT msp_uid FROM job_tasks WHERE job_id = j AND task_name <> 'huge') s), 'ok:|1,2');
+  PERFORM t_expect('m3: the huge rows are untouched', (SELECT msp_uid::text FROM job_tasks WHERE id = 'fa000000-0000-0000-0000-000000000001') || '/' || (SELECT msp_uid::text FROM job_phases WHERE name = 'hugep'), '2147483647/2147483646');
+  -- the space is 1..100000000: 99999999 stored + 2 new rows is refused, + 1 new row fills it exactly
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('fa000000-0000-0000-0000-000000000002', c1, jx, 1, 'top', 99999999);
+  p := t_pl(jsonb_build_array(t_ph(1, 'P')), jsonb_build_array(t_tk(2, 'A', 1)), jx);
+  PERFORM t_expect('m3: a payload needing uids past 100000000 is refused before any write', t_imp('authenticated', t_u('ops'), jx, 'append', p) || '|' || t_state(jx), 'uid space exhausted|0/1/0');
+  res := t_imp('authenticated', t_u('ops'), jx, 'append', t_pl(jsonb_build_array(t_ph(1, 'P')), '[]', jx));
+  PERFORM t_expect('m3: exactly filling the space is accepted: the last uid is 100000000', left(res, 3) || '|' || (SELECT msp_uid::text FROM job_phases WHERE job_id = jx), 'ok:|100000000');
 END $$;
 
 ROLLBACK;

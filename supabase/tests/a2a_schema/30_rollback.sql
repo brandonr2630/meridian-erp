@@ -12,6 +12,11 @@ BEGIN
   PERFORM t_expect('down: parent guard function and trigger are gone',
     (SELECT count(*)::text FROM pg_proc WHERE proname = 'job_tasks_parent_guard')
     || '/' || (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'job_tasks_parent_guard'), '0/0');
+  PERFORM t_expect('down: the company guard function, its three triggers and the msp_uid range constraints are gone',
+    (SELECT count(*)::text FROM pg_proc WHERE proname = 'job_schedule_company_guard') || '/' || (SELECT count(*)::text FROM pg_trigger WHERE tgname LIKE '%company_guard')
+    || '/' || (SELECT count(*)::text FROM pg_constraint WHERE conname LIKE '%msp_uid%'), '0/0/0');
+  PERFORM t_expect('down: job_phases and job_task_links triggers do not include a company guard',
+    (SELECT count(*)::text FROM pg_trigger WHERE tgrelid IN ('public.job_phases'::regclass, 'public.job_task_links'::regclass) AND NOT tgisinternal AND tgname LIKE '%company%'), '0');
   PERFORM t_expect('down: job_tasks triggers are the Phase A three again',
     (SELECT string_agg(tgname, ',' ORDER BY tgname) FROM pg_trigger WHERE tgrelid='public.job_tasks'::regclass AND NOT tgisinternal),
     'job_tasks_baseline_guard,job_tasks_set_updated_at,job_tasks_visibility_guard');

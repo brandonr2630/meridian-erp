@@ -56,12 +56,12 @@
  },
  {
   "name": "merge matches tasks on name",
-  "find": "UPDATE pg_temp.imp_t it SET id = t.id, matched = true FROM job_tasks t WHERE t.job_id = p_job_id AND t.msp_uid = it.uid;",
-  "replace": "UPDATE pg_temp.imp_t it SET id = t.id, matched = true FROM job_tasks t WHERE t.job_id = p_job_id AND t.task_name = it.name;"
+  "find": "UPDATE pg_temp.imp_t it SET id = t.id, matched = true FROM job_tasks t WHERE t.job_id = p_job_id AND t.company_id = v_company AND t.msp_uid = it.uid;",
+  "replace": "UPDATE pg_temp.imp_t it SET id = t.id, matched = true FROM job_tasks t WHERE t.job_id = p_job_id AND t.company_id = v_company AND t.task_name = it.name;"
  },
  {
   "name": "merge matches across jobs",
-  "find": "UPDATE pg_temp.imp_t it SET id = t.id, matched = true FROM job_tasks t WHERE t.job_id = p_job_id AND t.msp_uid = it.uid;",
+  "find": "UPDATE pg_temp.imp_t it SET id = t.id, matched = true FROM job_tasks t WHERE t.job_id = p_job_id AND t.company_id = v_company AND t.msp_uid = it.uid;",
   "replace": "UPDATE pg_temp.imp_t it SET id = t.id, matched = true FROM job_tasks t WHERE t.msp_uid = it.uid;"
  },
  {
@@ -96,8 +96,8 @@
  },
  {
   "name": "replace cannot re-lock a baseline",
-  "find": "  IF p_mode <> 'replace' THEN\n    SELECT EXISTS (SELECT 1 FROM job_tasks WHERE job_id = p_job_id AND baseline_locked_at IS NOT NULL) INTO v_locked;\n  END IF;",
-  "replace": "  SELECT EXISTS (SELECT 1 FROM job_tasks WHERE job_id = p_job_id AND baseline_locked_at IS NOT NULL) INTO v_locked;"
+  "find": "  IF p_mode <> 'replace' THEN v_locked := v_prior_bl; END IF;",
+  "replace": "  v_locked := v_prior_bl;"
  },
  {
   "name": "partial baselines are kept",
@@ -106,7 +106,7 @@
  },
  {
   "name": "baseline_locked audit row dropped",
-  "find": "IF v_nb > 0 THEN",
+  "find": "IF v_nb > 0 OR (p_mode = 'replace' AND v_prior_bl) THEN",
   "replace": "IF false THEN"
  },
  {
@@ -136,12 +136,12 @@
  },
  {
   "name": "payload cycle not checked",
-  "find": "IF EXISTS (SELECT 1 FROM pg_temp.imp_e) THEN RAISE EXCEPTION 'dependency cycle in the imported schedule'",
-  "replace": "IF false THEN RAISE EXCEPTION 'dependency cycle in the imported schedule'"
+  "find": "JOIN pg_temp.imp_t b ON b.uid = l.pred_uid;\n  INSERT INTO pg_temp.imp_n SELECT i.id",
+  "replace": "JOIN pg_temp.imp_t b ON b.uid = l.pred_uid WHERE false;\n  INSERT INTO pg_temp.imp_n SELECT i.id"
  },
  {
   "name": "stored links left out of the cycle graph",
-  "find": "INSERT INTO pg_temp.imp_e SELECT lk.task_id, lk.predecessor_id FROM job_task_links lk WHERE lk.job_id = p_job_id;",
+  "find": "INSERT INTO pg_temp.imp_a SELECT k.task_id, k.predecessor_id FROM job_task_links k WHERE k.job_id = p_job_id AND k.company_id = v_company;",
   "replace": "NULL;"
  },
  {
@@ -221,7 +221,7 @@
  },
  {
   "name": "control characters kept",
-  "find": "'[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]'",
+  "find": "'[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\uffa0\\ufff9-\\ufffb\\U000e0000-\\U000e007f]'",
   "replace": "'[\\u0001-\\u0002]'"
  },
  {
@@ -311,18 +311,18 @@
  },
  {
   "name": "replace keeps old rows",
-  "find": "DELETE FROM job_tasks      WHERE job_id = p_job_id;  GET DIAGNOSTICS v_del_t = ROW_COUNT;",
-  "replace": "DELETE FROM job_tasks      WHERE job_id = p_job_id AND false;  GET DIAGNOSTICS v_del_t = ROW_COUNT;"
+  "find": "DELETE FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company RETURNING",
+  "replace": "DELETE FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND false RETURNING"
  },
  {
   "name": "replace keeps old phases",
-  "find": "DELETE FROM job_phases     WHERE job_id = p_job_id;  GET DIAGNOSTICS v_del_p = ROW_COUNT;",
-  "replace": "DELETE FROM job_phases     WHERE job_id = p_job_id AND false;  GET DIAGNOSTICS v_del_p = ROW_COUNT;"
+  "find": "DELETE FROM job_phases WHERE job_id = p_job_id AND company_id = v_company RETURNING",
+  "replace": "DELETE FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND false RETURNING"
  },
  {
   "name": "replace deletes another job's rows too",
-  "find": "DELETE FROM job_task_links WHERE job_id = p_job_id;  GET DIAGNOSTICS v_del_l = ROW_COUNT;",
-  "replace": "DELETE FROM job_task_links WHERE job_id = p_job_id OR true;  GET DIAGNOSTICS v_del_l = ROW_COUNT;"
+  "find": "DELETE FROM job_task_links WHERE job_id = p_job_id AND company_id = v_company RETURNING",
+  "replace": "DELETE FROM job_task_links WHERE job_id = p_job_id OR true RETURNING"
  },
  {
   "name": "replace without recovery metadata",
@@ -331,8 +331,8 @@
  },
  {
   "name": "recovery keeps names only (no published flag)",
-  "find": "jsonb_build_array(t.id, t.task_name, t.phase_id, t.parent_task_id, t.msp_uid, t.client_visible)",
-  "replace": "jsonb_build_array(t.id, t.task_name, t.phase_id, t.parent_task_id, t.msp_uid, false)"
+  "find": "RETURNING to_jsonb(job_tasks.*) AS j)",
+  "replace": "RETURNING to_jsonb(job_tasks.*) || jsonb_build_object('client_visible', false) AS j)"
  },
  {
   "name": "uids reused in the same job",
@@ -396,8 +396,8 @@
  },
  {
   "name": "hierarchy not stored",
-  "find": "UPDATE job_tasks t SET parent_task_id = it.parent_id FROM pg_temp.imp_t it\n   WHERE it.id = t.id AND t.job_id = p_job_id AND it.parent_id IS NOT NULL",
-  "replace": "UPDATE job_tasks t SET parent_task_id = it.parent_id FROM pg_temp.imp_t it\n   WHERE it.id = t.id AND t.job_id = p_job_id AND false"
+  "find": "WHERE it.id = t.id AND t.job_id = p_job_id AND t.company_id = v_company AND it.parent_id IS NOT NULL",
+  "replace": "WHERE it.id = t.id AND t.job_id = p_job_id AND t.company_id = v_company AND false"
  },
  {
   "name": "audit action renamed",
@@ -455,5 +455,204 @@
   "name": "dynamic SQL introduced",
   "find": "PERFORM pg_advisory_xact_lock(hashtext(p_job_id::text));",
   "replace": "PERFORM pg_advisory_xact_lock(hashtext(p_job_id::text)); EXECUTE 'SELECT 1';"
+ },
+ {
+  "name": "h1: foreign phases are not refused",
+  "find": "IF EXISTS (SELECT 1 FROM job_phases WHERE job_id = p_job_id AND company_id <> v_company)",
+  "replace": "IF false"
+ },
+ {
+  "name": "h1: foreign tasks are not refused",
+  "find": "OR EXISTS (SELECT 1 FROM job_tasks WHERE job_id = p_job_id AND company_id <> v_company)",
+  "replace": "OR false"
+ },
+ {
+  "name": "h1: foreign links are not refused",
+  "find": "OR EXISTS (SELECT 1 FROM job_task_links WHERE job_id = p_job_id AND company_id <> v_company) THEN",
+  "replace": "OR false THEN"
+ },
+ {
+  "name": "h1: refusal uses a generic SQLSTATE",
+  "find": "RAISE EXCEPTION 'schedule contains rows of another company' USING ERRCODE = 'A2C01';",
+  "replace": "RAISE EXCEPTION 'schedule contains rows of another company' USING ERRCODE = '22023';"
+ },
+ {
+  "name": "h1: refusal message changed",
+  "find": "RAISE EXCEPTION 'schedule contains rows of another company'",
+  "replace": "RAISE EXCEPTION 'schedule is not clean'"
+ },
+ {
+  "name": "m2: a cycle is never reported",
+  "find": "IF v_done < v_nodes THEN RAISE EXCEPTION 'dependency cycle in the imported schedule'",
+  "replace": "IF false THEN RAISE EXCEPTION 'dependency cycle in the imported schedule'"
+ },
+ {
+  "name": "m2: stored links are not loaded for a merge",
+  "find": "    IF p_mode = 'merge' THEN\n      INSERT INTO pg_temp.imp_a SELECT k.task_id",
+  "replace": "    IF false THEN\n      INSERT INTO pg_temp.imp_a SELECT k.task_id"
+ },
+ {
+  "name": "m2: the peel is skipped",
+  "find": "IF EXISTS (SELECT 1 FROM pg_temp.imp_e e JOIN pg_temp.imp_r x ON x.id = e.t) THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "m2: the peel only decrements by one per round",
+  "find": "UPDATE pg_temp.imp_d d SET deg = d.deg - c.n",
+  "replace": "UPDATE pg_temp.imp_d d SET deg = d.deg - 1"
+ },
+ {
+  "name": "m2: the peel never starts (no sources)",
+  "find": "v_front := ARRAY(SELECT d.id FROM pg_temp.imp_d d WHERE d.deg = 0);",
+  "replace": "v_front := ARRAY[]::uuid[];"
+ },
+ {
+  "name": "m2: the whole stored graph is scanned for every file (the old cost)",
+  "find": "  IF EXISTS (SELECT 1 FROM pg_temp.imp_e) THEN\n    CREATE TEMP TABLE imp_a (t uuid NOT NULL, p uuid NOT NULL) ON COMMIT DROP;     -- every edge that can matter\n    INSERT INTO pg_temp.imp_a SELECT e.t, e.p FROM pg_temp.imp_e e;\n    IF p_mode = 'merge' THEN\n      INSERT INTO pg_temp.imp_a SELECT k.task_id, k.predecessor_id FROM job_task_links k WHERE k.job_id = p_job_id AND k.company_id = v_company;\n    END IF;\n    CREATE INDEX ON pg_temp.imp_a (t);\n    CREATE TEMP TABLE imp_r (id uuid PRIMARY KEY) ON COMMIT DROP;                   -- nodes reachable from a new edge's predecessor\n    INSERT INTO pg_temp.imp_r\n      WITH RECURSIVE rch(id) AS (\n        SELECT e.p FROM pg_temp.imp_e e\n         WHERE p_mode <> 'merge' OR NOT EXISTS (",
+  "replace": "  IF true THEN\n    CREATE TEMP TABLE imp_a (t uuid NOT NULL, p uuid NOT NULL) ON COMMIT DROP;     -- every edge that can matter\n    INSERT INTO pg_temp.imp_a SELECT e.t, e.p FROM pg_temp.imp_e e;\n    IF true THEN\n      INSERT INTO pg_temp.imp_a SELECT k.task_id, k.predecessor_id FROM job_task_links k WHERE k.job_id = p_job_id AND k.company_id = v_company;\n    END IF;\n    CREATE INDEX ON pg_temp.imp_a (t);\n    CREATE TEMP TABLE imp_r (id uuid PRIMARY KEY) ON COMMIT DROP;                   -- nodes reachable from a new edge's predecessor\n    INSERT INTO pg_temp.imp_r\n      WITH RECURSIVE rch(id) AS (\n        SELECT k0.predecessor_id FROM job_task_links k0 WHERE k0.job_id = p_job_id\n        UNION ALL SELECT e.p FROM pg_temp.imp_e e\n         WHERE p_mode <> 'merge' OR NOT EXISTS ("
+ },
+ {
+  "name": "m3: counter counts phase uids above the cap",
+  "find": "FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap\n",
+  "replace": "FROM job_phases WHERE job_id = p_job_id AND company_id = v_company\n"
+ },
+ {
+  "name": "m3: counter counts task uids above the cap",
+  "find": "FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap) s;",
+  "replace": "FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company) s;"
+ },
+ {
+  "name": "m3: exhaustion check off by one",
+  "find": "IF v_base::bigint + v_new_p + v_new_t > k_uid_cap THEN",
+  "replace": "IF v_base::bigint + v_new_p + v_new_t >= k_uid_cap THEN"
+ },
+ {
+  "name": "m3: exhaustion check removed",
+  "find": "IF v_base::bigint + v_new_p + v_new_t > k_uid_cap THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "m3: cap is the old two billion",
+  "find": "k_uid_cap constant integer := 100000000;",
+  "replace": "k_uid_cap constant integer := 2000000000;"
+ },
+ {
+  "name": "l4: a moved published task keeps its visibility",
+  "find": "client_visible = CASE WHEN t.phase_id IS DISTINCT FROM ph.id THEN false ELSE t.client_visible END",
+  "replace": "client_visible = t.client_visible"
+ },
+ {
+  "name": "l4: the phase comparison is NULL-blind (moving out of a phase keeps visibility)",
+  "find": "CASE WHEN t.phase_id IS DISTINCT FROM ph.id THEN false",
+  "replace": "CASE WHEN t.phase_id <> ph.id THEN false"
+ },
+ {
+  "name": "l4: every merged row is unpublished",
+  "find": "CASE WHEN t.phase_id IS DISTINCT FROM ph.id THEN false ELSE t.client_visible END",
+  "replace": "false"
+ },
+ {
+  "name": "l5: recovery tasks keep only id and name",
+  "find": "RETURNING to_jsonb(job_tasks.*) AS j)",
+  "replace": "RETURNING jsonb_build_object('id', id, 'task_name', task_name, 'client_visible', client_visible) AS j)"
+ },
+ {
+  "name": "l5: recovery links keep only the ids",
+  "find": "RETURNING to_jsonb(job_task_links.*) AS j)",
+  "replace": "RETURNING jsonb_build_object('id', id, 'task_id', task_id, 'predecessor_id', predecessor_id) AS j)"
+ },
+ {
+  "name": "l5: recovery phases keep only id and name",
+  "find": "RETURNING to_jsonb(job_phases.*) AS j)",
+  "replace": "RETURNING jsonb_build_object('id', id, 'name', name) AS j)"
+ },
+ {
+  "name": "l5: a replaced locked baseline is audited as baseline_locked",
+  "find": "CASE WHEN p_mode = 'replace' AND v_prior_bl THEN 'baseline_reset' ELSE 'baseline_locked' END,",
+  "replace": "'baseline_locked',"
+ },
+ {
+  "name": "l5: a replace that carries no baseline over a locked one logs nothing",
+  "find": "IF v_nb > 0 OR (p_mode = 'replace' AND v_prior_bl) THEN",
+  "replace": "IF v_nb > 0 THEN"
+ },
+ {
+  "name": "l5: every replace that writes a baseline is a reset",
+  "find": "CASE WHEN p_mode = 'replace' AND v_prior_bl THEN 'baseline_reset' ELSE 'baseline_locked' END,",
+  "replace": "CASE WHEN p_mode = 'replace' THEN 'baseline_reset' ELSE 'baseline_locked' END,"
+ },
+ {
+  "name": "l5: the prior baseline is not looked at for replace",
+  "find": "SELECT EXISTS (SELECT 1 FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND baseline_locked_at IS NOT NULL) INTO v_prior_bl;",
+  "replace": "v_prior_bl := false;"
+ },
+ {
+  "name": "l5: replace takes no row locks",
+  "equivalent": true,
+  "reason": "needs two real sessions: the row locks are proven by supabase/tests/a2a_import/concurrency.sh (CONCURRENCY OK) and its own mutants (lock removed, tasks lock removed: both MUTANT CAUGHT, run by hand and reported); a single-session assert file cannot observe a lock",
+  "find": "  IF p_mode = 'replace' THEN\n    PERFORM p.id FROM job_phases p",
+  "replace": "  IF false THEN\n    PERFORM p.id FROM job_phases p"
+ },
+ {
+  "name": "l5: the task rows are not locked",
+  "equivalent": true,
+  "reason": "needs two real sessions: the row locks are proven by supabase/tests/a2a_import/concurrency.sh (CONCURRENCY OK) and its own mutants (lock removed, tasks lock removed: both MUTANT CAUGHT, run by hand and reported); a single-session assert file cannot observe a lock",
+  "find": "    PERFORM t.id FROM job_tasks t WHERE t.job_id = p_job_id AND t.company_id = v_company ORDER BY t.id FOR UPDATE OF t;",
+  "replace": "    NULL;"
+ },
+ {
+  "name": "l6: cleaner class u061c -> (removed)",
+  "find": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\uffa0\\ufff9-\\ufffb\\U000e0000-\\U000e007f]",
+  "replace": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\uffa0\\ufff9-\\ufffb\\U000e0000-\\U000e007f]"
+ },
+ {
+  "name": "l6: cleaner class u115fu1160 -> (removed)",
+  "find": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\uffa0\\ufff9-\\ufffb\\U000e0000-\\U000e007f]",
+  "replace": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\uffa0\\ufff9-\\ufffb\\U000e0000-\\U000e007f]"
+ },
+ {
+  "name": "l6: cleaner class u180e -> (removed)",
+  "find": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\uffa0\\ufff9-\\ufffb\\U000e0000-\\U000e007f]",
+  "replace": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\uffa0\\ufff9-\\ufffb\\U000e0000-\\U000e007f]"
+ },
+ {
+  "name": "l6: cleaner class u2060-u206f -> \\u2060-\\u2069",
+  "find": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\uffa0\\ufff9-\\ufffb\\U000e0000-\\U000e007f]",
+  "replace": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\u3164\\ufeff\\uffa0\\ufff9-\\ufffb\\U000e0000-\\U000e007f]"
+ },
+ {
+  "name": "l6: cleaner class u3164 -> (removed)",
+  "find": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\uffa0\\ufff9-\\ufffb\\U000e0000-\\U000e007f]",
+  "replace": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\ufeff\\uffa0\\ufff9-\\ufffb\\U000e0000-\\U000e007f]"
+ },
+ {
+  "name": "l6: cleaner class uffa0 -> (removed)",
+  "find": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\uffa0\\ufff9-\\ufffb\\U000e0000-\\U000e007f]",
+  "replace": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\ufff9-\\ufffb\\U000e0000-\\U000e007f]"
+ },
+ {
+  "name": "l6: cleaner class ufff9-ufffb -> \\ufff9-\\ufffa",
+  "find": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\uffa0\\ufff9-\\ufffb\\U000e0000-\\U000e007f]",
+  "replace": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\uffa0\\ufff9-\\ufffa\\U000e0000-\\U000e007f]"
+ },
+ {
+  "name": "l6: cleaner class ufff9-ufffb -> \\ufff9-\\ufffc",
+  "find": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\uffa0\\ufff9-\\ufffb\\U000e0000-\\U000e007f]",
+  "replace": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\uffa0\\ufff9-\\ufffc\\U000e0000-\\U000e007f]"
+ },
+ {
+  "name": "l6: cleaner class U000e0000-U000e007f -> \\U000e0001-\\U000e007f",
+  "find": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\uffa0\\ufff9-\\ufffb\\U000e0000-\\U000e007f]",
+  "replace": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\uffa0\\ufff9-\\ufffb\\U000e0001-\\U000e007f]"
+ },
+ {
+  "name": "l6: cleaner class U000e0000-U000e007f -> \\U000e0000-\\U000e007e",
+  "find": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\uffa0\\ufff9-\\ufffb\\U000e0000-\\U000e007f]",
+  "replace": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\uffa0\\ufff9-\\ufffb\\U000e0000-\\U000e007e]"
+ },
+ {
+  "name": "l6: cleaner class U000e0000-U000e007f -> \\U000e0000-\\U000e0080",
+  "find": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\uffa0\\ufff9-\\ufffb\\U000e0000-\\U000e007f]",
+  "replace": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\uffa0\\ufff9-\\ufffb\\U000e0000-\\U000e0080]"
  }
 ]

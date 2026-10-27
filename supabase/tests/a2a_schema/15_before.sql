@@ -13,6 +13,9 @@ BEGIN
   PERFORM t_expect('before: no parent guard function or trigger',
     (SELECT count(*)::text FROM pg_proc WHERE proname = 'job_tasks_parent_guard')
     || '/' || (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'job_tasks_parent_guard'), '0/0');
+  PERFORM t_expect('before: no company guard function, trigger or msp_uid constraint',
+    (SELECT count(*)::text FROM pg_proc WHERE proname = 'job_schedule_company_guard') || '/' || (SELECT count(*)::text FROM pg_trigger WHERE tgname LIKE '%company_guard')
+    || '/' || (SELECT count(*)::text FROM pg_constraint WHERE conname LIKE '%msp_uid%'), '0/0/0');
   PERFORM t_expect('before: job_tasks triggers are the Phase A three',
     (SELECT string_agg(tgname, ',' ORDER BY tgname) FROM pg_trigger WHERE tgrelid='public.job_tasks'::regclass AND NOT tgisinternal),
     'job_tasks_baseline_guard,job_tasks_set_updated_at,job_tasks_visibility_guard');

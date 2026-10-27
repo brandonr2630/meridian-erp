@@ -70,7 +70,7 @@ BEGIN
        AND conkey = ARRAY[(SELECT attnum FROM pg_attribute WHERE attrelid='public.job_tasks'::regclass AND attname='parent_task_id')]), 'n');
   PERFORM t_expect('struct: job_tasks triggers',
     (SELECT string_agg(tgname, ',' ORDER BY tgname) FROM pg_trigger WHERE tgrelid='public.job_tasks'::regclass AND NOT tgisinternal),
-    'job_tasks_baseline_guard,job_tasks_parent_guard,job_tasks_set_updated_at,job_tasks_visibility_guard');
+    'job_tasks_baseline_guard,job_tasks_company_guard,job_tasks_parent_guard,job_tasks_set_updated_at,job_tasks_visibility_guard');
   PERFORM t_expect('struct: parent guard is BEFORE INSERT OR UPDATE OF parent_task_id, job_id, company_id',
     (SELECT (pg_get_triggerdef(oid) LIKE '%BEFORE INSERT OR UPDATE OF parent_task_id, job_id, company_id ON%')::text
        FROM pg_trigger WHERE tgname='job_tasks_parent_guard'), 'true');
@@ -104,10 +104,13 @@ BEGIN
   PERFORM t_expect('hier: root in another job inserts', pg_temp.ins(10, 'b3000000-0000-0000-0000-00000000000b'), 'ok');
   PERFORM t_expect('hier: parent in another job on insert -> A2H01', pg_temp.ins(11, 'b3000000-0000-0000-0000-00000000000a', 10), 'A2H01');
   PERFORM t_expect('hier: parent in another job on update -> A2H01', pg_temp.mv(3, 10), 'A2H01');
+  -- the parent guard's own company rule is defence in depth behind job_schedule_company_guard (A2C01), which fires first: switch that one off here
+  ALTER TABLE job_tasks DISABLE TRIGGER job_tasks_company_guard;
   PERFORM t_expect('hier: same job, other company on insert -> A2H01',
     pg_temp.ins(13, 'b3000000-0000-0000-0000-00000000000a', 1, 'c2000000-0000-0000-0000-000000000002'), 'A2H01');
   PERFORM t_expect('hier: same job, other company on update -> A2H01',
     pg_temp.ins(14, 'b3000000-0000-0000-0000-00000000000a', NULL, 'c2000000-0000-0000-0000-000000000002') || '/' || pg_temp.mv(14, 1), 'ok/A2H01');
+  ALTER TABLE job_tasks ENABLE TRIGGER job_tasks_company_guard;
   PERFORM t_expect('hier: rejected inserts left no row',
     (SELECT count(*)::text FROM job_tasks WHERE id IN (pg_temp.tid(4), pg_temp.tid(5), pg_temp.tid(11), pg_temp.tid(13))), '0');
   PERFORM t_expect('hier: failed updates left parents unchanged',
@@ -188,8 +191,10 @@ BEGIN
     pg_temp.try('UPDATE job_tasks SET job_id = ''b3000000-0000-0000-0000-00000000000b'' WHERE id = pg_temp.tid(82)'), 'A2H05');
   PERFORM t_expect('jobchg: a task with children cannot change job -> A2H05',
     pg_temp.try('UPDATE job_tasks SET job_id = ''b3000000-0000-0000-0000-00000000000b'' WHERE id = pg_temp.tid(81)'), 'A2H05');
+  ALTER TABLE job_tasks DISABLE TRIGGER job_tasks_company_guard;   -- the new row-company trigger would answer first
   PERFORM t_expect('jobchg: a task with children cannot change company -> A2H05',
     pg_temp.try('UPDATE job_tasks SET company_id = ''c2000000-0000-0000-0000-000000000002'' WHERE id = pg_temp.tid(81)'), 'A2H05');
+  ALTER TABLE job_tasks ENABLE TRIGGER job_tasks_company_guard;
   PERFORM t_expect('jobchg: moving to a new job while detaching in the same statement is still rejected (detach first) -> A2H05',
     pg_temp.try('UPDATE job_tasks SET job_id = ''b3000000-0000-0000-0000-00000000000b'', parent_task_id = NULL WHERE id = pg_temp.tid(82)'), 'A2H05');
   PERFORM t_expect('jobchg: a plain task (no parent, no children) can change job',
@@ -275,6 +280,91 @@ BEGIN
     (pg_temp.msg('INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, link_type) VALUES (''c1000000-0000-0000-0000-000000000001'', ''b3000000-0000-0000-0000-00000000000b'', pg_temp.tid(131), pg_temp.tid(133), ''FF'')') LIKE '%dependency cycle%')::text, 'true');
   PERFORM t_expect('link: self link with a non-FS type -> 23514', pg_temp.lnk(131, 131, 'SS'), '23514');
   PERFORM t_expect('link: the rejected cycle links left no row', (SELECT count(*)::text FROM job_task_links WHERE task_id = pg_temp.tid(131)), '0');
+END $$;
+
+-- ===== 11. H1: a schedule row's company must be the company of its job (A2C01), through the REAL policies =====
+-- Identities: 77777777-... = operations_tech in C2 (writer), 11111111-... = operations_tech in C1 (writer).
+DO $$
+DECLARE
+  c1 constant uuid := 'c1000000-0000-0000-0000-000000000001'; c2 constant uuid := 'c2000000-0000-0000-0000-000000000002';
+  j1 constant uuid := 'b1000000-0000-0000-0000-000000000001'; j2 constant uuid := 'b2000000-0000-0000-0000-000000000002';
+  w2 constant uuid := '77777777-7777-7777-7777-777777777777'; w1 constant uuid := '11111111-1111-1111-1111-111111111111';
+BEGIN
+  PERFORM t_expect('h1: struct: three company guard triggers exist (BEFORE INSERT OR UPDATE OF job_id, company_id)',
+    (SELECT string_agg(c.relname || ':' || t.tgname, ',' ORDER BY c.relname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
+      WHERE t.tgname LIKE '%company_guard' AND NOT t.tgisinternal AND (t.tgtype & 2) = 2 AND (t.tgtype & 4) = 4 AND (t.tgtype & 16) = 16),
+    'job_phases:job_phases_company_guard,job_task_links:job_task_links_company_guard,job_tasks:job_tasks_company_guard');
+  PERFORM t_expect('h1: struct: the guard is SECURITY DEFINER with a pinned search_path and not executable by API roles',
+    (SELECT (prosecdef AND array_to_string(proconfig, ',') LIKE '%search_path=public, pg_temp%')::text
+        || has_function_privilege('anon', oid, 'EXECUTE')::text || has_function_privilege('authenticated', oid, 'EXECUTE')::text
+        || has_function_privilege('service_role', oid, 'EXECUTE')::text
+       FROM pg_proc WHERE proname = 'job_schedule_company_guard'), 'truefalsefalsefalse');
+
+  -- the attack: a C2 writer plants rows carrying a C1 job id (company_id = its own company, so the Phase A policy alone lets it through)
+  PERFORM t_expect('h1: C2 writer cannot insert a job_phases row with a C1 job id',
+    t_dml_api('authenticated', w2, format('INSERT INTO job_phases (company_id, job_id, name, msp_uid) VALUES (%L, %L, ''planted'', 2000000)', c2, j1)), 'err:A2C01');
+  PERFORM t_expect('h1: C2 writer cannot insert a job_tasks row with a C1 job id',
+    t_dml_api('authenticated', w2, format('INSERT INTO job_tasks (company_id, job_id, task_name, msp_uid) VALUES (%L, %L, ''planted'', 2000000)', c2, j1)), 'err:A2C01');
+  INSERT INTO job_tasks (id, company_id, job_id, task_name) VALUES ('f4000000-0000-0000-0000-000000000001', c1, j1, 'c1 a'), ('f4000000-0000-0000-0000-000000000002', c1, j1, 'c1 b');
+  PERFORM t_expect('h1: C2 writer cannot insert a job_task_links row with a C1 job id (even with C1 task ids)',
+    t_dml_api('authenticated', w2, format('INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id) VALUES (%L, %L, %L, %L)', c2, j1,
+      'f4000000-0000-0000-0000-000000000001', 'f4000000-0000-0000-0000-000000000002')), 'err:A2C01');
+  PERFORM t_expect('h1: a nonexistent job id gives the same error (no probing of job ids)',
+    t_dml_api('authenticated', w2, format('INSERT INTO job_phases (company_id, job_id, name) VALUES (%L, ''aaaaaaaa-0000-0000-0000-00000000f4f4'', ''x'')', c2)), 'err:A2C01');
+  PERFORM t_expect('h1: the refusals planted nothing', (SELECT count(*)::text FROM job_phases WHERE name = 'planted') || (SELECT count(*)::text FROM job_tasks WHERE task_name = 'planted')
+    || (SELECT count(*)::text FROM job_task_links WHERE job_id = j1 AND company_id = c2), '000');
+  PERFORM t_expect('h1: the message names the table and does not echo ids',
+    t_msg_api('authenticated', w2, format('INSERT INTO job_phases (company_id, job_id, name) VALUES (%L, %L, ''x'')', c2, j1)), 'job_phases row must belong to the company of its job');
+
+  -- legit writers are not blocked
+  PERFORM t_expect('h1: C2 writer inserts a phase, a task and a link in its own job',
+    t_dml_api('authenticated', w2, format('INSERT INTO job_phases (company_id, job_id, name) VALUES (%L, %L, ''own'')', c2, j2))
+    || t_dml_api('authenticated', w2, format('INSERT INTO job_tasks (id, company_id, job_id, task_name) VALUES (''f4000000-0000-0000-0000-0000000000a1'', %L, %L, ''own1''), (''f4000000-0000-0000-0000-0000000000a2'', %L, %L, ''own2'')', c2, j2, c2, j2))
+    || t_dml_api('authenticated', w2, format('INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id) VALUES (%L, %L, ''f4000000-0000-0000-0000-0000000000a2'', ''f4000000-0000-0000-0000-0000000000a1'')', c2, j2)),
+    'rows:1rows:2rows:1');
+  PERFORM t_expect('h1: C1 writer inserts a phase in its own job', t_dml_api('authenticated', w1, format('INSERT INTO job_phases (company_id, job_id, name) VALUES (%L, %L, ''own c1'')', c1, j1)), 'rows:1');
+  -- updates: moving an existing row to another company's job is refused too
+  PERFORM t_expect('h1: a C1 writer cannot move its own task to a C2 job id',
+    t_dml_api('authenticated', w1, format('UPDATE job_tasks SET job_id = %L WHERE id = ''f4000000-0000-0000-0000-000000000001''', j2)), 'err:A2C01');
+  PERFORM t_expect('h1: a C1 writer cannot move its own phase to a C2 job id',
+    t_dml_api('authenticated', w1, format('UPDATE job_phases SET job_id = %L WHERE name = ''own c1''', j2)), 'err:A2C01');
+  PERFORM t_expect('h1: a C2 writer cannot move its own link to a C1 job id',
+    t_dml_api('authenticated', w2, format('UPDATE job_task_links SET job_id = %L WHERE task_id = ''f4000000-0000-0000-0000-0000000000a2''', j1)), 'err:A2C01');
+  PERFORM t_expect('h1: an UPDATE that touches neither job_id nor company_id is not affected',
+    t_dml_api('authenticated', w1, 'UPDATE job_tasks SET progress = 5 WHERE id = ''f4000000-0000-0000-0000-000000000001'''), 'rows:1');
+  -- the owner (migrations, backfills, the import RPC) is held to the same rule
+  PERFORM t_expect('h1: even the table owner cannot insert a mismatching row',
+    pg_temp.try(format('INSERT INTO job_tasks (company_id, job_id, task_name) VALUES (%L, %L, ''o'')', c2, j1)), 'A2C01');
+  -- the guard must work even when the writer cannot read jobs at all (RLS on jobs that hides every row): SECURITY DEFINER is load-bearing
+  ALTER TABLE jobs ENABLE ROW LEVEL SECURITY;
+  CREATE POLICY t_jobs_hidden ON jobs FOR SELECT TO authenticated USING (false);
+  PERFORM t_expect('h1: a legit writer is not blocked when RLS hides jobs from it (definer lookup)',
+    t_dml_api('authenticated', w2, format('INSERT INTO job_phases (company_id, job_id, name) VALUES (%L, %L, ''own rls'')', c2, j2)), 'rows:1');
+  DROP POLICY t_jobs_hidden ON jobs;
+  ALTER TABLE jobs DISABLE ROW LEVEL SECURITY;
+  PERFORM t_expect('h1: exactly one company guard trigger per table', (SELECT count(*)::text FROM pg_trigger WHERE tgname LIKE '%company_guard' AND NOT tgisinternal), '3');
+END $$;
+
+-- ===== 12. M3: msp_uid is 1..100000000 =====
+DO $$
+BEGIN
+  INSERT INTO job_tasks (id, company_id, job_id, task_name) VALUES ('f5000000-0000-0000-0000-000000000001', 'c1000000-0000-0000-0000-000000000001', 'b3000000-0000-0000-0000-00000000000c', 'u1');
+  INSERT INTO job_phases (id, company_id, job_id, name) VALUES ('f5000000-0000-0000-0000-0000000000f1', 'c1000000-0000-0000-0000-000000000001', 'b3000000-0000-0000-0000-00000000000c', 'p1');
+  PERFORM t_expect('m3: a task uid of 2147483647 is rejected -> 23514', pg_temp.try('UPDATE job_tasks SET msp_uid = 2147483647 WHERE id = ''f5000000-0000-0000-0000-000000000001'''), '23514');
+  PERFORM t_expect('m3: a phase uid of 2147483647 is rejected -> 23514', pg_temp.try('UPDATE job_phases SET msp_uid = 2147483647 WHERE id = ''f5000000-0000-0000-0000-0000000000f1'''), '23514');
+  PERFORM t_expect('m3: a task uid of 100000001 is rejected -> 23514', pg_temp.try('UPDATE job_tasks SET msp_uid = 100000001 WHERE id = ''f5000000-0000-0000-0000-000000000001'''), '23514');
+  PERFORM t_expect('m3: an inserted phase uid of 100000001 is rejected -> 23514',
+    pg_temp.try('INSERT INTO job_phases (company_id, job_id, name, msp_uid) VALUES (''c1000000-0000-0000-0000-000000000001'', ''b3000000-0000-0000-0000-00000000000c'', ''big'', 100000001)'), '23514');
+  PERFORM t_expect('m3: a task uid of 100000000 is accepted', pg_temp.try('UPDATE job_tasks SET msp_uid = 100000000 WHERE id = ''f5000000-0000-0000-0000-000000000001'''), 'ok');
+  PERFORM t_expect('m3: a phase uid of 100000000 is accepted', pg_temp.try('UPDATE job_phases SET msp_uid = 100000000 WHERE id = ''f5000000-0000-0000-0000-0000000000f1'''), 'ok');
+  PERFORM t_expect('m3: uid 1 and NULL are accepted',
+    pg_temp.try('UPDATE job_tasks SET msp_uid = 1 WHERE id = ''f5000000-0000-0000-0000-000000000001''') || pg_temp.try('UPDATE job_tasks SET msp_uid = NULL WHERE id = ''f5000000-0000-0000-0000-000000000001'''), 'okok');
+  PERFORM t_expect('m3: one named range constraint per table, the legacy unnamed check is gone',
+    (SELECT string_agg(conrelid::regclass::text || ':' || conname, ',' ORDER BY conname) FROM pg_constraint
+      WHERE contype = 'c' AND conname IN ('job_phases_msp_uid_range', 'job_tasks_msp_uid_range', 'job_phases_msp_uid_check', 'job_tasks_msp_uid_check')),
+    'job_phases:job_phases_msp_uid_range,job_tasks:job_tasks_msp_uid_range');
+  PERFORM t_expect('m3: the column stays integer and nullable', (SELECT string_agg(data_type || is_nullable, ',') FROM information_schema.columns
+      WHERE table_schema='public' AND table_name IN ('job_phases','job_tasks') AND column_name='msp_uid'), 'integerYES,integerYES');
 END $$;
 
 ROLLBACK;

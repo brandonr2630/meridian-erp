@@ -9,8 +9,20 @@
 ALTER TABLE job_task_links
   ADD COLUMN IF NOT EXISTS link_type text NOT NULL DEFAULT 'FS' CHECK (link_type IN ('FS', 'SS', 'FF', 'SF'));
 
-ALTER TABLE job_phases ADD COLUMN IF NOT EXISTS msp_uid integer CHECK (msp_uid IS NULL OR msp_uid > 0);
-ALTER TABLE job_tasks  ADD COLUMN IF NOT EXISTS msp_uid integer CHECK (msp_uid IS NULL OR msp_uid > 0);
+ALTER TABLE job_phases ADD COLUMN IF NOT EXISTS msp_uid integer;
+ALTER TABLE job_tasks  ADD COLUMN IF NOT EXISTS msp_uid integer;
+-- M3: a uid is 1..100000000 (the import payload range). A writer could otherwise UPDATE msp_uid to 2147483647 and block every import
+-- ("uid space exhausted") or overflow the export's max+n. Named constraints, dropped and re-added so a re-run (or a database that
+-- got the first version of this migration, whose inline CHECK was msp_uid > 0 and is named *_msp_uid_check) ends in the same state.
+-- NOT VALID: no table scan or failure on existing rows (there are none on prod: A2a is not applied yet); new and updated rows are checked.
+-- Pre-check (read-only, expect 0 and 0):  SELECT (SELECT count(*) FROM job_phases WHERE msp_uid > 100000000) AS phases_over_cap,
+--                                                 (SELECT count(*) FROM job_tasks  WHERE msp_uid > 100000000) AS tasks_over_cap;
+ALTER TABLE job_phases DROP CONSTRAINT IF EXISTS job_phases_msp_uid_check;
+ALTER TABLE job_phases DROP CONSTRAINT IF EXISTS job_phases_msp_uid_range;
+ALTER TABLE job_phases ADD CONSTRAINT job_phases_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid > 0 AND msp_uid <= 100000000)) NOT VALID;
+ALTER TABLE job_tasks  DROP CONSTRAINT IF EXISTS job_tasks_msp_uid_check;
+ALTER TABLE job_tasks  DROP CONSTRAINT IF EXISTS job_tasks_msp_uid_range;
+ALTER TABLE job_tasks  ADD CONSTRAINT job_tasks_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid > 0 AND msp_uid <= 100000000)) NOT VALID;
 CREATE UNIQUE INDEX IF NOT EXISTS job_phases_msp_uid_uq ON job_phases (job_id, msp_uid) WHERE msp_uid IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS job_tasks_msp_uid_uq  ON job_tasks  (job_id, msp_uid) WHERE msp_uid IS NOT NULL;
 
@@ -18,6 +30,37 @@ CREATE UNIQUE INDEX IF NOT EXISTS job_tasks_msp_uid_uq  ON job_tasks  (job_id, m
 -- ON DELETE SET NULL: deleting a parent promotes its children to direct children of their phase (nothing is lost silently).
 ALTER TABLE job_tasks ADD COLUMN IF NOT EXISTS parent_task_id uuid REFERENCES job_tasks(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS job_tasks_parent_idx ON job_tasks (parent_task_id) WHERE parent_task_id IS NOT NULL;
+
+-- ===== H1: a schedule row's company must be the company of its job =====
+-- The Phase A policies on job_phases / job_tasks / job_task_links check only company_id (own company + write atom), not that job_id
+-- belongs to that company, so a writer of company C2 could INSERT rows carrying the job_id of a C1 job. Import and export trust rows by
+-- job_id, so such a row leaks C1 data into C2-readable rows, plants a huge msp_uid or a far-future updated_at and blocks the C1 job.
+-- Root-cause fix: a BEFORE INSERT OR UPDATE OF job_id, company_id trigger on the three tables. SQLSTATE A2C01 (class A2, "company").
+-- SECURITY DEFINER with a fixed search_path on purpose: it must see the job whatever the writer's RLS says, and a job that does not
+-- exist and a job of another company raise the SAME error, so it cannot be used to probe job ids. It reads only jobs.company_id,
+-- takes no input but the row, and trigger functions need no EXECUTE grant (revoked from every API role below).
+-- Pre-check on prod, read-only (expect 0 0 0; if rows exist the trigger only guards FUTURE writes, nothing fails and nothing is changed):
+--   SELECT (SELECT count(*) FROM job_phases x     JOIN jobs j ON j.id = x.job_id WHERE j.company_id IS DISTINCT FROM x.company_id) AS phases,
+--          (SELECT count(*) FROM job_tasks x      JOIN jobs j ON j.id = x.job_id WHERE j.company_id IS DISTINCT FROM x.company_id) AS tasks,
+--          (SELECT count(*) FROM job_task_links x JOIN jobs j ON j.id = x.job_id WHERE j.company_id IS DISTINCT FROM x.company_id) AS links;
+CREATE OR REPLACE FUNCTION job_schedule_company_guard() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM jobs j WHERE j.id = NEW.job_id AND j.company_id = NEW.company_id) THEN
+    RAISE EXCEPTION '% row must belong to the company of its job', TG_TABLE_NAME USING ERRCODE = 'A2C01';
+  END IF;
+  RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION job_schedule_company_guard() FROM PUBLIC, anon, authenticated, service_role;
+DROP TRIGGER IF EXISTS job_phases_company_guard ON job_phases;
+CREATE TRIGGER job_phases_company_guard BEFORE INSERT OR UPDATE OF job_id, company_id ON job_phases
+  FOR EACH ROW EXECUTE FUNCTION job_schedule_company_guard();
+DROP TRIGGER IF EXISTS job_tasks_company_guard ON job_tasks;
+CREATE TRIGGER job_tasks_company_guard BEFORE INSERT OR UPDATE OF job_id, company_id ON job_tasks
+  FOR EACH ROW EXECUTE FUNCTION job_schedule_company_guard();
+DROP TRIGGER IF EXISTS job_task_links_company_guard ON job_task_links;
+CREATE TRIGGER job_task_links_company_guard BEFORE INSERT OR UPDATE OF job_id, company_id ON job_task_links
+  FOR EACH ROW EXECUTE FUNCTION job_schedule_company_guard();
 
 -- ===== Hierarchy guards (N1): parent in the same job and company, no cycle, depth cap =====
 -- Depth: job_phases is level 1, tasks nest below it, the maximum level is 6, so a chain of tasks is at most 5 deep

@@ -246,6 +246,64 @@ BEGIN
   PERFORM t_expect('client: a session whose identity is a writer assigns even for kind client (the rule is the identity, not the kind)',
     t_msg('postgres', wrt, format('SELECT prepare_schedule_export(%L, %L)', j5, 'client')), 'ok:2');
 END $$;
+
+-- ===== 6b. H1 / M3 (independent review): company scoping and the uid ceiling =====
+-- H1: a row of ANOTHER company that carries this job's id (the a2a_schema trigger now refuses to create one through the API; here it is
+-- planted as the owner with the triggers switched off, which is how a pre-trigger database could look) must not count, get a uid or be counted.
+DO $$
+DECLARE
+  ops uuid := '11111111-1111-1111-1111-111111111111';
+  c1 constant uuid := 'c1000000-0000-0000-0000-000000000001'; c2 constant uuid := 'c2000000-0000-0000-0000-000000000002';
+  ja constant uuid := 'b1000000-0000-0000-0000-0000000000a1'; jb constant uuid := 'b1000000-0000-0000-0000-0000000000a2';
+  res text;
+BEGIN
+  INSERT INTO jobs (id, company_id, job_no, status) VALUES (ja, c1, 'WO-EA1', 'Open'), (jb, c1, 'WO-EA2', 'Open');
+  INSERT INTO job_phases (id, company_id, job_id, sort_order, name) VALUES ('f6000000-0000-0000-0000-0000000000a9', c1, ja, 1, 'own phase');
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES ('f7000000-0000-0000-0000-0000000000a9', c1, ja, 1, 'own task');
+  SET LOCAL session_replication_role = replica;   -- owner only: skips the company guard (and every other trigger) for the plants below
+  INSERT INTO job_phases (id, company_id, job_id, sort_order, name, msp_uid) VALUES ('f6000000-0000-0000-0000-0000000000aa', c2, ja, 2, 'planted phase', 100000000);
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f7000000-0000-0000-0000-0000000000aa', c2, ja, 2, 'planted task', 99999999);
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES ('f7000000-0000-0000-0000-0000000000ab', c2, ja, 3, 'planted null task');
+  INSERT INTO job_phases (id, company_id, job_id, sort_order, name) VALUES ('f6000000-0000-0000-0000-0000000000ab', c2, ja, 3, 'planted null phase');
+  SET LOCAL session_replication_role = origin;
+  PERFORM t_expect('h1: the plants exist (fixture control)', (SELECT count(*)::text FROM job_phases WHERE job_id = ja AND company_id = c2) || (SELECT count(*)::text FROM job_tasks WHERE job_id = ja AND company_id = c2), '22');
+  res := t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', ja));
+  PERFORM t_expect('h1: a planted max uid does not block or shift the export: own rows get 1 and 2 (assigned 2)', res || '|'
+    || (SELECT msp_uid::text FROM job_phases WHERE id = 'f6000000-0000-0000-0000-0000000000a9') || '|' || (SELECT msp_uid::text FROM job_tasks WHERE id = 'f7000000-0000-0000-0000-0000000000a9'), 'ok:2|1|2');
+  PERFORM t_expect('h1: planted rows were not given a uid and kept the ones they had',
+    (SELECT coalesce(msp_uid::text, 'null') FROM job_tasks WHERE id = 'f7000000-0000-0000-0000-0000000000ab') || '/'
+    || (SELECT msp_uid::text FROM job_phases WHERE id = 'f6000000-0000-0000-0000-0000000000aa') || '/'
+    || (SELECT coalesce(msp_uid::text, 'null') FROM job_phases WHERE id = 'f6000000-0000-0000-0000-0000000000ab'), 'null/100000000/null');
+  PERFORM t_expect('h1: the audit counts only the job''s own company rows',
+    (SELECT (metadata ->> 'phases') || '/' || (metadata ->> 'tasks') || '/' || (metadata ->> 'assigned') FROM job_audit_log WHERE job_id = ja AND action_type = 'schedule_exported'), '1/1/2');
+  -- M3: a stored uid above the cap (only possible where the CHECK does not exist yet) is ignored, never added to
+  ALTER TABLE job_tasks DROP CONSTRAINT job_tasks_msp_uid_range;
+  ALTER TABLE job_phases DROP CONSTRAINT job_phases_msp_uid_range;
+  INSERT INTO job_phases (id, company_id, job_id, sort_order, name, msp_uid) VALUES ('f6000000-0000-0000-0000-0000000000b9', c1, jb, 1, 'p', NULL), ('f6000000-0000-0000-0000-0000000000b7', c1, jb, 2, 'huge phase', 2147483646);
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES
+    ('f7000000-0000-0000-0000-0000000000b9', c1, jb, 1, 'huge', 2147483647), ('f7000000-0000-0000-0000-0000000000b8', c1, jb, 2, 'null', NULL);
+  res := t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', jb));
+  PERFORM t_expect('m3: a stored task uid of 2147483647 and phase uid of 2147483646 do not overflow the export: the others get 1 and 2',
+    res || '|' || (SELECT msp_uid::text FROM job_phases WHERE id = 'f6000000-0000-0000-0000-0000000000b9') || '|' || (SELECT msp_uid::text FROM job_tasks WHERE id = 'f7000000-0000-0000-0000-0000000000b8')
+    || '|' || (SELECT msp_uid::text FROM job_tasks WHERE id = 'f7000000-0000-0000-0000-0000000000b9'), 'ok:2|1|2|2147483647');
+END $$;
+
+DO $$
+DECLARE
+  ops uuid := '11111111-1111-1111-1111-111111111111'; c1 constant uuid := 'c1000000-0000-0000-0000-000000000001';
+  jc constant uuid := 'b1000000-0000-0000-0000-0000000000a3'; res text;
+BEGIN
+  -- the space is 1..100000000: with a task on 99999999 and two rows still to number, the export refuses instead of crossing the cap
+  INSERT INTO jobs (id, company_id, job_no, status) VALUES (jc, c1, 'WO-EA3', 'Open');
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f7000000-0000-0000-0000-0000000000c3', c1, jc, 1, 'top', 99999999);
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES ('f7000000-0000-0000-0000-0000000000c4', c1, jc, 2, 'n1'), ('f7000000-0000-0000-0000-0000000000c5', c1, jc, 3, 'n2');
+  res := t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', jc));
+  PERFORM t_expect('m3: uid space exhausted is refused before anything is written', res || '|' || (SELECT count(*)::text FROM job_tasks WHERE job_id = jc AND msp_uid IS NULL)
+    || '|' || (SELECT count(*)::text FROM job_audit_log WHERE job_id = jc), 'uid space exhausted|2|0');
+  DELETE FROM job_tasks WHERE id = 'f7000000-0000-0000-0000-0000000000c5';
+  res := t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', jc));
+  PERFORM t_expect('m3: exactly filling the space to 100000000 is accepted', res || '|' || (SELECT msp_uid::text FROM job_tasks WHERE id = 'f7000000-0000-0000-0000-0000000000c4'), 'ok:1|100000000');
+END $$;
 ROLLBACK;
 
 -- ===== 7. committed marker (idempotent) so 30_rollback can prove audit rows and uids survive the rollback =====

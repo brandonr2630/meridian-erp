@@ -133,8 +133,8 @@
  },
  {
   "name": "msp_uid: task CHECK allows zero",
-  "find": "ALTER TABLE job_tasks  ADD COLUMN IF NOT EXISTS msp_uid integer CHECK (msp_uid IS NULL OR msp_uid > 0);",
-  "replace": "ALTER TABLE job_tasks  ADD COLUMN IF NOT EXISTS msp_uid integer CHECK (msp_uid IS NULL OR msp_uid >= 0);"
+  "find": "ADD CONSTRAINT job_tasks_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid > 0 AND msp_uid <= 100000000)) NOT VALID;",
+  "replace": "ADD CONSTRAINT job_tasks_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid >= 0 AND msp_uid <= 100000000)) NOT VALID;"
  },
  {
   "name": "parent_task_id: FK is ON DELETE CASCADE",
@@ -147,5 +147,65 @@
   "reason": "serialises concurrent hierarchy writes of one job; the single-session test harness cannot interleave two transactions, so removing it is not observable here (covered by review, not by a test)",
   "find": "PERFORM pg_advisory_xact_lock(hashtextextended('job_tasks_parent:' || NEW.job_id::text, 0));",
   "replace": "NULL;"
+ },
+ {
+  "name": "h1: company guard compares nothing (any existing job passes)",
+  "find": "WHERE j.id = NEW.job_id AND j.company_id = NEW.company_id) THEN",
+  "replace": "WHERE j.id = NEW.job_id) THEN"
+ },
+ {
+  "name": "h1: company guard never raises",
+  "find": "IF NOT EXISTS (SELECT 1 FROM jobs j WHERE j.id = NEW.job_id AND j.company_id = NEW.company_id) THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "h1: no company guard on job_task_links",
+  "find": "CREATE TRIGGER job_task_links_company_guard BEFORE INSERT OR UPDATE OF job_id, company_id ON job_task_links",
+  "replace": "CREATE TRIGGER job_task_links_company_guard BEFORE DELETE ON job_task_links"
+ },
+ {
+  "name": "h1: company guard on job_tasks is INSERT only",
+  "find": "CREATE TRIGGER job_tasks_company_guard BEFORE INSERT OR UPDATE OF job_id, company_id ON job_tasks",
+  "replace": "CREATE TRIGGER job_tasks_company_guard BEFORE INSERT ON job_tasks"
+ },
+ {
+  "name": "h1: company guard on job_phases is UPDATE only",
+  "find": "CREATE TRIGGER job_phases_company_guard BEFORE INSERT OR UPDATE OF job_id, company_id ON job_phases",
+  "replace": "CREATE TRIGGER job_phases_company_guard BEFORE UPDATE OF job_id, company_id ON job_phases"
+ },
+ {
+  "name": "h1: company guard function is SECURITY INVOKER (cannot see the other company's job under RLS)",
+  "find": "LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$\nBEGIN\n  IF NOT EXISTS (SELECT 1 FROM jobs j",
+  "replace": "LANGUAGE plpgsql SET search_path = public, pg_temp AS $$\nBEGIN\n  IF NOT EXISTS (SELECT 1 FROM jobs j"
+ },
+ {
+  "name": "h1: guard executable by authenticated",
+  "find": "REVOKE ALL ON FUNCTION job_schedule_company_guard() FROM PUBLIC, anon, authenticated, service_role;",
+  "replace": "REVOKE ALL ON FUNCTION job_schedule_company_guard() FROM PUBLIC, anon, service_role;"
+ },
+ {
+  "name": "m3: task uid cap is the integer maximum",
+  "find": "ADD CONSTRAINT job_tasks_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid > 0 AND msp_uid <= 100000000)) NOT VALID;",
+  "replace": "ADD CONSTRAINT job_tasks_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid > 0 AND msp_uid <= 2147483647)) NOT VALID;"
+ },
+ {
+  "name": "m3: phase uid cap is the integer maximum",
+  "find": "ADD CONSTRAINT job_phases_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid > 0 AND msp_uid <= 100000000)) NOT VALID;",
+  "replace": "ADD CONSTRAINT job_phases_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid > 0 AND msp_uid <= 2147483647)) NOT VALID;"
+ },
+ {
+  "name": "m3: phase uid cap is exclusive (100000000 refused)",
+  "find": "ADD CONSTRAINT job_phases_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid > 0 AND msp_uid <= 100000000)) NOT VALID;",
+  "replace": "ADD CONSTRAINT job_phases_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid > 0 AND msp_uid < 100000000)) NOT VALID;"
+ },
+ {
+  "name": "m3: the legacy inline check is not dropped (two checks, legacy name remains)",
+  "find": "ALTER TABLE job_tasks  DROP CONSTRAINT IF EXISTS job_tasks_msp_uid_range;",
+  "replace": "ALTER TABLE job_tasks  ADD CONSTRAINT job_tasks_msp_uid_check CHECK (msp_uid IS NULL OR msp_uid > 0);"
+ },
+ {
+  "name": "msp_uid: phase CHECK allows zero",
+  "find": "ADD CONSTRAINT job_phases_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid > 0 AND msp_uid <= 100000000)) NOT VALID;",
+  "replace": "ADD CONSTRAINT job_phases_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid >= 0 AND msp_uid <= 100000000)) NOT VALID;"
  }
 ]

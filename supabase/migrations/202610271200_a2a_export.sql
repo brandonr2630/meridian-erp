@@ -18,6 +18,11 @@
 --       would (rightly) refuse. Not callable through the API (no grant to authenticated/anon).
 -- Both are SECURITY DEFINER with a fixed search_path and must be owned by the role that owns lock_job_baseline (they are
 -- created by the same migration role; checked in the tests).
+--
+-- Independent attack review (H1, M3): every row predicate is scoped to the job AND the job's company (rows of another company that carry the
+-- job id are neither counted, nor numbered, nor given a uid; the a2a_schema trigger now stops them being written), and stored uids above
+-- 100000000 (the a2a_schema CHECK range) are ignored when the next uid is chosen; if the space would be crossed the export refuses
+-- ('uid space exhausted') before writing anything.
 
 CREATE OR REPLACE FUNCTION schedule_export_core(p_job_id uuid, p_kind text)
 RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
@@ -32,6 +37,9 @@ DECLARE
   v_assigned integer := 0;
   v_phases   integer;
   v_tasks    integer;
+  v_pnull    integer;
+  v_tnull    integer;
+  k_uid_cap  constant integer := 100000000;   -- msp_uid CHECK range (a2a_schema, M3)
 BEGIN
   IF p_kind IS NULL OR p_kind NOT IN ('staff', 'client') THEN
     RAISE EXCEPTION 'unknown export kind';
@@ -62,28 +70,34 @@ BEGIN
   -- UIDs are created only by a writer (read-only callers export with temporary UIDs on the client side)
   IF v_write AND v_read THEN
     PERFORM pg_advisory_xact_lock(hashtext(p_job_id::text));
-    -- one UID space per job across BOTH tables; UID 0 is never used because max() starts at 0 and we add 1
+    -- one UID space per job across BOTH tables; UID 0 is never used because max() starts at 0 and we add 1.
+    -- H1: only rows of THIS job AND of the job's own company count (a row planted by another company's writer is ignored; the
+    -- a2a_schema trigger now stops such rows from being written at all). M3: a stored uid above the cap (impossible through the
+    -- CHECK, possible only in a database that predates it) is ignored, so v_max + n can never overflow integer.
     SELECT coalesce(max(u), 0) INTO v_max
-      FROM (SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id
+      FROM (SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap
             UNION ALL
-            SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id) s;
+            SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap) s;
+    SELECT count(*) INTO v_pnull FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid IS NULL;
+    SELECT count(*) INTO v_tnull FROM job_tasks  WHERE job_id = p_job_id AND company_id = v_company AND msp_uid IS NULL;
+    IF v_max::bigint + v_pnull + v_tnull > k_uid_cap THEN RAISE EXCEPTION 'uid space exhausted' USING ERRCODE = '22023'; END IF;
 
     WITH n AS (SELECT id, row_number() OVER (ORDER BY sort_order, id) AS rn
-                 FROM job_phases WHERE job_id = p_job_id AND msp_uid IS NULL)
+                 FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid IS NULL)
     UPDATE job_phases p SET msp_uid = v_max + n.rn FROM n WHERE p.id = n.id;
     GET DIAGNOSTICS v_n = ROW_COUNT;
     v_assigned := v_n;
     v_max := v_max + v_n;
 
     WITH n AS (SELECT id, row_number() OVER (ORDER BY sort_order, id) AS rn
-                 FROM job_tasks WHERE job_id = p_job_id AND msp_uid IS NULL)
+                 FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid IS NULL)
     UPDATE job_tasks t SET msp_uid = v_max + n.rn FROM n WHERE t.id = n.id;
     GET DIAGNOSTICS v_n = ROW_COUNT;
     v_assigned := v_assigned + v_n;
   END IF;
 
-  SELECT count(*) INTO v_phases FROM job_phases WHERE job_id = p_job_id;
-  SELECT count(*) INTO v_tasks  FROM job_tasks  WHERE job_id = p_job_id;
+  SELECT count(*) INTO v_phases FROM job_phases WHERE job_id = p_job_id AND company_id = v_company;
+  SELECT count(*) INTO v_tasks  FROM job_tasks  WHERE job_id = p_job_id AND company_id = v_company;
 
   INSERT INTO job_audit_log (job_id, job_no, user_id, username, action_type, description, metadata)
   VALUES (p_job_id, v_job_no, v_uid,

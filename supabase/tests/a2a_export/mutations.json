@@ -1,30 +1,197 @@
 [
- { "name": "lock removed", "find": "PERFORM pg_advisory_xact_lock(hashtext(p_job_id::text));", "replace": "NULL;" },
- { "name": "lock on the wrong key", "find": "PERFORM pg_advisory_xact_lock(hashtext(p_job_id::text));", "replace": "PERFORM pg_advisory_xact_lock(hashtext(p_job_id::text || 'x'));" },
- { "name": "max ignores job_phases", "find": "(SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id\n            UNION ALL\n            SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id) s", "replace": "(SELECT msp_uid AS u FROM job_tasks WHERE job_id = p_job_id) s" },
- { "name": "max ignores job_tasks", "find": "(SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id\n            UNION ALL\n            SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id) s", "replace": "(SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id) s" },
- { "name": "max not job scoped", "find": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id) s", "replace": "SELECT msp_uid FROM job_tasks) s" },
- { "name": "uid 0 can be handed out", "find": "coalesce(max(u), 0)", "replace": "coalesce(max(u), -1)" },
- { "name": "readers assign too", "find": "IF v_write AND v_read THEN", "replace": "IF true THEN" },
- { "name": "assignment needs read only", "find": "IF v_write AND v_read THEN", "replace": "IF v_read THEN" },
- { "name": "phase order ignores sort_order", "find": "row_number() OVER (ORDER BY sort_order, id) AS rn\n                 FROM job_phases", "replace": "row_number() OVER (ORDER BY id) AS rn\n                 FROM job_phases" },
- { "name": "task order descending", "find": "row_number() OVER (ORDER BY sort_order, id) AS rn\n                 FROM job_tasks", "replace": "row_number() OVER (ORDER BY sort_order DESC, id) AS rn\n                 FROM job_tasks" },
- { "name": "tasks reuse the phase uid range", "find": "v_max := v_max + v_n;", "replace": "NULL;" },
- { "name": "existing phase uids reassigned", "find": "FROM job_phases WHERE job_id = p_job_id AND msp_uid IS NULL)", "replace": "FROM job_phases WHERE job_id = p_job_id)" },
- { "name": "existing task uids reassigned", "find": "FROM job_tasks WHERE job_id = p_job_id AND msp_uid IS NULL)", "replace": "FROM job_tasks WHERE job_id = p_job_id)" },
- { "name": "cross-company membership dropped", "find": "FROM jobs j WHERE j.id = p_job_id AND j.company_id IN (SELECT my_company_ids());", "replace": "FROM jobs j WHERE j.id = p_job_id;" },
- { "name": "read permission not required", "find": "IF p_kind = 'staff' AND NOT v_read THEN", "replace": "IF false THEN" },
- { "name": "permission atoms not scoped to the job company", "find": "JOIN erp_user_company_roles ucr ON ucr.user_id = eu.id AND ucr.company_id = v_company", "replace": "JOIN erp_user_company_roles ucr ON ucr.user_id = eu.id" },
- { "name": "inactive users accepted", "find": "WHERE eu.auth_user_id = v_uid AND eu.is_active = true;", "replace": "WHERE eu.auth_user_id = v_uid;" },
- { "name": "unknown kind accepted", "find": "IF p_kind IS NULL OR p_kind NOT IN ('staff', 'client') THEN", "replace": "IF p_kind IS NULL THEN" },
- { "name": "client kind open to the API", "find": "AND coalesce(current_setting('role', true), '') IN ('authenticated', 'anon', 'authenticator') THEN", "replace": "AND false THEN" },
- { "name": "client kind open to authenticator sessions only blocked for anon", "find": "IN ('authenticated', 'anon', 'authenticator') THEN", "replace": "IN ('anon', 'authenticator') THEN" },
- { "name": "audit action_type renamed", "find": "'schedule_exported',\n          'Schedule exported (' || p_kind || ')',", "replace": "'schedule_export',\n          'Schedule exported (' || p_kind || ')'," },
- { "name": "audit assigned always 0", "find": "'assigned', v_assigned));", "replace": "'assigned', 0));" },
- { "name": "audit kind hardcoded", "find": "jsonb_build_object('kind', p_kind,", "replace": "jsonb_build_object('kind', 'staff'," },
- { "name": "audit phase count not job scoped", "find": "FROM job_phases WHERE job_id = p_job_id;", "replace": "FROM job_phases;" },
- { "name": "public function granted to anon", "find": "REVOKE ALL ON FUNCTION prepare_schedule_export(uuid, text) FROM PUBLIC, anon;", "replace": "REVOKE ALL ON FUNCTION prepare_schedule_export(uuid, text) FROM PUBLIC;" },
- { "name": "core executable by authenticated", "find": "FROM PUBLIC, anon, authenticated, service_role;", "replace": "FROM PUBLIC, anon;" },
- { "name": "core loses fixed search_path", "find": "RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$\nDECLARE", "replace": "RETURNS integer LANGUAGE plpgsql SECURITY DEFINER AS $$\nDECLARE" },
- { "name": "public function becomes invoker", "find": "RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$\nBEGIN\n  IF p_kind", "replace": "RETURNS integer LANGUAGE plpgsql SECURITY INVOKER SET search_path = public, pg_temp AS $$\nBEGIN\n  IF p_kind" }
+ {
+  "name": "lock removed",
+  "find": "PERFORM pg_advisory_xact_lock(hashtext(p_job_id::text));",
+  "replace": "NULL;"
+ },
+ {
+  "name": "lock on the wrong key",
+  "find": "PERFORM pg_advisory_xact_lock(hashtext(p_job_id::text));",
+  "replace": "PERFORM pg_advisory_xact_lock(hashtext(p_job_id::text || 'x'));"
+ },
+ {
+  "name": "max ignores job_phases",
+  "find": "(SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap\n            UNION ALL\n            SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap) s",
+  "replace": "(SELECT msp_uid AS u FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap) s"
+ },
+ {
+  "name": "max ignores job_tasks",
+  "find": "(SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap\n            UNION ALL\n            SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap) s",
+  "replace": "(SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap) s"
+ },
+ {
+  "name": "max not job scoped",
+  "find": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap) s",
+  "replace": "SELECT msp_uid FROM job_tasks WHERE company_id = v_company AND msp_uid <= k_uid_cap) s"
+ },
+ {
+  "name": "uid 0 can be handed out",
+  "find": "coalesce(max(u), 0)",
+  "replace": "coalesce(max(u), -1)"
+ },
+ {
+  "name": "readers assign too",
+  "find": "IF v_write AND v_read THEN",
+  "replace": "IF true THEN"
+ },
+ {
+  "name": "assignment needs read only",
+  "find": "IF v_write AND v_read THEN",
+  "replace": "IF v_read THEN"
+ },
+ {
+  "name": "phase order ignores sort_order",
+  "find": "row_number() OVER (ORDER BY sort_order, id) AS rn\n                 FROM job_phases",
+  "replace": "row_number() OVER (ORDER BY id) AS rn\n                 FROM job_phases"
+ },
+ {
+  "name": "task order descending",
+  "find": "row_number() OVER (ORDER BY sort_order, id) AS rn\n                 FROM job_tasks",
+  "replace": "row_number() OVER (ORDER BY sort_order DESC, id) AS rn\n                 FROM job_tasks"
+ },
+ {
+  "name": "tasks reuse the phase uid range",
+  "find": "v_max := v_max + v_n;",
+  "replace": "NULL;"
+ },
+ {
+  "name": "existing phase uids reassigned",
+  "find": "FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid IS NULL)",
+  "replace": "FROM job_phases WHERE job_id = p_job_id AND company_id = v_company)"
+ },
+ {
+  "name": "existing task uids reassigned",
+  "find": "FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid IS NULL)",
+  "replace": "FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company)"
+ },
+ {
+  "name": "cross-company membership dropped",
+  "find": "FROM jobs j WHERE j.id = p_job_id AND j.company_id IN (SELECT my_company_ids());",
+  "replace": "FROM jobs j WHERE j.id = p_job_id;"
+ },
+ {
+  "name": "read permission not required",
+  "find": "IF p_kind = 'staff' AND NOT v_read THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "permission atoms not scoped to the job company",
+  "find": "JOIN erp_user_company_roles ucr ON ucr.user_id = eu.id AND ucr.company_id = v_company",
+  "replace": "JOIN erp_user_company_roles ucr ON ucr.user_id = eu.id"
+ },
+ {
+  "name": "inactive users accepted",
+  "find": "WHERE eu.auth_user_id = v_uid AND eu.is_active = true;",
+  "replace": "WHERE eu.auth_user_id = v_uid;"
+ },
+ {
+  "name": "unknown kind accepted",
+  "find": "IF p_kind IS NULL OR p_kind NOT IN ('staff', 'client') THEN",
+  "replace": "IF p_kind IS NULL THEN"
+ },
+ {
+  "name": "client kind open to the API",
+  "find": "AND coalesce(current_setting('role', true), '') IN ('authenticated', 'anon', 'authenticator') THEN",
+  "replace": "AND false THEN"
+ },
+ {
+  "name": "client kind open to authenticator sessions only blocked for anon",
+  "find": "IN ('authenticated', 'anon', 'authenticator') THEN",
+  "replace": "IN ('anon', 'authenticator') THEN"
+ },
+ {
+  "name": "audit action_type renamed",
+  "find": "'schedule_exported',\n          'Schedule exported (' || p_kind || ')',",
+  "replace": "'schedule_export',\n          'Schedule exported (' || p_kind || ')',"
+ },
+ {
+  "name": "audit assigned always 0",
+  "find": "'assigned', v_assigned));",
+  "replace": "'assigned', 0));"
+ },
+ {
+  "name": "audit kind hardcoded",
+  "find": "jsonb_build_object('kind', p_kind,",
+  "replace": "jsonb_build_object('kind', 'staff',"
+ },
+ {
+  "name": "audit phase count not job scoped",
+  "find": "FROM job_phases WHERE job_id = p_job_id AND company_id = v_company;",
+  "replace": "FROM job_phases WHERE company_id = v_company;"
+ },
+ {
+  "name": "public function granted to anon",
+  "find": "REVOKE ALL ON FUNCTION prepare_schedule_export(uuid, text) FROM PUBLIC, anon;",
+  "replace": "REVOKE ALL ON FUNCTION prepare_schedule_export(uuid, text) FROM PUBLIC;"
+ },
+ {
+  "name": "core executable by authenticated",
+  "find": "FROM PUBLIC, anon, authenticated, service_role;",
+  "replace": "FROM PUBLIC, anon;"
+ },
+ {
+  "name": "core loses fixed search_path",
+  "find": "RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$\nDECLARE",
+  "replace": "RETURNS integer LANGUAGE plpgsql SECURITY DEFINER AS $$\nDECLARE"
+ },
+ {
+  "name": "public function becomes invoker",
+  "find": "RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$\nBEGIN\n  IF p_kind",
+  "replace": "RETURNS integer LANGUAGE plpgsql SECURITY INVOKER SET search_path = public, pg_temp AS $$\nBEGIN\n  IF p_kind"
+ },
+ {
+  "name": "h1: max uid counts rows of other companies (phases)",
+  "find": "FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap\n",
+  "replace": "FROM job_phases WHERE job_id = p_job_id AND msp_uid <= k_uid_cap\n"
+ },
+ {
+  "name": "h1: max uid counts rows of other companies (tasks)",
+  "find": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap) s;",
+  "replace": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND msp_uid <= k_uid_cap) s;"
+ },
+ {
+  "name": "h1: phase numbering touches rows of other companies",
+  "find": "FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid IS NULL)\n    UPDATE job_phases p",
+  "replace": "FROM job_phases WHERE job_id = p_job_id AND msp_uid IS NULL)\n    UPDATE job_phases p"
+ },
+ {
+  "name": "h1: task numbering touches rows of other companies",
+  "find": "FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid IS NULL)\n    UPDATE job_tasks t",
+  "replace": "FROM job_tasks WHERE job_id = p_job_id AND msp_uid IS NULL)\n    UPDATE job_tasks t"
+ },
+ {
+  "name": "h1: audit counts phases of other companies",
+  "find": "SELECT count(*) INTO v_phases FROM job_phases WHERE job_id = p_job_id AND company_id = v_company;",
+  "replace": "SELECT count(*) INTO v_phases FROM job_phases WHERE job_id = p_job_id;"
+ },
+ {
+  "name": "h1: audit counts tasks of other companies",
+  "find": "SELECT count(*) INTO v_tasks  FROM job_tasks  WHERE job_id = p_job_id AND company_id = v_company;",
+  "replace": "SELECT count(*) INTO v_tasks  FROM job_tasks  WHERE job_id = p_job_id;"
+ },
+ {
+  "name": "m3: stored uids above the cap are not ignored (phases)",
+  "find": "FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap\n",
+  "replace": "FROM job_phases WHERE job_id = p_job_id AND company_id = v_company\n"
+ },
+ {
+  "name": "m3: stored uids above the cap are not ignored (tasks)",
+  "find": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap) s;",
+  "replace": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company) s;"
+ },
+ {
+  "name": "m3: exhaustion check removed",
+  "find": "IF v_max::bigint + v_pnull + v_tnull > k_uid_cap THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "m3: exhaustion off by one (refuses a fill to exactly the cap)",
+  "find": "IF v_max::bigint + v_pnull + v_tnull > k_uid_cap THEN",
+  "replace": "IF v_max::bigint + v_pnull + v_tnull >= k_uid_cap THEN"
+ },
+ {
+  "name": "m3: cap is the integer maximum",
+  "find": "k_uid_cap  constant integer := 100000000;",
+  "replace": "k_uid_cap  constant integer := 2147483000;"
+ }
 ]
