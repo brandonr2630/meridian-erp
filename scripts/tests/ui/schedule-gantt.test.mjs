@@ -268,6 +268,27 @@ test("connectors: only critical links by default, every link with showAll; paths
   const only = plain(A.jcGanttLayout({ ...f2, compute: { crit: ["p"] } })).connectors;
   assert.equal(only.length, 0, "a link needs BOTH ends critical to count as critical");
 });
+test("connectors by link type (A2): SS start->start, FF finish->finish, SF start->finish; missing or unknown type is FS", () => {
+  // p: x 56..112 on the row with mid y 42; q: x 336..420 on the row with mid y 70
+  const mk = (type) => ({ tasks: [{ id: "p", task_name: "P", start_date: "2026-10-10", end_date: "2026-10-11" }, { id: "q", task_name: "Q", start_date: "2026-10-20", end_date: "2026-10-22" }], phases: [],
+    links: [{ task_id: "q", predecessor_id: "p", link_type: type }], compute: { crit: ["p", "q"] }, today: TODAY, pxPerDay: 28 });
+  const one = (type) => plain(A.jcGanttLayout(mk(type))).connectors[0];
+  const fs = one("FS"), ss = one("SS"), ff = one("FF"), sf = one("SF");
+  assert.deepEqual([fs.type, fs.d, fs.head], ["FS", "M112 42H118V70H336", "336,70 331,67 331,73"]);
+  assert.deepEqual([ss.type, ss.d, ss.head], ["SS", "M56 42H50V70H336", "336,70 331,67 331,73"]);                         // leaves p's start to the left, arrives at q's start
+  assert.deepEqual([ff.type, ff.d, ff.head], ["FF", "M112 42H426V70H420", "420,70 425,67 425,73"]);                      // arrives at q's finish from the right, head points left
+  assert.deepEqual([sf.type, sf.d, sf.head], ["SF", "M56 42H50V56H426V70H420", "420,70 425,67 425,73"]);                 // would double back: detours through the gap between the rows
+  for (const t of [undefined, null, "", "XX", "fs"]) { const c = one(t); assert.deepEqual([c.type, c.d], ["FS", fs.d]); }
+  // upward arrows: SF from a lower row to an upper one runs straight back (no detour); an FS that would double back detours ABOVE the lower row
+  const upSF = plain(A.jcGanttLayout({ ...mk("SF"), links: [{ task_id: "p", predecessor_id: "q", link_type: "SF" }] })).connectors[0];
+  assert.equal(upSF.d, "M336 70H330V42H112");
+  assert.equal(upSF.head, "112,42 117,39 117,45");
+  const upFS = plain(A.jcGanttLayout({ ...mk("FS"), links: [{ task_id: "p", predecessor_id: "q", link_type: "FS" }] })).connectors[0];
+  assert.equal(upFS.d, "M420 70H426V56H50V42H56");
+  // the same pair with different types draws both; the same pair and type draws once
+  const both = plain(A.jcGanttLayout({ ...mk("FS"), links: [{ task_id: "q", predecessor_id: "p", link_type: "FS" }, { task_id: "q", predecessor_id: "p", link_type: "SS" }, { task_id: "q", predecessor_id: "p", link_type: "SS" }] })).connectors;
+  assert.deepEqual(both.map((c) => c.type), ["FS", "SS"]);
+});
 test("connectors attach at the diamond edge; bad links (duplicate, self, unknown, undated, null) are skipped", () => {
   const f = { tasks: [{ id: "p", task_name: "P", start_date: "2026-10-10", end_date: "2026-10-11" }, { id: "ms", task_name: "M", start_date: "2026-10-20", end_date: "2026-10-20", is_milestone: true },
     { id: "und", task_name: "U" }], phases: [], today: TODAY, pxPerDay: 28,
