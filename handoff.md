@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-27 · Session 73*
+*Last updated: 2026-10-28 · Session 74*
 
 ---
 
@@ -30,7 +30,7 @@
 8. Older: PO module live click-through (S48) and PO list search/pagination (S49); `www.erp` alias/cert (S51); rotate the ERP password; confirm the BMS Bar Stock cost in Job Config; watch for GreenGeeks WAF block recurrence (S47).
 
 **Claude-side, waiting on a go-ahead or a trigger:**
-- **A2a SQL (S73): built and tested on throwaway Postgres on LOCAL branches, NOT merged, NOT pushed, NOT applied.** An independent attack review found a High (cross-company planting); its fixes are mostly done but unverified and paused on `feature/a2a-sql-fixes` (fc67dae). See Session 73 for branches, results, open decisions and the pre-apply checks. Docker is now installed and working.
+- **A2a SQL (S73-S74): built, fixed after two independent attack reviews, all gates green; still on LOCAL branches: NOT pushed, NOT applied to prod.** Continue from `feature/a2a-sql` (c52b655). See Session 74 for what is proven, what the reviews found, the open decisions (uid reuse, M2, E1) and the prod pre-checks.
 - **A2a, JS side DONE and merged (S71)**: link types FS/SS/FF/SF and task hierarchy in `jcSchedCompute` (PRs #175, #176), the MSPDI codec `schedule-msp.js` (#176), the read-only schedule window with Export XML and an import dry run (#177), and (S72) **Gantt arrows by link type** (#180, dormant until the migration adds `link_type`). **A2a still open:** (1) the SQL side, which needs **Docker** (not installed on the machine used in S71; install it first): the A2 migration (`link_type`, `msp_uid`, `parent_task_id` + cycle guard, depth cap), `job_schedule_status` rewritten with the same link-type and hierarchy rules as the JS (the 52+3 shared fixture cases must pass on SQL too: update `scripts/tests/schedule/sql-fixture-runner.mjs`, which does not pass `link_type` or the new `parent` key yet, so the new cases fail loudly against the old SQL), `prepare_schedule_export`, `import_job_schedule` (needs an independent attack review like D0d), all proven on throwaway Postgres with mutation checks and then applied to prod one step at a time; (2) window editing and Apply import once the RPCs exist; (3) audit row per export; (4) Gantt nesting by `parent_task_id` (summary rows, indent, collapse) once that column exists. Then **A2b** (resources, `task_id` on labour and equipment entries, `jcSaveJobData` change) and **A2c** (undo/redo).
 - A2 spec accepted (S71) and **recorded 2026-10-27 (S72, PR #179)**: roadmap row, sequencing steps 2a/2b/2c, decisions 24-25, risks, effort, X1 amendment and rules X24-X30 are in `00-overview.md` / `99-roadmap.md`, and the shared-codec note is at the top of `phase-d-client-portal.md`. Still to settle in the specs when their SQL is written: names of the Phase D agreement tables (X29), and the A2b table names are only reserved (`job_resources`, `job_task_assignments`).
 - Pre-existing, not from S72: `node scripts/verify-spec.mjs phase-a-schedule-v2.md` fails on master ("DROP in up-migration without a -- down section"; the Phase A spec embeds the migration executed in Session 61). Decide whether to fix the spec text or relax the check.
@@ -39,6 +39,48 @@
 - Parked: staging deploy gate (S52, blocked on the Supabase project cap); Supabase Branching `main` record stuck in `MIGRATIONS_FAILED` (S52, not the prod database).
 
 **Gotcha:** Edit/Write are blocked on the base repo's worktrees. Write the file to the scratchpad and `cp` it in. Pull or branch from `origin/master` before reading this file (a stale checkout once stopped at Session 51).
+
+---
+
+## Session 74 - Docker working; A2a SQL fixes finished; second attack review; four more fixes (2026-10-28)
+
+**Nothing from this session is pushed or applied to prod.** Everything is on LOCAL branches in worktrees under `.worktrees/`. Integration branch: `feature/a2a-sql` = c52b655 (contains the S73 leaves, the first review's fixes and this session's round 2).
+
+**Docker:** Docker Desktop 29.9.2 is installed (WSL 2, virtualization had to be enabled in the MSI BIOS). It is a per-user install, so `docker` is NOT on the PATH of Claude Code shells: prepend `C:\Users\User\AppData\Local\Programs\DockerDesktop\resources\bin` to PATH (also needed for `docker-credential-desktop`). From PowerShell use `& "C:\Program Files\Git\bin\bash.exe" supabase/tests/...`. Docker Desktop must be running.
+
+**Done:**
+- Finished the paused `feature/a2a-sql-fixes` work: added the tests that kill the three surviving import mutants (m2 peel decrement, m3 task uid above the cap, l5 phase recovery row) and fast-forwarded `feature/a2a-sql` to it. Mutation runs: schema 39/39, export 39/39, import 127/127.
+- **Second independent attack review** (fresh agent, every finding proven on throwaway Postgres). No High; the cross-company fix (H1, trigger A2C01) held. Findings and what was done (branch `feature/a2a-sql-r2`, now merged into `feature/a2a-sql`):
+  - **M1 fixed:** a writer could store a task end date in year 99999 and make `job_schedule_status` raise "integer out of range" for the whole job (dashboard, nightly snapshot). Dates are now clamped to 2000-01-01..2100-12-31 when loaded. No CHECK constraint was added on purpose (a NOT VALID CHECK would also block updates of any legacy row with an odd date).
+  - **L1 fixed:** a writer could set one `msp_uid` to 100000000 and block import and export for good. When max + n does not fit, import (append, merge) and export now take the first unused numbers (helper `sched_free_uids`, in the schema migration); replace restarts its counter at 0 because it deletes every stored row. Side effect: "uid space exhausted" is now practically unreachable. Two old tests that expected the refusal were rewritten. NOTE: this reuses numbers in that corner case, which interacts with the open uid-reuse decision below.
+  - **L2 fixed:** names made only of braille blank U+2800, combining grapheme joiner, variation selectors, Khmer inherent vowels or other space characters (U+00A0, U+2000-200A, U+3000, ...) are now empty and get "(unnamed)"; those spaces become a plain space inside text; marks inside real text (emoji U+FE0F) are kept.
+  - **L3 fixed:** `jobs_company_change_guard` (SQLSTATE A2C02) refuses to change `jobs.company_id` while the job has phases, tasks or links (otherwise import would be blocked by A2C01 for good).
+- 45 new mutants for these fixes; every run ends with 0 survivors after tests were added for 7 that first survived (they became equivalent while only a cap-level uid was used; fixed with tests that tell the plain path from the gap path). Final totals: schema 54/54, status 24/24, export and import clean.
+- Gates on `feature/a2a-sql` (c52b655): Phase A 10/381/21, schema 139, status 125, export 100, import 578, shared fixture 55/55 on SQL, combined stack + reverse rollbacks twice + re-apply passes. JS suite untouched (273/273 at S72).
+- Added `CLAUDE.md` guidance (commands, schedule section) in the Z: root checkout only (uncommitted there); not part of any PR.
+
+**NOT fixed (reviewer's findings, your call):**
+- **M2 (Medium, pre-existing Phase A design):** `job_schedule_status` is quadratic on long dependency chains (6,000 tasks about 31 s; over the 8 s timeout from about 3,500). Fix: process links in dependency order. Own change, needs its own tests and the shared fixture.
+- **E1 (Medium for audit integrity):** a writer can INSERT `job_audit_log` rows with another user's id and an RPC action type (`schedule_imported`, `baseline_locked`). Proven only on the test stub policy (staff FOR ALL, no user_id check). **Check the live audit policies first** (the D0c audit work may already restrict this). Fix idea: WITH CHECK user_id = auth.uid() and block RPC-only action types from direct insert.
+- Unproven concerns recorded by the reviewer: a C2 writer can set `depends_on` to a C1 task uuid (Phase A column, existence oracle); any read user can append `schedule_exported` rows without limit (log flooding); a possible deadlock (clean 40P01) between a UI parent update and replace; a merge on a 9,990-task chain takes about 5 s (close to the 8 s limit).
+
+**Decisions still open for the owner:**
+1. **Uid reuse (X26):** recommended a per-job high-water mark so a deleted uid is never handed out again. The L1 gap fill and the replace restart now reuse numbers in the corner case; decide whether the high-water mark replaces them.
+2. M2 and E1 as separate follow-ups (recommended), or before the migrations go live.
+3. The S73 list: `file_name` and `based_on` from the JS side, prod pre-checks, push and PRs.
+
+**Prod pre-checks (read-only, still to run before ANY apply):** (a) rows whose `company_id` differs from their job's company in job_phases, job_tasks, job_task_links (expect 0 0 0; query in the a2a_schema migration header); (b) the live `job_audit_log.action_type` CHECK and the live policies on `job_audit_log` (E1); (c) ownership of the new functions equals the `lock_job_baseline` owner; (d) nothing in the app changes `jobs.company_id` of a job that has a schedule (L3); (e) legacy task dates outside 2000-2100 (M1: the clamp only changes what the status function sees). Then apply one migration at a time with simulated-identity verification.
+
+**Gotchas learned:**
+- A mutation-run output filtered with `grep` lost the result once (the final line says "mutation check passed: N/N mutants caught", no "SURVIVED" lines when clean): redirect the full output to a file and read it afterwards.
+- `supabase/tests/a2a_status/20_after.sql` is generated: edit `20_after.template.sql` and run `node supabase/tests/a2a_status/gen-cases.mjs`.
+- Tests that call `t_job(N)` create the job: call it once per N (use a variable) and `t_jid(N)` to look it up. `t_pl(phases, tasks, job)` needs the job as 3rd argument to carry the project uid, otherwise the file imports as foreign.
+- The `d0c_common/mutate.mjs` harness uses the FIRST occurrence of each `find`; a mutant needs a unique pattern. Mutations that only change the cap-level case can become equivalent once there is a gap-fill path.
+- Long `node -e "..."` commands with nested quotes break in Git Bash: write a script to the scratchpad and run it. Node on Windows does not see `/tmp`; use `cygpath -m`.
+- The migrations in the working tree are CRLF (git autocrlf); scripts that edit them must preserve line endings.
+- Stray containers: `docker rm -f` names starting with `d0c-`, `review-`, `a2a-all-`.
+
+**Next:** (1) decide uid reuse; (2) run the read-only prod pre-checks (needs a prod SQL session; give the queries to the owner or run with an approved identity); (3) push the `feature/a2a-sql*` branches or one squashed branch and open PRs (owner approval); (4) apply to prod one migration at a time; (5) JS: send `based_on` and `file_name` and wire Apply; (6) M2 and E1 follow-ups; (7) A2b and A2c.
 
 ---
 
@@ -79,7 +121,7 @@
 - Parallel leaves that each pass alone can still conflict on merge (the depth cap): always run the combined stack (`a2a_all/run.sh`) and every family on the merged branch.
 - Stray containers from killed mutation runs (`d0c-*`, `impdbg`, `dbgpg`) can be removed with `docker rm -f`; `open-webui` is unrelated.
 
-**Next:** (1) resume `feature/a2a-sql-fixes`: re-run every gate, kill the m2, m3 and l5 survivors and re-run the import mutants, merge into `feature/a2a-sql`; (2) re-run the attack review on the fixed import; (3) decide uid reuse; (4) run the prod pre-checks (read-only); (5) push, PR, then apply to prod one migration at a time; (6) JS: add `based_on` and `file_name` to the import call and the Apply path in the schedule window; (7) A2b and A2c after that.
+**Next (superseded by Session 74):** the fixes branch was finished and merged into `feature/a2a-sql` in S74; see Session 74 for the current list.
 
 ---
 
