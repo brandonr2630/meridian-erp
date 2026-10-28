@@ -30,7 +30,7 @@
 8. Older: PO module live click-through (S48) and PO list search/pagination (S49); `www.erp` alias/cert (S51); rotate the ERP password; confirm the BMS Bar Stock cost in Job Config; watch for GreenGeeks WAF block recurrence (S47).
 
 **Claude-side, waiting on a go-ahead or a trigger:**
-- **A2a SQL (S73-S74): built, fixed after two independent attack reviews, uid counter done (X26), all gates green; still on LOCAL branches: NOT pushed, NOT applied to prod.** Continue from `feature/a2a-sql` (bdf0fce). See Session 74 for what is proven, the open items (M2, E1) and the prod pre-checks.
+- **A2a SQL (S73-S74): built, fixed after two independent attack reviews, uid counter done (X26), all gates green. `feature/a2a-sql` (bdf0fce) is pushed to GitHub as a BACKUP ONLY (no PR, nothing merged to master, NOT applied to prod).** The other `feature/a2a-sql-*` branches are local only (already contained in `feature/a2a-sql`). See Session 74 for what is proven, the open items (M2, E1) and the prod pre-checks.
 - **A2a, JS side DONE and merged (S71)**: link types FS/SS/FF/SF and task hierarchy in `jcSchedCompute` (PRs #175, #176), the MSPDI codec `schedule-msp.js` (#176), the read-only schedule window with Export XML and an import dry run (#177), and (S72) **Gantt arrows by link type** (#180, dormant until the migration adds `link_type`). **A2a still open:** (1) the SQL side, which needs **Docker** (not installed on the machine used in S71; install it first): the A2 migration (`link_type`, `msp_uid`, `parent_task_id` + cycle guard, depth cap), `job_schedule_status` rewritten with the same link-type and hierarchy rules as the JS (the 52+3 shared fixture cases must pass on SQL too: update `scripts/tests/schedule/sql-fixture-runner.mjs`, which does not pass `link_type` or the new `parent` key yet, so the new cases fail loudly against the old SQL), `prepare_schedule_export`, `import_job_schedule` (needs an independent attack review like D0d), all proven on throwaway Postgres with mutation checks and then applied to prod one step at a time; (2) window editing and Apply import once the RPCs exist; (3) audit row per export; (4) Gantt nesting by `parent_task_id` (summary rows, indent, collapse) once that column exists. Then **A2b** (resources, `task_id` on labour and equipment entries, `jcSaveJobData` change) and **A2c** (undo/redo).
 - A2 spec accepted (S71) and **recorded 2026-10-27 (S72, PR #179)**: roadmap row, sequencing steps 2a/2b/2c, decisions 24-25, risks, effort, X1 amendment and rules X24-X30 are in `00-overview.md` / `99-roadmap.md`, and the shared-codec note is at the top of `phase-d-client-portal.md`. Still to settle in the specs when their SQL is written: names of the Phase D agreement tables (X29), and the A2b table names are only reserved (`job_resources`, `job_task_assignments`).
 - Pre-existing, not from S72: `node scripts/verify-spec.mjs phase-a-schedule-v2.md` fails on master ("DROP in up-migration without a -- down section"; the Phase A spec embeds the migration executed in Session 61). Decide whether to fix the spec text or relax the check.
@@ -44,7 +44,7 @@
 
 ## Session 74 - Docker working; A2a SQL fixes finished; second attack review; four more fixes (2026-10-28)
 
-**Nothing from this session is pushed or applied to prod.** Everything is on LOCAL branches in worktrees under `.worktrees/`. Integration branch: `feature/a2a-sql` = c52b655 (contains the S73 leaves, the first review's fixes and this session's round 2).
+**Nothing from this session is applied to prod, and nothing is merged to master.** `feature/a2a-sql` (bdf0fce) was pushed to GitHub on 2026-10-28 as a backup only (no PR; the deploy workflow runs only on `master`, so a branch push deploys nothing). All other branches and the worktrees under `.worktrees/` are local. Integration branch: `feature/a2a-sql` = bdf0fce (contains the S73 leaves, the first review's fixes, round 2 and the uid counter).
 
 **Docker:** Docker Desktop 29.9.2 is installed (WSL 2, virtualization had to be enabled in the MSI BIOS). It is a per-user install, so `docker` is NOT on the PATH of Claude Code shells: prepend `C:\Users\User\AppData\Local\Programs\DockerDesktop\resources\bin` to PATH (also needed for `docker-credential-desktop`). From PowerShell use `& "C:\Program Files\Git\bin\bash.exe" supabase/tests/...`. Docker Desktop must be running.
 
@@ -88,7 +88,7 @@
 - The migrations in the working tree are CRLF (git autocrlf); scripts that edit them must preserve line endings.
 - Stray containers: `docker rm -f` names starting with `d0c-`, `review-`, `a2a-all-`.
 
-**Next:** (1) run the read-only prod pre-checks (needs a prod SQL session; give the queries to the owner or run with an approved identity); (2) push the `feature/a2a-sql*` branches or one squashed branch and open PRs (owner approval); (3) apply to prod one migration at a time; (4) JS: send `based_on` and `file_name` and wire Apply; (5) M2 and E1 follow-ups; (6) A2b and A2c.
+**Next:** (1) the owner runs the four read-only prod pre-checks in the Supabase SQL Editor (project "Terran Group ERP") and sends the results (queries were given in chat: cross-company row counts; `job_audit_log` CHECK and policies; owner of `lock_job_baseline`; task dates outside 2000-2100; Claude found no PATCH of `jobs.company_id` in index.html, a narrow search); (2) decide E1 from the real audit policies; (3) open PRs from `feature/a2a-sql` (owner approval); (4) apply to prod one migration at a time with simulated-identity verification; (5) JS: send `based_on` and `file_name` and wire Apply; (6) M2 and E1 follow-ups; (7) A2b and A2c.
 
 ---
 
@@ -121,7 +121,7 @@
 1. Uid reuse: `max+1` can reuse a uid if the highest row was deleted, but X26 says never reused. Recommend a per-job high-water mark (a design change).
 2. The JS side must send `file_name` and `based_on` (= max `updated_at` over the job's phases, tasks and links; required when the job already has rows; a mismatch raises 40001). `toPayload` emits neither. The spec's payload JSON differs from `toPayload` (nested links, key names); `toPayload` wins and the spec text should be amended.
 3. Prod pre-checks before ANY apply: the cross-company row count above; the live `job_audit_log.action_type` CHECK (none in the stubs, live not seen); ownership of the new functions equals the `lock_job_baseline` owner; apply one migration at a time with simulated-identity verification (the D0/Phase A method).
-4. Push the local branches (nothing is on GitHub yet) and open PRs once the fixes are verified.
+4. (Done in part in S74: `feature/a2a-sql` is on GitHub as a backup.) Open PRs once the fixes are verified.
 
 **Gotchas learned:**
 - In Windows PowerShell plain `bash` is WSL's bash (no distro installed): use `& "C:\Program Files\Git\bin\bash.exe" supabase/tests/...` from `Z:\09-DevPro\projects\meridian-erp`. The old `phase_a_sql/run.sh` named in S72 does not exist; the baseline is `bash supabase/tests/d0c_common/run.sh phase_a_sql`.
