@@ -948,4 +948,50 @@ BEGIN
   PERFORM t_expect('m3: exactly filling the space is accepted: the last uid is 100000000', left(res, 3) || '|' || (SELECT msp_uid::text FROM job_phases WHERE job_id = jx), 'ok:|100000000');
 END $$;
 
+-- M2 (peel): a node with SEVERAL predecessors that are all placed in the same round must reach degree 0 in that round. A file with a
+-- diamond (C waits for A and B, D waits for C) is acyclic and must import; a peel that decrements by one per round calls it a cycle.
+DO $$
+DECLARE
+  j uuid := t_job(177); res text;
+BEGIN
+  res := t_imp('authenticated', t_u('ops'), j, 'append', t_pl('[]', jsonb_build_array(
+    t_tk(1, 'A', NULL, NULL, '2026-05-01', '2026-05-02'),
+    t_tk(2, 'B', NULL, NULL, '2026-05-01', '2026-05-02'),
+    t_tk(3, 'C', NULL, NULL, '2026-05-03', '2026-05-04', jsonb_build_array(t_lk(1), t_lk(2))),
+    t_tk(4, 'D', NULL, NULL, '2026-05-05', '2026-05-06', jsonb_build_array(t_lk(3))))));
+  PERFORM t_expect('m2: a diamond (two predecessors placed in the same round) is not a cycle', left(res, 3) || '|' || t_state(j), 'ok:|0/4/3');
+  -- three sources into one node, and a wider second round
+  res := t_imp('authenticated', t_u('ops'), t_job(178), 'append', t_pl('[]', jsonb_build_array(
+    t_tk(1, 'A'), t_tk(2, 'B'), t_tk(3, 'C'),
+    t_tk(4, 'D', NULL, NULL, '2026-05-03', '2026-05-04', jsonb_build_array(t_lk(1), t_lk(2), t_lk(3))),
+    t_tk(5, 'E', NULL, NULL, '2026-05-03', '2026-05-04', jsonb_build_array(t_lk(1), t_lk(2))),
+    t_tk(6, 'F', NULL, NULL, '2026-05-05', '2026-05-06', jsonb_build_array(t_lk(4), t_lk(5))))));
+  PERFORM t_expect('m2: three sources into one node and two nodes into the last are not a cycle', left(res, 3), 'ok:');
+END $$;
+
+-- M3 (task side): a stored TASK uid above the cap, with no oversized phase, must not block the counter either
+DO $$
+DECLARE
+  c1 constant uuid := 'c1000000-0000-0000-0000-000000000001'; j uuid := t_job(179); res text;
+BEGIN
+  ALTER TABLE job_tasks DROP CONSTRAINT IF EXISTS job_tasks_msp_uid_range;
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('fa000000-0000-0000-0000-000000000003', c1, j, 1, 'huge', 2147483647);
+  res := t_imp('authenticated', t_u('ops'), j, 'append', t_pl('[]', jsonb_build_array(t_tk(1, 'A')), j));
+  PERFORM t_expect('m3: a stored task uid of 2147483647 (no oversized phase) is ignored by the counter: the new task gets 1',
+    left(res, 3) || '|' || (SELECT msp_uid::text FROM job_tasks WHERE job_id = j AND task_name = 'A'), 'ok:|1');
+END $$;
+
+-- L5 (phase side): the recovery copy of a replaced phase is the full row, not just id and name
+DO $$
+DECLARE
+  j uuid := t_job(180); rec jsonb;
+BEGIN
+  PERFORM t_expect('l5: setup (phase)', t_res(t_imp('authenticated', t_u('ops'), j, 'append', t_pl(jsonb_build_array(t_ph(7, 'Ph7')), jsonb_build_array(t_tk(8, 'T', 7)), j)), 'created'), '2');
+  PERFORM t_expect('l5: replace (phase)', t_res(t_imp('authenticated', t_u('ops'), j, 'replace', t_pl('[]', jsonb_build_array(t_tk(1, 'N')), j), 'redo'), 'created'), '1');
+  SELECT metadata -> 'recovery' INTO rec FROM job_audit_log WHERE job_id = j AND action_type = 'schedule_imported' AND metadata ->> 'mode' = 'replace';
+  PERFORM t_expect('l5: recovery phase row carries job, company, uid and order, not only id and name',
+    (SELECT (x ->> 'job_id' = j::text)::text || (x ->> 'company_id' IS NOT NULL)::text || (x ->> 'msp_uid' IS NOT NULL)::text || (x ->> 'sort_order' IS NOT NULL)::text || (x ->> 'created_at' IS NOT NULL)::text
+       FROM jsonb_array_elements(rec -> 'phases') x WHERE x ->> 'name' = 'Ph7'), 'truetruetruetruetrue');
+END $$;
+
 ROLLBACK;
