@@ -20,6 +20,7 @@ BEGIN
   PERFORM t_expect('down: job_tasks triggers are the Phase A three again',
     (SELECT string_agg(tgname, ',' ORDER BY tgname) FROM pg_trigger WHERE tgrelid='public.job_tasks'::regclass AND NOT tgisinternal),
     'job_tasks_baseline_guard,job_tasks_set_updated_at,job_tasks_visibility_guard');
+  PERFORM t_expect('down: the free-uid helper and the jobs company guard are gone', (SELECT count(*)::text FROM pg_proc WHERE proname IN ('sched_free_uids', 'jobs_company_change_guard')) || '/' || (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'jobs_company_change_guard'), '0/0');
   PERFORM t_expect('down: job_task_links_no_cycle still guards (Phase A intact)',
     (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'job_task_links_no_cycle'), '1');
   PERFORM t_expect('down: legacy links and tasks survive (3 links, 7 tasks)',

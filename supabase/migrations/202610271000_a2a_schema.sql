@@ -62,6 +62,53 @@ DROP TRIGGER IF EXISTS job_task_links_company_guard ON job_task_links;
 CREATE TRIGGER job_task_links_company_guard BEFORE INSERT OR UPDATE OF job_id, company_id ON job_task_links
   FOR EACH ROW EXECUTE FUNCTION job_schedule_company_guard();
 
+-- ===== L1 (review 2): free uids =====
+-- The uid space of a job is 1..100000000 across phases and tasks. A writer can set one row's msp_uid to 100000000 (inside the CHECK range),
+-- so "max + n" was already over the cap and import and export refused for good. When max + n does not fit, import and export take the
+-- first n UNUSED numbers (gaps) instead. Pure read, invoker, only rows of this job and company. Returns fewer than p_n numbers only when
+-- all 100000000 are taken.
+CREATE OR REPLACE FUNCTION sched_free_uids(p_job_id uuid, p_company uuid, p_n integer) RETURNS integer[]
+LANGUAGE plpgsql STABLE SET search_path = public, pg_temp AS $$
+DECLARE
+  k_cap constant integer := 100000000;
+  v_out integer[] := ARRAY[]::integer[]; r record; v_hi integer; v_want integer;
+BEGIN
+  IF p_n IS NULL OR p_n <= 0 THEN RETURN v_out; END IF;
+  FOR r IN SELECT z.u AS prev, lead(z.u) OVER (ORDER BY z.u) AS nxt
+             FROM (SELECT 0 AS u
+                   UNION SELECT msp_uid FROM job_phases WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap
+                   UNION SELECT msp_uid FROM job_tasks  WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) z
+            ORDER BY z.u LOOP
+    v_want := p_n - cardinality(v_out);
+    EXIT WHEN v_want <= 0;
+    v_hi := coalesce(r.nxt - 1, k_cap);
+    IF v_hi >= r.prev + 1 THEN
+      v_out := v_out || ARRAY(SELECT g FROM generate_series(r.prev + 1, LEAST(v_hi, r.prev + v_want)) g);
+    END IF;
+  END LOOP;
+  RETURN v_out;
+END $$;
+REVOKE ALL ON FUNCTION sched_free_uids(uuid, uuid, integer) FROM PUBLIC, anon, authenticated, service_role;
+
+-- ===== L3 (review 2): a job with schedule rows keeps its company =====
+-- If jobs.company_id changed after the job had a schedule, its rows would belong to the old company and import / export would
+-- refuse for good (A2C01). Refuse the change instead (SQLSTATE A2C02): move the schedule first, or replace it. Definer, fixed search_path,
+-- reads only row existence; trigger functions need no EXECUTE grant.
+CREATE OR REPLACE FUNCTION jobs_company_change_guard() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+BEGIN
+  IF NEW.company_id IS DISTINCT FROM OLD.company_id AND (
+       EXISTS (SELECT 1 FROM job_phases WHERE job_id = OLD.id) OR EXISTS (SELECT 1 FROM job_tasks WHERE job_id = OLD.id)
+       OR EXISTS (SELECT 1 FROM job_task_links WHERE job_id = OLD.id)) THEN
+    RAISE EXCEPTION 'cannot change the company of a job that has a schedule' USING ERRCODE = 'A2C02';
+  END IF;
+  RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION jobs_company_change_guard() FROM PUBLIC, anon, authenticated, service_role;
+DROP TRIGGER IF EXISTS jobs_company_change_guard ON jobs;
+CREATE TRIGGER jobs_company_change_guard BEFORE UPDATE OF company_id ON jobs
+  FOR EACH ROW EXECUTE FUNCTION jobs_company_change_guard();
+
 -- ===== Hierarchy guards (N1): parent in the same job and company, no cycle, depth cap =====
 -- Depth: job_phases is level 1, tasks nest below it, the maximum level is 6, so a chain of tasks is at most 5 deep
 -- (a root task is chain position 1). On re-parenting the deepest descendant of the moved subtree is checked too.

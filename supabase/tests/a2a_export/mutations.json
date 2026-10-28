@@ -193,5 +193,25 @@
   "name": "m3: cap is the integer maximum",
   "find": "k_uid_cap  constant integer := 100000000;",
   "replace": "k_uid_cap  constant integer := 2147483000;"
+ },
+ {
+  "name": "l1: export never takes free numbers",
+  "find": "IF v_max::bigint + v_pnull + v_tnull > k_uid_cap THEN\n      v_free :=",
+  "replace": "IF false THEN\n      v_free :="
+ },
+ {
+  "name": "l1: phases take the tasks' slice of the free numbers",
+  "find": "ELSE v_free[n.rn] END FROM n WHERE p.id = n.id",
+  "replace": "ELSE v_free[v_pnull + n.rn] END FROM n WHERE p.id = n.id"
+ },
+ {
+  "name": "l1: tasks reuse the phases' free numbers",
+  "find": "ELSE v_free[v_pnull + n.rn] END FROM n WHERE t.id = n.id",
+  "replace": "ELSE v_free[n.rn] END FROM n WHERE t.id = n.id"
+ },
+ {
+  "name": "l1: free numbers are asked for one row fewer",
+  "find": "v_free := sched_free_uids(p_job_id, v_company, v_pnull + v_tnull);",
+  "replace": "v_free := sched_free_uids(p_job_id, v_company, v_pnull + v_tnull - 1);"
  }
 ]

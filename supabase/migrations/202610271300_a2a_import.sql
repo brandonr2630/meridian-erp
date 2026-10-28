@@ -30,11 +30,17 @@
 -- Strip control characters, line breaks become spaces, bidi/zero-width controls removed, runs of spaces collapsed, trimmed.
 CREATE OR REPLACE FUNCTION import_sched_clean(p_s text) RETURNS text
 LANGUAGE sql IMMUTABLE SET search_path = public, pg_temp AS $$
-  SELECT btrim(regexp_replace(
-           regexp_replace(
-             regexp_replace(p_s, '[\t\n\r\f\v]+', ' ', 'g'),
-             '[\u0001-\u001f\u007f-\u009f\u00ad\u061c\u115f\u1160\u180e\u200b-\u200f\u2028-\u202e\u2060-\u206f\u3164\ufeff\uffa0\ufff9-\ufffb\U000e0000-\U000e007f]', '', 'g'),
-           ' {2,}', ' ', 'g'))
+  -- L2 (review 2): other space characters (no-break, en/em/thin..., ideographic) become a plain space, and a name made only of invisible
+  -- marks and spaces (braille blank U+2800, combining grapheme joiner, variation selectors, Khmer inherent vowels) becomes empty, so the
+  -- caller names it '(unnamed)'. The marks are kept inside real text (emoji need U+FE0F).
+  SELECT CASE WHEN q.s ~ '^[ \u034f\u17b4\u17b5\u2800\ufe00-\ufe0f]*$' THEN '' ELSE q.s END
+    FROM (SELECT btrim(regexp_replace(
+                   regexp_replace(
+                     regexp_replace(
+                       regexp_replace(p_s, '[\t\n\r\f\v]+', ' ', 'g'),
+                       '[\u0001-\u001f\u007f-\u009f\u00ad\u061c\u115f\u1160\u180e\u200b-\u200f\u2028-\u202e\u2060-\u206f\u3164\ufeff\uffa0\ufff9-\ufffb\U000e0000-\U000e007f]', '', 'g'),
+                     '[\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000]', ' ', 'g'),
+                   ' {2,}', ' ', 'g')) AS s) q
 $$;
 
 CREATE OR REPLACE FUNCTION import_sched_str(o jsonb, k text, w text, p_max integer, p_req boolean DEFAULT false) RETURNS text
@@ -138,7 +144,7 @@ DECLARE
   n_trunc integer := 0; n_defaulted integer := 0; n_bl_partial integer := 0; n_bl_ignored integer := 0; n_kind integer := 0; n_res integer := 0;
   n_links integer := 0; n_total_links integer := 0;
   v_cur timestamptz; v_ex_p integer := 0; v_ex_t integer := 0; v_matched integer := 0;
-  v_base integer; v_new_p integer; v_new_t integer;
+  v_base integer; v_new_p integer; v_new_t integer; v_free integer[];
   v_created integer := 0; v_updated integer := 0; v_kept integer := 0; v_skipped integer := 0; n integer;
   v_has_bl boolean; v_locked boolean := false; v_bl_ok boolean := false; v_nb integer := 0;
   v_recovery jsonb := NULL; v_del_p integer := 0; v_del_t integer := 0; v_del_l integer := 0; v_links_written integer := 0;
@@ -446,9 +452,18 @@ BEGIN
                                               UNION ALL SELECT max(msp_uid) FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap) s;
   SELECT count(*) INTO v_new_p FROM pg_temp.imp_p WHERE NOT matched;
   SELECT count(*) INTO v_new_t FROM pg_temp.imp_t WHERE NOT matched;
-  IF v_base::bigint + v_new_p + v_new_t > k_uid_cap THEN RAISE EXCEPTION 'uid space exhausted' USING ERRCODE = '22023'; END IF;
-  UPDATE pg_temp.imp_p ip SET new_uid = v_base + s.rn FROM (SELECT uid, row_number() OVER (ORDER BY idx) AS rn FROM pg_temp.imp_p WHERE NOT matched) s WHERE s.uid = ip.uid;
-  UPDATE pg_temp.imp_t it SET new_uid = v_base + v_new_p + s.rn FROM (SELECT uid, row_number() OVER (ORDER BY idx) AS rn FROM pg_temp.imp_t WHERE NOT matched) s WHERE s.uid = it.uid;
+  -- L1 (review 2): max + n not fitting must not lock the job for good (a writer can set one msp_uid to the cap). Replace deletes every stored
+  -- row, so its counter restarts at 0; append and merge take the first unused numbers (gaps).
+  IF v_base::bigint + v_new_p + v_new_t > k_uid_cap AND p_mode = 'replace' THEN v_base := 0; END IF;
+  IF v_base::bigint + v_new_p + v_new_t > k_uid_cap THEN
+    v_free := sched_free_uids(p_job_id, v_company, v_new_p + v_new_t);
+    IF coalesce(cardinality(v_free), 0) < v_new_p + v_new_t THEN RAISE EXCEPTION 'uid space exhausted' USING ERRCODE = '22023'; END IF;
+    UPDATE pg_temp.imp_p ip SET new_uid = v_free[s.rn] FROM (SELECT uid, row_number() OVER (ORDER BY idx) AS rn FROM pg_temp.imp_p WHERE NOT matched) s WHERE s.uid = ip.uid;
+    UPDATE pg_temp.imp_t it SET new_uid = v_free[v_new_p + s.rn] FROM (SELECT uid, row_number() OVER (ORDER BY idx) AS rn FROM pg_temp.imp_t WHERE NOT matched) s WHERE s.uid = it.uid;
+  ELSE
+    UPDATE pg_temp.imp_p ip SET new_uid = v_base + s.rn FROM (SELECT uid, row_number() OVER (ORDER BY idx) AS rn FROM pg_temp.imp_p WHERE NOT matched) s WHERE s.uid = ip.uid;
+    UPDATE pg_temp.imp_t it SET new_uid = v_base + v_new_p + s.rn FROM (SELECT uid, row_number() OVER (ORDER BY idx) AS rn FROM pg_temp.imp_t WHERE NOT matched) s WHERE s.uid = it.uid;
+  END IF;
 
   -- ---- 6. baseline decision (Baseline on import): approver, >= 1 complete baseline, and no baseline locked yet unless replacing
   SELECT EXISTS (SELECT 1 FROM pg_temp.imp_t WHERE bstart IS NOT NULL AND bend IS NOT NULL) INTO v_has_bl;

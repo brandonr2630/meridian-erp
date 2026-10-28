@@ -293,16 +293,58 @@ DECLARE
   ops uuid := '11111111-1111-1111-1111-111111111111'; c1 constant uuid := 'c1000000-0000-0000-0000-000000000001';
   jc constant uuid := 'b1000000-0000-0000-0000-0000000000a3'; res text;
 BEGIN
-  -- the space is 1..100000000: with a task on 99999999 and two rows still to number, the export refuses instead of crossing the cap
+  -- the space is 1..100000000: with a task on 99999999 and two rows still to number, max + n does not fit, so the export takes the first unused numbers (gaps)
   INSERT INTO jobs (id, company_id, job_no, status) VALUES (jc, c1, 'WO-EA3', 'Open');
   INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f7000000-0000-0000-0000-0000000000c3', c1, jc, 1, 'top', 99999999);
   INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES ('f7000000-0000-0000-0000-0000000000c4', c1, jc, 2, 'n1'), ('f7000000-0000-0000-0000-0000000000c5', c1, jc, 3, 'n2');
   res := t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', jc));
-  PERFORM t_expect('m3: uid space exhausted is refused before anything is written', res || '|' || (SELECT count(*)::text FROM job_tasks WHERE job_id = jc AND msp_uid IS NULL)
-    || '|' || (SELECT count(*)::text FROM job_audit_log WHERE job_id = jc), 'uid space exhausted|2|0');
-  DELETE FROM job_tasks WHERE id = 'f7000000-0000-0000-0000-0000000000c5';
-  res := t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', jc));
-  PERFORM t_expect('m3: exactly filling the space to 100000000 is accepted', res || '|' || (SELECT msp_uid::text FROM job_tasks WHERE id = 'f7000000-0000-0000-0000-0000000000c4'), 'ok:1|100000000');
+  PERFORM t_expect('l1: max + n past the cap takes the first unused numbers instead of refusing', res || '|' || (SELECT count(*)::text FROM job_tasks WHERE job_id = jc AND msp_uid IS NULL)
+    || '|' || (SELECT string_agg(msp_uid::text, ',' ORDER BY msp_uid) FROM job_tasks WHERE job_id = jc) || '|' || (SELECT count(*)::text FROM job_audit_log WHERE job_id = jc), 'ok:2|0|1,2,99999999|1');
+  -- exactly filling the space is still the plain max + n path
+  INSERT INTO jobs (id, company_id, job_no, status) VALUES ('b1000000-0000-0000-0000-0000000000a4', c1, 'WO-EA4', 'Open');
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f7000000-0000-0000-0000-0000000000d1', c1, 'b1000000-0000-0000-0000-0000000000a4', 1, 'top', 99999999);
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES ('f7000000-0000-0000-0000-0000000000d2', c1, 'b1000000-0000-0000-0000-0000000000a4', 2, 'n1');
+  res := t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', 'b1000000-0000-0000-0000-0000000000a4'));
+  PERFORM t_expect('m3: exactly filling the space to 100000000 is accepted', res || '|' || (SELECT msp_uid::text FROM job_tasks WHERE id = 'f7000000-0000-0000-0000-0000000000d2'), 'ok:1|100000000');
+  -- L1 as the reviewer found it: one row planted at the cap, three rows still to number; used numbers 1, 2 and 4 are skipped
+  INSERT INTO jobs (id, company_id, job_no, status) VALUES ('b1000000-0000-0000-0000-0000000000a5', c1, 'WO-EA5', 'Open');
+  INSERT INTO job_phases (id, company_id, job_id, sort_order, name, msp_uid) VALUES ('f6000000-0000-0000-0000-0000000000d3', c1, 'b1000000-0000-0000-0000-0000000000a5', 1, 'ph', 2), ('f6000000-0000-0000-0000-0000000000d4', c1, 'b1000000-0000-0000-0000-0000000000a5', 2, 'ph2', NULL);
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES
+    ('f7000000-0000-0000-0000-0000000000d5', c1, 'b1000000-0000-0000-0000-0000000000a5', 1, 'cap', 100000000), ('f7000000-0000-0000-0000-0000000000d6', c1, 'b1000000-0000-0000-0000-0000000000a5', 2, 'one', 1),
+    ('f7000000-0000-0000-0000-0000000000d7', c1, 'b1000000-0000-0000-0000-0000000000a5', 3, 'four', 4), ('f7000000-0000-0000-0000-0000000000d8', c1, 'b1000000-0000-0000-0000-0000000000a5', 4, 'n1', NULL),
+    ('f7000000-0000-0000-0000-0000000000d9', c1, 'b1000000-0000-0000-0000-0000000000a5', 5, 'n2', NULL);
+  res := t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', 'b1000000-0000-0000-0000-0000000000a5'));
+  PERFORM t_expect('l1: a writer-planted uid at the cap does not block the export; free numbers skip the used ones (phase gets 3, tasks 5 and 6)',
+    res || '|' || (SELECT msp_uid::text FROM job_phases WHERE id = 'f6000000-0000-0000-0000-0000000000d4') || '|' || (SELECT string_agg(task_name || '=' || msp_uid::text, ',' ORDER BY sort_order) FROM job_tasks WHERE job_id = 'b1000000-0000-0000-0000-0000000000a5'),
+    'ok:3|3|cap=100000000,one=1,four=4,n1=5,n2=6');
+END $$;
+-- H1 / M3 again, now that max + n past the cap takes free numbers instead of refusing: the numbers must still come from the plain
+-- max + n path whenever it fits, so a planted foreign-company uid or a stored uid above the cap must not be counted into the maximum.
+DO $$
+DECLARE
+  ops uuid := '11111111-1111-1111-1111-111111111111';
+  c1 constant uuid := 'c1000000-0000-0000-0000-000000000001'; c2 constant uuid := 'c2000000-0000-0000-0000-000000000002';
+  jh constant uuid := 'b1000000-0000-0000-0000-0000000000a6'; jm constant uuid := 'b1000000-0000-0000-0000-0000000000a7'; res text;
+BEGIN
+  INSERT INTO jobs (id, company_id, job_no, status) VALUES (jh, c1, 'WO-EA6', 'Open'), (jm, c1, 'WO-EA7', 'Open');
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f7000000-0000-0000-0000-0000000000e1', c1, jh, 1, 'own', 5);
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES ('f7000000-0000-0000-0000-0000000000e2', c1, jh, 2, 'n1');
+  SET LOCAL session_replication_role = replica;
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f7000000-0000-0000-0000-0000000000e3', c2, jh, 3, 'foreign task', 50);
+  INSERT INTO job_phases (id, company_id, job_id, sort_order, name, msp_uid) VALUES ('f6000000-0000-0000-0000-0000000000e1', c2, jh, 1, 'foreign phase', 60);
+  SET LOCAL session_replication_role = origin;
+  res := t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', jh));
+  PERFORM t_expect('h1: foreign-company uids 50 (task) and 60 (phase) do not move the numbering: the next number after own 5 is 6',
+    res || '|' || (SELECT msp_uid::text FROM job_tasks WHERE id = 'f7000000-0000-0000-0000-0000000000e2'), 'ok:1|6');
+
+  ALTER TABLE job_tasks DROP CONSTRAINT IF EXISTS job_tasks_msp_uid_range;
+  ALTER TABLE job_phases DROP CONSTRAINT IF EXISTS job_phases_msp_uid_range;
+  INSERT INTO job_phases (id, company_id, job_id, sort_order, name, msp_uid) VALUES ('f6000000-0000-0000-0000-0000000000e2', c1, jm, 1, 'huge phase', 2147483646);
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f7000000-0000-0000-0000-0000000000e4', c1, jm, 1, 'five', 5);
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES ('f7000000-0000-0000-0000-0000000000e5', c1, jm, 2, 'n1'), ('f7000000-0000-0000-0000-0000000000e6', c1, jm, 3, 'n2');
+  res := t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', jm));
+  PERFORM t_expect('m3: a stored phase uid above the cap is ignored: the null tasks continue after 5 (6 and 7), not in the gaps (1 and 2)',
+    res || '|' || (SELECT string_agg(task_name || '=' || msp_uid::text, ',' ORDER BY sort_order) FROM job_tasks WHERE job_id = jm), 'ok:2|five=5,n1=6,n2=7');
 END $$;
 ROLLBACK;
 

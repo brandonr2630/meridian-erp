@@ -372,6 +372,31 @@ BEGIN
     (SELECT (d LIKE '%''FS''%' AND d LIKE '%''SS''%' AND d LIKE '%''FF''%' AND d LIKE '%''SF''%' AND d NOT LIKE '%''ZZ''%')::text FROM (SELECT pg_get_constraintdef(oid) AS d FROM pg_constraint WHERE conname = cn) x), 'true');
   EXECUTE format('ALTER TABLE job_task_links DROP CONSTRAINT %I', cn);
 END $$;
+-- ===== (5) M1 (review 2): absurd dates a writer can store must not make the status function raise =====
+DO $$
+DECLARE
+  c1 constant uuid := 'c1000000-0000-0000-0000-000000000001'; j constant uuid := 'b1000000-0000-0000-0000-0000000e9998'; r text;
+BEGIN
+  INSERT INTO jobs (id, company_id, job_no, status) VALUES (j, c1, 'WO-S9998', 'In Progress');
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, start_date, end_date, progress) VALUES
+    ('f1000000-0000-0000-0000-0000000e9981', c1, j, 1, 'far end', '2026-01-01', '99999-12-31', 0),
+    ('f1000000-0000-0000-0000-0000000e9982', c1, j, 2, 'far both', '99998-01-01', '99999-12-31', 50),
+    ('f1000000-0000-0000-0000-0000000e9983', c1, j, 3, 'ancient', '0100-01-01', '2026-02-01', 10),
+    ('f1000000-0000-0000-0000-0000000e9984', c1, j, 4, 'done far', '2026-01-01', '99999-12-31', 100);
+  BEGIN
+    SELECT count(*)::text || '|' || (min(forecast_end) IS NOT NULL)::text INTO r FROM job_schedule_status(j, '2026-03-02');
+  EXCEPTION WHEN OTHERS THEN r := 'raised: ' || SQLERRM;
+  END;
+  PERFORM t_expect('m1: dates in year 99999 and year 100 do not make job_schedule_status raise and still give a forecast', r, '1|true');
+  DELETE FROM job_tasks WHERE job_id = j AND task_name IN ('far both', 'done far'); UPDATE job_tasks SET end_date = '2026-06-30' WHERE job_id = j AND task_name = 'far end';
+  BEGIN SELECT count(*)::text INTO r FROM job_schedule_status(j, '2026-03-02'); EXCEPTION WHEN OTHERS THEN r := 'raised: ' || SQLERRM; END;
+  PERFORM t_expect('m1: and still answers after the far dates are edited back', r, '1');
+  -- a start date far in the past is clamped too: the forecast of a lone ancient task stays inside the clamp range
+  DELETE FROM job_tasks WHERE job_id = j AND task_name = 'far end';
+  SELECT (min(forecast_end) >= DATE '2000-01-01')::text INTO r FROM job_schedule_status(j, '2026-03-02');
+  PERFORM t_expect('m1: a lone task starting in year 100 forecasts inside the clamp range', r, 'true');
+END $$;
+
 DO $$
 BEGIN
   PERFORM t_expect('reference for the unknown-type cases: the same link as FS', pg_temp.a2run($j${"today":"2026-03-02","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"A","sort_order":10,"start_date":"2026-03-09","end_date":"2026-03-13","progress":0,"is_milestone":false,"weight":null,"baseline_start":null,"baseline_end":null},{"key":"B","sort_order":20,"start_date":"2026-03-09","end_date":"2026-03-14","progress":0,"is_milestone":false,"weight":null,"baseline_start":null,"baseline_end":null}],"links":[{"task":"B","pred":"A","lag":2,"type":"FS"}]}$j$::jsonb), '1:On track|2026-03-15|null');

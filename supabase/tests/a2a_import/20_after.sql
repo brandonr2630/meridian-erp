@@ -930,7 +930,7 @@ END $$;
 -- M3: stored uids above the cap (a database that predates the CHECK) never overflow the counter; the space is 1..100000000
 DO $$
 DECLARE
-  c1 constant uuid := 'c1000000-0000-0000-0000-000000000001'; j uuid := t_job(175); jx uuid := t_job(176); res text; p jsonb;
+  c1 constant uuid := 'c1000000-0000-0000-0000-000000000001'; j uuid := t_job(175); jx uuid := t_job(176); j2 uuid := t_job(181); res text; p jsonb;
 BEGIN
   ALTER TABLE job_tasks DROP CONSTRAINT job_tasks_msp_uid_range;   -- simulate the old database (rolled back with the test transaction)
   ALTER TABLE job_phases DROP CONSTRAINT job_phases_msp_uid_range;
@@ -940,12 +940,15 @@ BEGIN
   PERFORM t_expect('m3: stored uids of 2147483647 (task) and 2147483646 (phase) do not block or overflow the import: new rows get 1 and 2',
     left(res, 3) || '|' || (SELECT string_agg(msp_uid::text, ',' ORDER BY msp_uid) FROM (SELECT msp_uid FROM job_phases WHERE job_id = j AND name <> 'hugep' UNION ALL SELECT msp_uid FROM job_tasks WHERE job_id = j AND task_name <> 'huge') s), 'ok:|1,2');
   PERFORM t_expect('m3: the huge rows are untouched', (SELECT msp_uid::text FROM job_tasks WHERE id = 'fa000000-0000-0000-0000-000000000001') || '/' || (SELECT msp_uid::text FROM job_phases WHERE name = 'hugep'), '2147483647/2147483646');
-  -- the space is 1..100000000: 99999999 stored + 2 new rows is refused, + 1 new row fills it exactly
+  -- the space is 1..100000000: + 1 new row fills it exactly (plain max + n); + 2 new rows no longer fit past the top, so (L1) they take unused numbers
   INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('fa000000-0000-0000-0000-000000000002', c1, jx, 1, 'top', 99999999);
-  p := t_pl(jsonb_build_array(t_ph(1, 'P')), jsonb_build_array(t_tk(2, 'A', 1)), jx);
-  PERFORM t_expect('m3: a payload needing uids past 100000000 is refused before any write', t_imp('authenticated', t_u('ops'), jx, 'append', p) || '|' || t_state(jx), 'uid space exhausted|0/1/0');
   res := t_imp('authenticated', t_u('ops'), jx, 'append', t_pl(jsonb_build_array(t_ph(1, 'P')), '[]', jx));
   PERFORM t_expect('m3: exactly filling the space is accepted: the last uid is 100000000', left(res, 3) || '|' || (SELECT msp_uid::text FROM job_phases WHERE job_id = jx), 'ok:|100000000');
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('fa000000-0000-0000-0000-000000000004', c1, j2, 1, 'top', 99999999);
+  res := t_imp('authenticated', t_u('ops'), j2, 'append', t_pl(jsonb_build_array(t_ph(1, 'P')), jsonb_build_array(t_tk(2, 'A', 1)), j2));
+  PERFORM t_expect('l1: a payload needing uids past 100000000 takes the first unused numbers (phase 1, task 2) instead of refusing',
+    left(res, 3) || '|' || (SELECT msp_uid::text FROM job_phases WHERE job_id = j2) || '|' || (SELECT msp_uid::text FROM job_tasks WHERE job_id = j2 AND task_name = 'A') || '|' || t_state(j2),
+    'ok:|1|2|1/2/0');
 END $$;
 
 -- M2 (peel): a node with SEVERAL predecessors that are all placed in the same round must reach degree 0 in that round. A file with a
@@ -992,6 +995,82 @@ BEGIN
   PERFORM t_expect('l5: recovery phase row carries job, company, uid and order, not only id and name',
     (SELECT (x ->> 'job_id' = j::text)::text || (x ->> 'company_id' IS NOT NULL)::text || (x ->> 'msp_uid' IS NOT NULL)::text || (x ->> 'sort_order' IS NOT NULL)::text || (x ->> 'created_at' IS NOT NULL)::text
        FROM jsonb_array_elements(rec -> 'phases') x WHERE x ->> 'name' = 'Ph7'), 'truetruetruetruetrue');
+END $$;
+
+-- L1 (review 2): a writer sets ONE msp_uid to the cap; the next import must still work, and used numbers are skipped
+DO $$
+DECLARE
+  c1 constant uuid := 'c1000000-0000-0000-0000-000000000001'; j uuid := t_job(182); jr uuid := t_job(183); res text;
+BEGIN
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES
+    ('fa000000-0000-0000-0000-000000000011', c1, j, 1, 'cap', 100000000), ('fa000000-0000-0000-0000-000000000012', c1, j, 2, 'one', 1), ('fa000000-0000-0000-0000-000000000013', c1, j, 3, 'four', 4);
+  res := t_imp('authenticated', t_u('wrt'), j, 'append', t_pl('[]', jsonb_build_array(t_tk(1, 'X'), t_tk(2, 'Y'), t_tk(3, 'Z')), j));
+  PERFORM t_expect('l1: a task planted at the cap does not block a writer''s append; new rows take 2, 3 and 5 (1 and 4 are used)',
+    left(res, 3) || '|' || (SELECT string_agg(task_name || '=' || msp_uid::text, ',' ORDER BY msp_uid) FROM job_tasks WHERE job_id = j), 'ok:|one=1,X=2,Y=3,four=4,Z=5,cap=100000000');
+  -- replace: every stored row is deleted, so the planted uid cannot block the approver's recovery; the new rows start at 1
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('fa000000-0000-0000-0000-000000000014', c1, jr, 1, 'cap', 100000000);
+  res := t_imp('authenticated', t_u('ops'), jr, 'replace', t_pl('[]', jsonb_build_array(t_tk(1, 'A'), t_tk(2, 'B')), jr), 'fix the planted uid');
+  PERFORM t_expect('l1: replace over a task planted at the cap works and numbers the new rows 1 and 2',
+    left(res, 3) || '|' || (SELECT string_agg(task_name || '=' || msp_uid::text, ',' ORDER BY msp_uid) FROM job_tasks WHERE job_id = jr), 'ok:|A=1,B=2');
+END $$;
+
+-- L2 (review 2): a name made only of invisible marks and spaces is empty; other space characters become a plain space; real text is intact
+DO $$
+DECLARE res text;
+BEGIN
+  PERFORM t_expect('l2: braille blank U+2800 alone is empty', import_sched_clean(chr(10240)), '');
+  PERFORM t_expect('l2: ideographic space U+3000 alone is empty', import_sched_clean(chr(12288)), '');
+  PERFORM t_expect('l2: no-break space and em space alone are empty', import_sched_clean(chr(160) || chr(8195)), '');
+  PERFORM t_expect('l2: combining grapheme joiner U+034F alone is empty', import_sched_clean(chr(847)), '');
+  PERFORM t_expect('l2: variation selector U+FE0F alone is empty', import_sched_clean(chr(65039)), '');
+  PERFORM t_expect('l2: Khmer inherent vowel U+17B4 alone is empty', import_sched_clean(chr(6068)), '');
+  PERFORM t_expect('l2: hair space U+200A alone is empty', import_sched_clean(chr(8202)), '');
+  PERFORM t_expect('l2: a mix of blank marks and spaces is empty', import_sched_clean(' ' || chr(10240) || chr(12288) || chr(847) || chr(65039) || ' '), '');
+  PERFORM t_expect('l2: no-break and ideographic spaces between words become one plain space', import_sched_clean('Pump' || chr(160) || chr(12288) || 'repair'), 'Pump repair');
+  PERFORM t_expect('l2: a variation selector next to real text is kept (emoji)', import_sched_clean('ok' || chr(10084) || chr(65039)), 'ok' || chr(10084) || chr(65039));
+  PERFORM t_expect('l2: a mark inside real text is kept', import_sched_clean('a' || chr(10240) || 'b'), 'a' || chr(10240) || 'b');
+  res := t_imp('authenticated', t_u('ops'), t_job(184), 'append', t_pl('[]', jsonb_build_array(t_tk(1, chr(10240) || chr(12288)))));
+  PERFORM t_expect('l2: through the RPC: a blank-looking task name is stored as (unnamed)', left(res, 3) || (SELECT task_name FROM job_tasks WHERE job_id = t_jid(184)), 'ok:(unnamed)');
+END $$;
+
+-- L3 (review 2): a job that has schedule rows keeps its company; a job without any can still move
+DO $$
+DECLARE
+  c2 constant uuid := 'c2000000-0000-0000-0000-000000000002'; j uuid := t_job(185); jn uuid := t_job(186); r text;
+BEGIN
+  PERFORM t_expect('l3: setup', t_res(t_imp('authenticated', t_u('ops'), j, 'append', t_pl('[]', jsonb_build_array(t_tk(1, 'A')), j)), 'created'), '1');
+  BEGIN UPDATE jobs SET company_id = c2 WHERE id = j; r := 'changed'; EXCEPTION WHEN SQLSTATE 'A2C02' THEN r := 'A2C02'; END;
+  PERFORM t_expect('l3: changing the company of a job that has tasks is refused', r || '|' || (SELECT company_id::text FROM jobs WHERE id = j), 'A2C02|c1000000-0000-0000-0000-000000000001');
+  BEGIN UPDATE jobs SET job_no = job_no || 'x' WHERE id = j; r := 'ok'; EXCEPTION WHEN OTHERS THEN r := SQLSTATE; END;
+  PERFORM t_expect('l3: other updates of that job are untouched', r, 'ok');
+  BEGIN UPDATE jobs SET company_id = c2 WHERE id = jn; r := 'changed'; EXCEPTION WHEN SQLSTATE 'A2C02' THEN r := 'A2C02'; END;
+  PERFORM t_expect('l3: a job without schedule rows can change company', r, 'changed');
+END $$;
+
+-- the plain max + n path must be taken whenever it fits: stored uids above the cap are ignored (not counted into the maximum)
+DO $$
+DECLARE
+  c1 constant uuid := 'c1000000-0000-0000-0000-000000000001'; ja uuid := t_job(187); jb uuid := t_job(188); jr uuid := t_job(189); res text;
+BEGIN
+  ALTER TABLE job_tasks DROP CONSTRAINT IF EXISTS job_tasks_msp_uid_range;
+  ALTER TABLE job_phases DROP CONSTRAINT IF EXISTS job_phases_msp_uid_range;
+  INSERT INTO job_phases (id, company_id, job_id, sort_order, name, msp_uid) VALUES ('fa000000-0000-0000-0000-000000000021', c1, ja, 1, 'huge phase', 2147483646);
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('fa000000-0000-0000-0000-000000000022', c1, ja, 1, 'five', 5);
+  res := t_imp('authenticated', t_u('ops'), ja, 'append', t_pl('[]', jsonb_build_array(t_tk(1, 'N1'), t_tk(2, 'N2')), ja));
+  PERFORM t_expect('m3: a stored phase uid above the cap is ignored: new tasks continue after 5 (6 and 7), not in the gaps (1 and 2)',
+    left(res, 3) || '|' || (SELECT string_agg(task_name || '=' || msp_uid::text, ',' ORDER BY msp_uid) FROM job_tasks WHERE job_id = ja), 'ok:|five=5,N1=6,N2=7');
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('fa000000-0000-0000-0000-000000000023', c1, jb, 1, 'huge task', 2147483647), ('fa000000-0000-0000-0000-000000000024', c1, jb, 2, 'five', 5);
+  res := t_imp('authenticated', t_u('ops'), jb, 'append', t_pl('[]', jsonb_build_array(t_tk(1, 'N1'), t_tk(2, 'N2')), jb));
+  PERFORM t_expect('m3: a stored task uid above the cap is ignored: new tasks continue after 5 (6 and 7), not in the gaps (1 and 2)',
+    left(res, 3) || '|' || (SELECT string_agg(task_name || '=' || msp_uid::text, ',' ORDER BY msp_uid) FROM job_tasks WHERE job_id = jb AND msp_uid < 100), 'ok:|five=5,N1=6,N2=7');
+  -- replace deletes every stored row, so the new rows restart at 1 even when the old maximum would have fitted nothing
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES
+    ('fa000000-0000-0000-0000-000000000025', c1, jr, 1, 'one', 1), ('fa000000-0000-0000-0000-000000000026', c1, jr, 2, 'two', 2), ('fa000000-0000-0000-0000-000000000027', c1, jr, 3, 'cap', 100000000);
+  res := t_imp('authenticated', t_u('ops'), jr, 'replace', t_pl('[]', jsonb_build_array(t_tk(1, 'A'), t_tk(2, 'B')), jr), 'restart numbering');
+  PERFORM t_expect('l1: replace over rows 1, 2 and the cap restarts at 1 (A=1, B=2), it does not skip the numbers of the rows it deletes',
+    left(res, 3) || '|' || (SELECT string_agg(task_name || '=' || msp_uid::text, ',' ORDER BY msp_uid) FROM job_tasks WHERE job_id = jr), 'ok:|A=1,B=2');
+  PERFORM t_expect('l2: a blank mark at the start of real text is kept', import_sched_clean(chr(10240) || 'Pump'), chr(10240) || 'Pump');
+  PERFORM t_expect('l2: a variation selector at the start of real text is kept', import_sched_clean(chr(65039) || 'Pump'), chr(65039) || 'Pump');
 END $$;
 
 ROLLBACK;

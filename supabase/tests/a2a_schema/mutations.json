@@ -207,5 +207,80 @@
   "name": "msp_uid: phase CHECK allows zero",
   "find": "ADD CONSTRAINT job_phases_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid > 0 AND msp_uid <= 100000000)) NOT VALID;",
   "replace": "ADD CONSTRAINT job_phases_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid >= 0 AND msp_uid <= 100000000)) NOT VALID;"
+ },
+ {
+  "name": "l1: free uids ignore the phases",
+  "find": "UNION SELECT msp_uid FROM job_phases WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap",
+  "replace": "UNION SELECT 0 FROM job_phases WHERE false"
+ },
+ {
+  "name": "l1: free uids ignore the tasks",
+  "find": "UNION SELECT msp_uid FROM job_tasks  WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) z",
+  "replace": "UNION SELECT 0 FROM job_tasks WHERE false) z"
+ },
+ {
+  "name": "l1: free uids ignore the company of the rows (phases)",
+  "find": "FROM job_phases WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap",
+  "replace": "FROM job_phases WHERE job_id = p_job_id AND msp_uid BETWEEN 1 AND k_cap"
+ },
+ {
+  "name": "l1: free uids ignore the company of the rows (tasks)",
+  "find": "FROM job_tasks  WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) z",
+  "replace": "FROM job_tasks  WHERE job_id = p_job_id AND msp_uid BETWEEN 1 AND k_cap) z"
+ },
+ {
+  "name": "l1: free uids ignore the job of the rows",
+  "find": "FROM job_tasks  WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) z",
+  "replace": "FROM job_tasks  WHERE company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) z"
+ },
+ {
+  "name": "l1: free uids start at 2 (number 1 is never given)",
+  "find": "(SELECT 0 AS u\n",
+  "replace": "(SELECT 1 AS u\n"
+ },
+ {
+  "name": "l1: a gap hands out one number too many",
+  "find": "LEAST(v_hi, r.prev + v_want)",
+  "replace": "LEAST(v_hi, r.prev + v_want + 1)"
+ },
+ {
+  "name": "l1: a gap hands out one number too few",
+  "find": "LEAST(v_hi, r.prev + v_want)",
+  "replace": "LEAST(v_hi, r.prev + v_want - 1)"
+ },
+ {
+  "name": "l1: the gap starts on the used number",
+  "find": "generate_series(r.prev + 1, ",
+  "replace": "generate_series(r.prev, "
+ },
+ {
+  "name": "l1: the gap ends on the next used number",
+  "find": "v_hi := coalesce(r.nxt - 1, k_cap);",
+  "replace": "v_hi := coalesce(r.nxt, k_cap);"
+ },
+ {
+  "name": "l3: the company guard fires on any update of the column",
+  "find": "IF NEW.company_id IS DISTINCT FROM OLD.company_id AND (",
+  "replace": "IF true AND ("
+ },
+ {
+  "name": "l3: phases are not looked at",
+  "find": "EXISTS (SELECT 1 FROM job_phases WHERE job_id = OLD.id) OR ",
+  "replace": "false OR "
+ },
+ {
+  "name": "l3: tasks are not looked at",
+  "find": "OR EXISTS (SELECT 1 FROM job_tasks WHERE job_id = OLD.id)\n",
+  "replace": "OR false\n"
+ },
+ {
+  "name": "l3: the guard never fires",
+  "find": "IF NEW.company_id IS DISTINCT FROM OLD.company_id AND (",
+  "replace": "IF false AND ("
+ },
+ {
+  "name": "l3: the trigger is not installed on update of company_id",
+  "find": "CREATE TRIGGER jobs_company_change_guard BEFORE UPDATE OF company_id ON jobs",
+  "replace": "CREATE TRIGGER jobs_company_change_guard BEFORE UPDATE OF job_no ON jobs"
  }
 ]

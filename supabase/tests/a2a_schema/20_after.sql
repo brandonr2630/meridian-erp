@@ -367,4 +367,40 @@ BEGIN
       WHERE table_schema='public' AND table_name IN ('job_phases','job_tasks') AND column_name='msp_uid'), 'integerYES,integerYES');
 END $$;
 
+-- L1 (review 2): sched_free_uids returns the first n unused numbers of a job's uid space; L3: the jobs company guard
+DO $$
+DECLARE
+  c1 constant uuid := 'c1000000-0000-0000-0000-000000000001'; c2 constant uuid := 'c2000000-0000-0000-0000-000000000002';
+  j constant uuid := 'b5000000-0000-0000-0000-0000000f1ee1'; jn constant uuid := 'b5000000-0000-0000-0000-0000000f1ee2'; r text;
+BEGIN
+  INSERT INTO jobs (id, company_id, job_no, status) VALUES (j, c1, 'WO-FREE1', 'Open'), (jn, c1, 'WO-FREE2', 'Open');
+  INSERT INTO job_phases (id, company_id, job_id, sort_order, name, msp_uid) VALUES ('f4000000-0000-0000-0000-0000000f1ee1', c1, j, 1, 'p', 2);
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES
+    ('f5000000-0000-0000-0000-0000000f1ee1', c1, j, 1, 'a', 1), ('f5000000-0000-0000-0000-0000000f1ee2', c1, j, 2, 'b', 4),
+    ('f5000000-0000-0000-0000-0000000f1ee3', c1, j, 3, 'c', 100000000), ('f5000000-0000-0000-0000-0000000f1ee4', c1, j, 4, 'd', NULL);
+  PERFORM t_expect('l1: free uids skip the used ones of phases and tasks (1, 2, 4 and the cap are used)', sched_free_uids(j, c1, 3)::text, '{3,5,6}');
+  PERFORM t_expect('l1: one number', sched_free_uids(j, c1, 1)::text, '{3}');
+  PERFORM t_expect('l1: zero, negative and NULL ask for nothing', sched_free_uids(j, c1, 0)::text || sched_free_uids(j, c1, -2)::text || sched_free_uids(j, c1, NULL)::text, '{}{}{}');
+  PERFORM t_expect('l1: an empty job starts at 1', sched_free_uids(jn, c1, 3)::text, '{1,2,3}');
+  PERFORM t_expect('l1: only rows of the given company count (a row under another company id is ignored)', sched_free_uids(j, c2, 2)::text, '{1,2}');
+  PERFORM t_expect('l1: the helper is not callable by API roles',
+    has_function_privilege('authenticated', 'sched_free_uids(uuid, uuid, integer)', 'EXECUTE')::text || has_function_privilege('anon', 'sched_free_uids(uuid, uuid, integer)', 'EXECUTE')::text, 'falsefalse');
+  BEGIN UPDATE jobs SET company_id = c2 WHERE id = j; r := 'changed'; EXCEPTION WHEN SQLSTATE 'A2C02' THEN r := 'A2C02'; END;
+  PERFORM t_expect('l3: a job with schedule rows keeps its company', r, 'A2C02');
+  BEGIN UPDATE jobs SET company_id = c2 WHERE id = jn; r := 'changed'; EXCEPTION WHEN SQLSTATE 'A2C02' THEN r := 'A2C02'; END;
+  PERFORM t_expect('l3: a job without schedule rows can still change company', r, 'changed');
+  -- a job that has only phases, and one that has only tasks, are protected too; setting the same company is not a change
+  INSERT INTO jobs (id, company_id, job_no, status) VALUES ('b5000000-0000-0000-0000-0000000f1ee3', c1, 'WO-FREE3', 'Open'), ('b5000000-0000-0000-0000-0000000f1ee4', c1, 'WO-FREE4', 'Open');
+  INSERT INTO job_phases (id, company_id, job_id, sort_order, name) VALUES ('f4000000-0000-0000-0000-0000000f1ee3', c1, 'b5000000-0000-0000-0000-0000000f1ee3', 1, 'only a phase');
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES ('f5000000-0000-0000-0000-0000000f1ee5', c1, 'b5000000-0000-0000-0000-0000000f1ee4', 1, 'only a task');
+  BEGIN UPDATE jobs SET company_id = c2 WHERE id = 'b5000000-0000-0000-0000-0000000f1ee3'; r := 'changed'; EXCEPTION WHEN SQLSTATE 'A2C02' THEN r := 'A2C02'; END;
+  PERFORM t_expect('l3: a job with only a phase keeps its company', r, 'A2C02');
+  BEGIN UPDATE jobs SET company_id = c2 WHERE id = 'b5000000-0000-0000-0000-0000000f1ee4'; r := 'changed'; EXCEPTION WHEN SQLSTATE 'A2C02' THEN r := 'A2C02'; END;
+  PERFORM t_expect('l3: a job with only a task keeps its company', r, 'A2C02');
+  BEGIN UPDATE jobs SET company_id = company_id WHERE id = j; r := 'ok'; EXCEPTION WHEN SQLSTATE 'A2C02' THEN r := 'A2C02'; END;
+  PERFORM t_expect('l3: writing the same company back is not a change', r, 'ok');
+  PERFORM t_expect('l3: the guard trigger exists and its function is not callable by API roles',
+    (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'jobs_company_change_guard') || has_function_privilege('authenticated', 'jobs_company_change_guard()', 'EXECUTE')::text, '1false');
+END $$;
+
 ROLLBACK;

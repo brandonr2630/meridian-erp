@@ -38,7 +38,7 @@ DECLARE
   c int; c_lo int; c_hi int; k int; nx int; s int; ty text; e0 date; f0 date; b0 date; v_all boolean; v_any boolean; v_ok boolean;
   r record; v_changed boolean; cand date; v_deadline date; v_fe date; v_minslack int;
   v_overall numeric; v_planned numeric; v_has_bl boolean; v_base_end date; v_slip int; v_gap numeric;
-  v_late boolean := false; v_late_days int := 0; v_status text; v_dur int; v_prog int;
+  v_late boolean := false; v_late_days int := 0; v_status text; v_dur int; v_prog int; v_sd date; v_ed date;
 BEGIN
   SELECT j.status, j.due_date INTO v_jstatus, v_due FROM jobs j WHERE j.id = p_job_id;
   IF NOT FOUND THEN RETURN; END IF;               -- invisible under RLS or missing: no rows
@@ -48,19 +48,23 @@ BEGIN
             WHERE job_id = p_job_id ORDER BY sort_order, id LOOP
     n := n + 1;
     v_prog := coalesce(r.progress, 0);
-    v_dur  := GREATEST(1, CASE WHEN r.start_date IS NOT NULL AND r.end_date IS NOT NULL
-                               THEN r.end_date - r.start_date + 1 ELSE 1 END);
+    -- M1 (review 2): a writer can store any date (year 99999), and v_dur * (100 - v_prog) or es + rem would then overflow integer and make
+    -- this function raise for the whole job (dashboard, nightly snapshot). Dates are clamped to 2000-01-01..2100-12-31 on load (the import range).
+    v_sd := CASE WHEN r.start_date IS NULL THEN NULL ELSE LEAST(GREATEST(r.start_date, DATE '2000-01-01'), DATE '2100-12-31') END;
+    v_ed := CASE WHEN r.end_date   IS NULL THEN NULL ELSE LEAST(GREATEST(r.end_date,   DATE '2000-01-01'), DATE '2100-12-31') END;
+    v_dur  := GREATEST(1, CASE WHEN v_sd IS NOT NULL AND v_ed IS NOT NULL
+                               THEN v_ed - v_sd + 1 ELSE 1 END);
     ids  := ids  || r.id;
     pids := pids || r.parent_task_id;
-    endd := endd || r.end_date;
+    endd := endd || v_ed;
     done := done || (v_prog = 100);
     ms   := ms   || r.is_milestone;
     rem  := rem  || (CASE WHEN r.is_milestone OR v_prog = 100 THEN 0
                           ELSE GREATEST(1, ceil(v_dur * (100 - v_prog) / 100.0)::int) END);
-    sched := sched || (r.start_date IS NOT NULL AND r.end_date IS NOT NULL);
+    sched := sched || (v_sd IS NOT NULL AND v_ed IS NOT NULL);
     -- base earliest start: done and started tasks keep their actual start; others start today
-    es := es || (CASE WHEN v_prog = 100 OR v_prog > 0 THEN coalesce(r.start_date, p_today) ELSE p_today END);
-    ef := ef || (CASE WHEN v_prog = 100 THEN r.end_date ELSE NULL END);   -- done keep their actual end
+    es := es || (CASE WHEN v_prog = 100 OR v_prog > 0 THEN coalesce(v_sd, p_today) ELSE p_today END);
+    ef := ef || (CASE WHEN v_prog = 100 THEN v_ed ELSE NULL END);   -- done keep their actual end
     ls := ls || NULL::date;  lf := lf || NULL::date;                      -- pre-size (array lower bound stays 1)
     par := par || 0;  is_sum := is_sum || false;  depth := depth || 0;
   END LOOP;

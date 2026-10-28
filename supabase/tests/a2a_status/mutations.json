@@ -119,5 +119,25 @@
   "name": "undated link participants no longer scheduled (Phase A rule)",
   "find": "IF NOT (done[t] AND endd[t] IS NULL) THEN sched[t] := true; END IF;",
   "replace": "NULL;"
+ },
+ {
+  "name": "m1: the end date is not clamped",
+  "find": "LEAST(GREATEST(r.end_date,   DATE '2000-01-01'), DATE '2100-12-31')",
+  "replace": "r.end_date"
+ },
+ {
+  "name": "m1: the start date is not clamped",
+  "find": "LEAST(GREATEST(r.start_date, DATE '2000-01-01'), DATE '2100-12-31')",
+  "replace": "r.start_date"
+ },
+ {
+  "name": "m1: the clamp has no lower bound (start)",
+  "find": "LEAST(GREATEST(r.start_date, DATE '2000-01-01'), DATE '2100-12-31')",
+  "replace": "LEAST(r.start_date, DATE '2100-12-31')"
+ },
+ {
+  "name": "m1: the clamp has no upper bound (end)",
+  "find": "LEAST(GREATEST(r.end_date,   DATE '2000-01-01'), DATE '2100-12-31')",
+  "replace": "GREATEST(r.end_date, DATE '2000-01-01')"
  }
 ]

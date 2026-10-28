@@ -654,5 +654,85 @@
   "name": "l6: cleaner class U000e0000-U000e007f -> \\U000e0000-\\U000e0080",
   "find": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\uffa0\\ufff9-\\ufffb\\U000e0000-\\U000e007f]",
   "replace": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\uffa0\\ufff9-\\ufffb\\U000e0000-\\U000e0080]"
+ },
+ {
+  "name": "l1: replace keeps counting from the old maximum",
+  "find": "AND p_mode = 'replace' THEN v_base := 0; END IF;",
+  "replace": "AND false THEN v_base := 0; END IF;"
+ },
+ {
+  "name": "l1: replace resets the counter even when it fits",
+  "find": "IF v_base::bigint + v_new_p + v_new_t > k_uid_cap AND p_mode = 'replace' THEN v_base := 0; END IF;",
+  "replace": "IF p_mode = 'replace' THEN v_base := 0; END IF;"
+ },
+ {
+  "name": "l1: append and merge never take free numbers",
+  "find": "IF v_base::bigint + v_new_p + v_new_t > k_uid_cap THEN\n    v_free :=",
+  "replace": "IF false THEN\n    v_free :="
+ },
+ {
+  "name": "l1: new tasks reuse the phases' free numbers",
+  "find": "SET new_uid = v_free[v_new_p + s.rn]",
+  "replace": "SET new_uid = v_free[s.rn]"
+ },
+ {
+  "name": "l1: new phases start one free number late",
+  "find": "SET new_uid = v_free[s.rn] FROM (SELECT uid, row_number() OVER (ORDER BY idx) AS rn FROM pg_temp.imp_p",
+  "replace": "SET new_uid = v_free[s.rn + 1] FROM (SELECT uid, row_number() OVER (ORDER BY idx) AS rn FROM pg_temp.imp_p"
+ },
+ {
+  "name": "l1: free numbers are asked for one row fewer",
+  "find": "v_free := sched_free_uids(p_job_id, v_company, v_new_p + v_new_t);",
+  "replace": "v_free := sched_free_uids(p_job_id, v_company, v_new_p + v_new_t - 1);"
+ },
+ {
+  "name": "l2: braille blank is not treated as blank",
+  "find": "'^[ \\u034f\\u17b4\\u17b5\\u2800\\ufe00-\\ufe0f]*$'",
+  "replace": "'^[ \\u034f\\u17b4\\u17b5\\ufe00-\\ufe0f]*$'"
+ },
+ {
+  "name": "l2: combining grapheme joiner is not treated as blank",
+  "find": "'^[ \\u034f\\u17b4\\u17b5\\u2800\\ufe00-\\ufe0f]*$'",
+  "replace": "'^[ \\u17b4\\u17b5\\u2800\\ufe00-\\ufe0f]*$'"
+ },
+ {
+  "name": "l2: Khmer inherent vowels are not treated as blank",
+  "find": "'^[ \\u034f\\u17b4\\u17b5\\u2800\\ufe00-\\ufe0f]*$'",
+  "replace": "'^[ \\u034f\\u2800\\ufe00-\\ufe0f]*$'"
+ },
+ {
+  "name": "l2: variation selectors are not treated as blank",
+  "find": "'^[ \\u034f\\u17b4\\u17b5\\u2800\\ufe00-\\ufe0f]*$'",
+  "replace": "'^[ \\u034f\\u17b4\\u17b5\\u2800]*$'"
+ },
+ {
+  "name": "l2: the blank test is only for a prefix",
+  "find": "'^[ \\u034f\\u17b4\\u17b5\\u2800\\ufe00-\\ufe0f]*$'",
+  "replace": "'^[ \\u034f\\u17b4\\u17b5\\u2800\\ufe00-\\ufe0f]'"
+ },
+ {
+  "name": "l2: no-break and ideographic spaces are not turned into spaces",
+  "find": "'[\\u00a0\\u1680\\u2000-\\u200a\\u202f\\u205f\\u3000]', ' ', 'g'",
+  "replace": "'[\\u1680]', ' ', 'g'"
+ },
+ {
+  "name": "l2: ideographic space is not turned into a space",
+  "find": "'[\\u00a0\\u1680\\u2000-\\u200a\\u202f\\u205f\\u3000]', ' ', 'g'",
+  "replace": "'[\\u00a0\\u1680\\u2000-\\u200a\\u202f\\u205f]', ' ', 'g'"
+ },
+ {
+  "name": "l2: no-break space is not turned into a space",
+  "find": "'[\\u00a0\\u1680\\u2000-\\u200a\\u202f\\u205f\\u3000]', ' ', 'g'",
+  "replace": "'[\\u1680\\u2000-\\u200a\\u202f\\u205f\\u3000]', ' ', 'g'"
+ },
+ {
+  "name": "l2: hair space and the other U+2000 spaces are not turned into spaces",
+  "find": "'[\\u00a0\\u1680\\u2000-\\u200a\\u202f\\u205f\\u3000]', ' ', 'g'",
+  "replace": "'[\\u00a0\\u1680\\u202f\\u205f\\u3000]', ' ', 'g'"
+ },
+ {
+  "name": "l2: the blank result is kept instead of emptied",
+  "find": "SELECT CASE WHEN q.s ~ '^[ \\u034f\\u17b4\\u17b5\\u2800\\ufe00-\\ufe0f]*$' THEN '' ELSE q.s END",
+  "replace": "SELECT q.s"
  }
 ]
