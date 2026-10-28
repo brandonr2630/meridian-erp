@@ -335,21 +335,6 @@
   "replace": "RETURNING to_jsonb(job_tasks.*) || jsonb_build_object('client_visible', false) AS j)"
  },
  {
-  "name": "uids reused in the same job",
-  "find": "SET new_uid = v_base + s.rn FROM",
-  "replace": "SET new_uid = s.rn FROM"
- },
- {
-  "name": "counter ignores uids of the old schedule on replace",
-  "find": "SELECT coalesce(max(m), 0) INTO v_base FROM",
-  "replace": "SELECT 0 * coalesce(max(m), 0) INTO v_base FROM"
- },
- {
-  "name": "task uids overlap phase uids",
-  "find": "SET new_uid = v_base + v_new_p + s.rn FROM",
-  "replace": "SET new_uid = v_base + s.rn FROM"
- },
- {
   "name": "merge deletes",
   "find": "UPDATE job_phases p SET name = ip.name, sort_order = coalesce(ip.sort_order, p.sort_order)",
   "replace": "DELETE FROM job_tasks WHERE job_id = p_job_id AND msp_uid IS NULL; UPDATE job_phases p SET name = ip.name, sort_order = coalesce(ip.sort_order, p.sort_order)"
@@ -512,31 +497,6 @@
   "replace": "  IF true THEN\n    CREATE TEMP TABLE imp_a (t uuid NOT NULL, p uuid NOT NULL) ON COMMIT DROP;     -- every edge that can matter\n    INSERT INTO pg_temp.imp_a SELECT e.t, e.p FROM pg_temp.imp_e e;\n    IF true THEN\n      INSERT INTO pg_temp.imp_a SELECT k.task_id, k.predecessor_id FROM job_task_links k WHERE k.job_id = p_job_id AND k.company_id = v_company;\n    END IF;\n    CREATE INDEX ON pg_temp.imp_a (t);\n    CREATE TEMP TABLE imp_r (id uuid PRIMARY KEY) ON COMMIT DROP;                   -- nodes reachable from a new edge's predecessor\n    INSERT INTO pg_temp.imp_r\n      WITH RECURSIVE rch(id) AS (\n        SELECT k0.predecessor_id FROM job_task_links k0 WHERE k0.job_id = p_job_id\n        UNION ALL SELECT e.p FROM pg_temp.imp_e e\n         WHERE p_mode <> 'merge' OR NOT EXISTS ("
  },
  {
-  "name": "m3: counter counts phase uids above the cap",
-  "find": "FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap\n",
-  "replace": "FROM job_phases WHERE job_id = p_job_id AND company_id = v_company\n"
- },
- {
-  "name": "m3: counter counts task uids above the cap",
-  "find": "FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap) s;",
-  "replace": "FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company) s;"
- },
- {
-  "name": "m3: exhaustion check off by one",
-  "find": "IF v_base::bigint + v_new_p + v_new_t > k_uid_cap THEN",
-  "replace": "IF v_base::bigint + v_new_p + v_new_t >= k_uid_cap THEN"
- },
- {
-  "name": "m3: exhaustion check removed",
-  "find": "IF v_base::bigint + v_new_p + v_new_t > k_uid_cap THEN",
-  "replace": "IF false THEN"
- },
- {
-  "name": "m3: cap is the old two billion",
-  "find": "k_uid_cap constant integer := 100000000;",
-  "replace": "k_uid_cap constant integer := 2000000000;"
- },
- {
   "name": "l4: a moved published task keeps its visibility",
   "find": "client_visible = CASE WHEN t.phase_id IS DISTINCT FROM ph.id THEN false ELSE t.client_visible END",
   "replace": "client_visible = t.client_visible"
@@ -656,36 +616,6 @@
   "replace": "[\\u0001-\\u001f\\u007f-\\u009f\\u00ad\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufeff\\uffa0\\ufff9-\\ufffb\\U000e0000-\\U000e0080]"
  },
  {
-  "name": "l1: replace keeps counting from the old maximum",
-  "find": "AND p_mode = 'replace' THEN v_base := 0; END IF;",
-  "replace": "AND false THEN v_base := 0; END IF;"
- },
- {
-  "name": "l1: replace resets the counter even when it fits",
-  "find": "IF v_base::bigint + v_new_p + v_new_t > k_uid_cap AND p_mode = 'replace' THEN v_base := 0; END IF;",
-  "replace": "IF p_mode = 'replace' THEN v_base := 0; END IF;"
- },
- {
-  "name": "l1: append and merge never take free numbers",
-  "find": "IF v_base::bigint + v_new_p + v_new_t > k_uid_cap THEN\n    v_free :=",
-  "replace": "IF false THEN\n    v_free :="
- },
- {
-  "name": "l1: new tasks reuse the phases' free numbers",
-  "find": "SET new_uid = v_free[v_new_p + s.rn]",
-  "replace": "SET new_uid = v_free[s.rn]"
- },
- {
-  "name": "l1: new phases start one free number late",
-  "find": "SET new_uid = v_free[s.rn] FROM (SELECT uid, row_number() OVER (ORDER BY idx) AS rn FROM pg_temp.imp_p",
-  "replace": "SET new_uid = v_free[s.rn + 1] FROM (SELECT uid, row_number() OVER (ORDER BY idx) AS rn FROM pg_temp.imp_p"
- },
- {
-  "name": "l1: free numbers are asked for one row fewer",
-  "find": "v_free := sched_free_uids(p_job_id, v_company, v_new_p + v_new_t);",
-  "replace": "v_free := sched_free_uids(p_job_id, v_company, v_new_p + v_new_t - 1);"
- },
- {
   "name": "l2: braille blank is not treated as blank",
   "find": "'^[ \\u034f\\u17b4\\u17b5\\u2800\\ufe00-\\ufe0f]*$'",
   "replace": "'^[ \\u034f\\u17b4\\u17b5\\ufe00-\\ufe0f]*$'"
@@ -734,5 +664,40 @@
   "name": "l2: the blank result is kept instead of emptied",
   "find": "SELECT CASE WHEN q.s ~ '^[ \\u034f\\u17b4\\u17b5\\u2800\\ufe00-\\ufe0f]*$' THEN '' ELSE q.s END",
   "replace": "SELECT q.s"
+ },
+ {
+  "name": "counter: replace is not told it is a replace",
+  "find": "v_free := sched_next_uids(p_job_id, v_company, v_new_p + v_new_t, p_mode = 'replace');",
+  "replace": "v_free := sched_next_uids(p_job_id, v_company, v_new_p + v_new_t, false);"
+ },
+ {
+  "name": "counter: every import is told it is a replace",
+  "find": "v_free := sched_next_uids(p_job_id, v_company, v_new_p + v_new_t, p_mode = 'replace');",
+  "replace": "v_free := sched_next_uids(p_job_id, v_company, v_new_p + v_new_t, true);"
+ },
+ {
+  "name": "counter: only append is told it is a replace",
+  "find": "v_free := sched_next_uids(p_job_id, v_company, v_new_p + v_new_t, p_mode = 'replace');",
+  "replace": "v_free := sched_next_uids(p_job_id, v_company, v_new_p + v_new_t, p_mode = 'append');"
+ },
+ {
+  "name": "counter: numbers are asked for one row fewer",
+  "find": "v_free := sched_next_uids(p_job_id, v_company, v_new_p + v_new_t, p_mode = 'replace');",
+  "replace": "v_free := sched_next_uids(p_job_id, v_company, v_new_p + v_new_t - 1, p_mode = 'replace');"
+ },
+ {
+  "name": "counter: numbers are asked for another company",
+  "find": "v_free := sched_next_uids(p_job_id, v_company, v_new_p + v_new_t, p_mode = 'replace');",
+  "replace": "v_free := sched_next_uids(p_job_id, '00000000-0000-0000-0000-000000000000'::uuid, v_new_p + v_new_t, p_mode = 'replace');"
+ },
+ {
+  "name": "counter: new tasks reuse the phases' numbers",
+  "find": "SET new_uid = v_free[v_new_p + s.rn]",
+  "replace": "SET new_uid = v_free[s.rn]"
+ },
+ {
+  "name": "counter: new phases start one number late",
+  "find": "SET new_uid = v_free[s.rn] FROM (SELECT uid, row_number() OVER (ORDER BY idx) AS rn FROM pg_temp.imp_p",
+  "replace": "SET new_uid = v_free[s.rn + 1] FROM (SELECT uid, row_number() OVER (ORDER BY idx) AS rn FROM pg_temp.imp_p"
  }
 ]

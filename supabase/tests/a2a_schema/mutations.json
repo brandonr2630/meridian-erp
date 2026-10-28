@@ -209,36 +209,6 @@
   "replace": "ADD CONSTRAINT job_phases_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid >= 0 AND msp_uid <= 100000000)) NOT VALID;"
  },
  {
-  "name": "l1: free uids ignore the phases",
-  "find": "UNION SELECT msp_uid FROM job_phases WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap",
-  "replace": "UNION SELECT 0 FROM job_phases WHERE false"
- },
- {
-  "name": "l1: free uids ignore the tasks",
-  "find": "UNION SELECT msp_uid FROM job_tasks  WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) z",
-  "replace": "UNION SELECT 0 FROM job_tasks WHERE false) z"
- },
- {
-  "name": "l1: free uids ignore the company of the rows (phases)",
-  "find": "FROM job_phases WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap",
-  "replace": "FROM job_phases WHERE job_id = p_job_id AND msp_uid BETWEEN 1 AND k_cap"
- },
- {
-  "name": "l1: free uids ignore the company of the rows (tasks)",
-  "find": "FROM job_tasks  WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) z",
-  "replace": "FROM job_tasks  WHERE job_id = p_job_id AND msp_uid BETWEEN 1 AND k_cap) z"
- },
- {
-  "name": "l1: free uids ignore the job of the rows",
-  "find": "FROM job_tasks  WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) z",
-  "replace": "FROM job_tasks  WHERE company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) z"
- },
- {
-  "name": "l1: free uids start at 2 (number 1 is never given)",
-  "find": "(SELECT 0 AS u\n",
-  "replace": "(SELECT 1 AS u\n"
- },
- {
   "name": "l1: a gap hands out one number too many",
   "find": "LEAST(v_hi, r.prev + v_want)",
   "replace": "LEAST(v_hi, r.prev + v_want + 1)"
@@ -282,5 +252,115 @@
   "name": "l3: the trigger is not installed on update of company_id",
   "find": "CREATE TRIGGER jobs_company_change_guard BEFORE UPDATE OF company_id ON jobs",
   "replace": "CREATE TRIGGER jobs_company_change_guard BEFORE UPDATE OF job_no ON jobs"
+ },
+ {
+  "name": "counter: the counter does not move after handing out numbers",
+  "find": "UPDATE job_schedule_uid_counter SET last_uid = v_out[p_n], updated_at = now() WHERE job_id = p_job_id;",
+  "replace": "UPDATE job_schedule_uid_counter SET updated_at = now() WHERE job_id = p_job_id;"
+ },
+ {
+  "name": "counter: the counter moves only to the first number handed out",
+  "find": "SET last_uid = v_out[p_n], updated_at",
+  "replace": "SET last_uid = v_out[1], updated_at"
+ },
+ {
+  "name": "counter: asking for more than is left does not raise",
+  "find": "IF cardinality(v_out) < p_n THEN RAISE EXCEPTION 'uid space exhausted' USING ERRCODE = '22023'; END IF;",
+  "replace": "IF false THEN RAISE EXCEPTION 'uid space exhausted' USING ERRCODE = '22023'; END IF;"
+ },
+ {
+  "name": "counter: first use ignores the phases",
+  "find": "SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap\n            UNION ALL",
+  "replace": "SELECT 0 AS u FROM job_phases WHERE false\n            UNION ALL"
+ },
+ {
+  "name": "counter: first use ignores the tasks",
+  "find": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) s;",
+  "replace": "SELECT 0 FROM job_tasks WHERE false) s;"
+ },
+ {
+  "name": "counter: first use counts the rows of every company (tasks)",
+  "find": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) s;",
+  "replace": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND msp_uid BETWEEN 1 AND k_cap) s;"
+ },
+ {
+  "name": "counter: first use counts the rows of every job (tasks)",
+  "find": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) s;",
+  "replace": "SELECT msp_uid FROM job_tasks WHERE company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) s;"
+ },
+ {
+  "name": "counter: first use counts the rows of every company (phases)",
+  "find": "SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap\n            UNION ALL",
+  "replace": "SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id AND msp_uid BETWEEN 1 AND k_cap\n            UNION ALL"
+ },
+ {
+  "name": "counter: first use counts the uids above the cap",
+  "find": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) s;",
+  "replace": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = p_company AND msp_uid >= 1) s;"
+ },
+ {
+  "name": "counter: first use always starts from the highest stored uid (a planted cap blocks the job)",
+  "find": "VALUES (p_job_id, CASE WHEN v_init::bigint + p_n > k_cap THEN 0 ELSE v_init END)",
+  "replace": "VALUES (p_job_id, v_init)"
+ },
+ {
+  "name": "counter: first use falls back to 0 even when the fit is exact",
+  "find": "CASE WHEN v_init::bigint + p_n > k_cap THEN 0 ELSE v_init END",
+  "replace": "CASE WHEN v_init::bigint + p_n >= k_cap THEN 0 ELSE v_init END"
+ },
+ {
+  "name": "counter: first use never continues after the highest stored uid",
+  "find": "CASE WHEN v_init::bigint + p_n > k_cap THEN 0 ELSE v_init END",
+  "replace": "0"
+ },
+ {
+  "name": "counter: used numbers of the phases are not skipped",
+  "find": "UNION SELECT msp_uid FROM job_phases WHERE NOT p_replace AND job_id = p_job_id AND company_id = p_company AND msp_uid > v_last AND msp_uid <= k_cap",
+  "replace": "UNION SELECT 0 FROM job_phases WHERE false"
+ },
+ {
+  "name": "counter: used numbers of the tasks are not skipped",
+  "find": "UNION SELECT msp_uid FROM job_tasks  WHERE NOT p_replace AND job_id = p_job_id AND company_id = p_company AND msp_uid > v_last AND msp_uid <= k_cap) z",
+  "replace": "UNION SELECT 0 FROM job_tasks WHERE false) z"
+ },
+ {
+  "name": "counter: replace still skips the stored numbers (tasks)",
+  "find": "UNION SELECT msp_uid FROM job_tasks  WHERE NOT p_replace AND",
+  "replace": "UNION SELECT msp_uid FROM job_tasks  WHERE true AND"
+ },
+ {
+  "name": "counter: replace still skips the stored numbers (phases)",
+  "find": "UNION SELECT msp_uid FROM job_phases WHERE NOT p_replace AND",
+  "replace": "UNION SELECT msp_uid FROM job_phases WHERE true AND"
+ },
+ {
+  "name": "counter: used numbers of other companies are skipped (tasks)",
+  "find": "UNION SELECT msp_uid FROM job_tasks  WHERE NOT p_replace AND job_id = p_job_id AND company_id = p_company AND",
+  "replace": "UNION SELECT msp_uid FROM job_tasks  WHERE NOT p_replace AND job_id = p_job_id AND"
+ },
+ {
+  "name": "counter: the counter starts at 1 on an empty job",
+  "find": "FROM (SELECT v_last AS u\n",
+  "replace": "FROM (SELECT v_last + 1 AS u\n"
+ },
+ {
+  "name": "counter: the counter row is not removed with its job",
+  "find": "job_id     uuid PRIMARY KEY REFERENCES jobs (id) ON DELETE CASCADE,",
+  "replace": "job_id     uuid PRIMARY KEY REFERENCES jobs (id),"
+ },
+ {
+  "name": "counter: row level security is off",
+  "find": "ALTER TABLE job_schedule_uid_counter ENABLE ROW LEVEL SECURITY;",
+  "replace": "-- rls off"
+ },
+ {
+  "name": "counter: the helper can be called by API roles",
+  "find": "REVOKE ALL ON FUNCTION sched_next_uids(uuid, uuid, integer, boolean) FROM PUBLIC, anon, authenticated, service_role;",
+  "replace": "GRANT EXECUTE ON FUNCTION sched_next_uids(uuid, uuid, integer, boolean) TO authenticated;"
+ },
+ {
+  "name": "counter: the counter may hold more than the cap",
+  "find": "last_uid   integer NOT NULL CHECK (last_uid BETWEEN 0 AND 100000000),",
+  "replace": "last_uid   integer NOT NULL,"
  }
 ]

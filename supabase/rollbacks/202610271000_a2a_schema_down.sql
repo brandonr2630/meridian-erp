@@ -2,7 +2,8 @@
 -- parent_task_id flattens the hierarchy; copy job_task_links / job_tasks first if any non-FS link or parent exists.
 DROP TRIGGER IF EXISTS jobs_company_change_guard ON jobs;
 DROP FUNCTION IF EXISTS jobs_company_change_guard();
-DROP FUNCTION IF EXISTS sched_free_uids(uuid, uuid, integer);
+DROP FUNCTION IF EXISTS sched_next_uids(uuid, uuid, integer, boolean);
+DROP TABLE IF EXISTS job_schedule_uid_counter;
 DROP TRIGGER IF EXISTS job_tasks_parent_guard ON job_tasks;
 DROP FUNCTION IF EXISTS job_tasks_parent_guard();
 DROP TRIGGER IF EXISTS job_phases_company_guard ON job_phases;

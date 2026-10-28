@@ -32,7 +32,6 @@ DECLARE
   v_job_no   text;
   v_read     boolean := false;
   v_write    boolean := false;
-  v_max      integer;
   v_n        integer;
   v_assigned integer := 0;
   v_phases   integer;
@@ -40,7 +39,6 @@ DECLARE
   v_pnull    integer;
   v_tnull    integer;
   v_free     integer[];
-  k_uid_cap  constant integer := 100000000;   -- msp_uid CHECK range (a2a_schema, M3)
 BEGIN
   IF p_kind IS NULL OR p_kind NOT IN ('staff', 'client') THEN
     RAISE EXCEPTION 'unknown export kind';
@@ -71,32 +69,22 @@ BEGIN
   -- UIDs are created only by a writer (read-only callers export with temporary UIDs on the client side)
   IF v_write AND v_read THEN
     PERFORM pg_advisory_xact_lock(hashtext(p_job_id::text));
-    -- one UID space per job across BOTH tables; UID 0 is never used because max() starts at 0 and we add 1.
-    -- H1: only rows of THIS job AND of the job's own company count (a row planted by another company's writer is ignored; the
-    -- a2a_schema trigger now stops such rows from being written at all). M3: a stored uid above the cap (impossible through the
-    -- CHECK, possible only in a database that predates it) is ignored, so v_max + n can never overflow integer.
-    SELECT coalesce(max(u), 0) INTO v_max
-      FROM (SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap
-            UNION ALL
-            SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap) s;
+    -- one UID space per job across BOTH tables; UID 0 is never used. Numbers come from sched_next_uids (a per-job counter that never goes
+    -- back, so a uid is never handed out twice, X26; a writer cannot block the job by planting a uid, review L1). H1: only rows of THIS job
+    -- AND of the job's own company are looked at. M3: a stored uid above the cap is ignored.
     SELECT count(*) INTO v_pnull FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid IS NULL;
     SELECT count(*) INTO v_tnull FROM job_tasks  WHERE job_id = p_job_id AND company_id = v_company AND msp_uid IS NULL;
-    -- L1 (review 2): when max + n does not fit, take unused numbers (gaps) instead of refusing for good
-    IF v_max::bigint + v_pnull + v_tnull > k_uid_cap THEN
-      v_free := sched_free_uids(p_job_id, v_company, v_pnull + v_tnull);
-      IF coalesce(cardinality(v_free), 0) < v_pnull + v_tnull THEN RAISE EXCEPTION 'uid space exhausted' USING ERRCODE = '22023'; END IF;
-    END IF;
+    IF v_pnull + v_tnull > 0 THEN v_free := sched_next_uids(p_job_id, v_company, v_pnull + v_tnull); END IF;
 
     WITH n AS (SELECT id, row_number() OVER (ORDER BY sort_order, id) AS rn
                  FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid IS NULL)
-    UPDATE job_phases p SET msp_uid = CASE WHEN v_free IS NULL THEN v_max + n.rn ELSE v_free[n.rn] END FROM n WHERE p.id = n.id;
+    UPDATE job_phases p SET msp_uid = v_free[n.rn] FROM n WHERE p.id = n.id;
     GET DIAGNOSTICS v_n = ROW_COUNT;
     v_assigned := v_n;
-    v_max := v_max + v_n;
 
     WITH n AS (SELECT id, row_number() OVER (ORDER BY sort_order, id) AS rn
                  FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid IS NULL)
-    UPDATE job_tasks t SET msp_uid = CASE WHEN v_free IS NULL THEN v_max + n.rn ELSE v_free[v_pnull + n.rn] END FROM n WHERE t.id = n.id;
+    UPDATE job_tasks t SET msp_uid = v_free[v_pnull + n.rn] FROM n WHERE t.id = n.id;
     GET DIAGNOSTICS v_n = ROW_COUNT;
     v_assigned := v_assigned + v_n;
   END IF;

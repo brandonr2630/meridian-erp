@@ -346,6 +346,23 @@ BEGIN
   PERFORM t_expect('m3: a stored phase uid above the cap is ignored: the null tasks continue after 5 (6 and 7), not in the gaps (1 and 2)',
     res || '|' || (SELECT string_agg(task_name || '=' || msp_uid::text, ',' ORDER BY sort_order) FROM job_tasks WHERE job_id = jm), 'ok:2|five=5,n1=6,n2=7');
 END $$;
+-- X26 (owner decision 2026-10-28): the per-job counter never goes back, so a number whose row was deleted is not handed out again
+DO $$
+DECLARE
+  ops uuid := '11111111-1111-1111-1111-111111111111'; c1 constant uuid := 'c1000000-0000-0000-0000-000000000001';
+  jd constant uuid := 'b1000000-0000-0000-0000-0000000000a8'; res text;
+BEGIN
+  INSERT INTO jobs (id, company_id, job_no, status) VALUES (jd, c1, 'WO-EA8', 'Open');
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES ('f7000000-0000-0000-0000-0000000001a1', c1, jd, 1, 'a'), ('f7000000-0000-0000-0000-0000000001a2', c1, jd, 2, 'b');
+  res := t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', jd));
+  PERFORM t_expect('x26: first export numbers a and b', res || '|' || (SELECT string_agg(task_name || '=' || msp_uid::text, ',' ORDER BY sort_order) FROM job_tasks WHERE job_id = jd), 'ok:2|a=1,b=2');
+  DELETE FROM job_tasks WHERE id = 'f7000000-0000-0000-0000-0000000001a2';
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES ('f7000000-0000-0000-0000-0000000001a3', c1, jd, 3, 'c');
+  res := t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', jd));
+  PERFORM t_expect('x26: after b (uid 2) was deleted, the new task c gets 3, not 2 again', res || '|' || (SELECT string_agg(task_name || '=' || msp_uid::text, ',' ORDER BY sort_order) FROM job_tasks WHERE job_id = jd), 'ok:1|a=1,c=3');
+  res := t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', jd));
+  PERFORM t_expect('x26: a second export with nothing new assigns nothing', res, 'ok:0');
+END $$;
 ROLLBACK;
 
 -- ===== 7. committed marker (idempotent) so 30_rollback can prove audit rows and uids survive the rollback =====

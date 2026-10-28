@@ -160,8 +160,8 @@ BEGIN
     (SELECT client_visible::text FROM job_tasks WHERE job_id = ja AND msp_uid = dv), 'true');
   PERFORM t_expect('merge: the guard wrote one visibility_changed audit row (wording_edited)',
     (SELECT count(*)::text || '|' || min(metadata ->> 'reason') FROM job_audit_log WHERE job_id = ja AND action_type = 'visibility_changed'), '1|wording_edited');
-  PERFORM t_expect('merge: new row is unpublished and got the next uid from the counter',
-    (SELECT client_visible::text || msp_uid FROM job_tasks WHERE job_id = ja AND msp_uid > 6), 'false7');
+  PERFORM t_expect('merge: new row is unpublished and got the next uid from the counter (7 went to the earlier merge''s row, which was deleted, and is not given again: X26)',
+    (SELECT client_visible::text || msp_uid FROM job_tasks WHERE job_id = ja AND msp_uid > 6), 'false8');
   PERFORM t_expect('merge: the unchanged link was not rewritten and the link count is the same', t_state(ja), '2/6/1');
   PERFORM t_expect('merge: audit row says merge with its counts',
     (SELECT metadata ->> 'mode' || '|' || (metadata ->> 'created') || '|' || (metadata ->> 'updated') || '|' || (metadata ->> 'kept') || '|' || (metadata ->> 'skipped')
@@ -1071,6 +1071,26 @@ BEGIN
     left(res, 3) || '|' || (SELECT string_agg(task_name || '=' || msp_uid::text, ',' ORDER BY msp_uid) FROM job_tasks WHERE job_id = jr), 'ok:|A=1,B=2');
   PERFORM t_expect('l2: a blank mark at the start of real text is kept', import_sched_clean(chr(10240) || 'Pump'), chr(10240) || 'Pump');
   PERFORM t_expect('l2: a variation selector at the start of real text is kept', import_sched_clean(chr(65039) || 'Pump'), chr(65039) || 'Pump');
+END $$;
+
+-- X26 (owner decision 2026-10-28): numbers are never handed out twice, even after their rows were deleted or replaced
+DO $$
+DECLARE
+  j uuid := t_job(190); jr uuid := t_job(191); res text;
+BEGIN
+  res := t_imp('authenticated', t_u('ops'), j, 'append', t_pl('[]', jsonb_build_array(t_tk(1, 'A'), t_tk(2, 'B')), j));
+  PERFORM t_expect('x26: first append numbers A and B', left(res, 3) || '|' || (SELECT string_agg(task_name || '=' || msp_uid::text, ',' ORDER BY msp_uid) FROM job_tasks WHERE job_id = j), 'ok:|A=1,B=2');
+  DELETE FROM job_tasks WHERE job_id = j AND task_name = 'B';
+  res := t_imp('authenticated', t_u('ops'), j, 'append', t_pl('[]', jsonb_build_array(t_tk(1, 'C')), j));
+  PERFORM t_expect('x26: after B (uid 2) was deleted, the next append gets 3, not 2 again', left(res, 3) || '|' || (SELECT msp_uid::text FROM job_tasks WHERE job_id = j AND task_name = 'C'), 'ok:|3');
+  res := t_imp('authenticated', t_u('ops'), jr, 'append', t_pl('[]', jsonb_build_array(t_tk(1, 'A'), t_tk(2, 'B')), jr));
+  res := t_imp('authenticated', t_u('ops'), jr, 'replace', t_pl('[]', jsonb_build_array(t_tk(1, 'X')), jr), 'redo');
+  PERFORM t_expect('x26: replace does not restart numbering (A=1 and B=2 were handed out): X gets 3',
+    left(res, 3) || '|' || (SELECT string_agg(task_name || '=' || msp_uid::text, ',' ORDER BY msp_uid) FROM job_tasks WHERE job_id = jr), 'ok:|X=3');
+  res := t_imp('authenticated', t_u('ops'), jr, 'replace', t_pl('[]', jsonb_build_array(t_tk(1, 'Y'), t_tk(2, 'Z')), jr), 'again');
+  PERFORM t_expect('x26: and again: Y and Z get 4 and 5', left(res, 3) || '|' || (SELECT string_agg(task_name || '=' || msp_uid::text, ',' ORDER BY msp_uid) FROM job_tasks WHERE job_id = jr), 'ok:|Y=4,Z=5');
+  res := t_imp('authenticated', t_u('ops'), jr, 'append', t_pl('[]', jsonb_build_array(t_tk(1, 'W'), t_tk(2, 'V', NULL, 99)), jr));
+  PERFORM t_expect('x26: a refused import (parent 99 does not exist) does not move the counter', (left(res, 3) = 'ok:')::text || '|' || (SELECT last_uid::text FROM job_schedule_uid_counter WHERE job_id = jr), 'false|5');
 END $$;
 
 ROLLBACK;

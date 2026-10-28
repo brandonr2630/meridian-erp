@@ -10,26 +10,6 @@
   "replace": "PERFORM pg_advisory_xact_lock(hashtext(p_job_id::text || 'x'));"
  },
  {
-  "name": "max ignores job_phases",
-  "find": "(SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap\n            UNION ALL\n            SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap) s",
-  "replace": "(SELECT msp_uid AS u FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap) s"
- },
- {
-  "name": "max ignores job_tasks",
-  "find": "(SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap\n            UNION ALL\n            SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap) s",
-  "replace": "(SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap) s"
- },
- {
-  "name": "max not job scoped",
-  "find": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap) s",
-  "replace": "SELECT msp_uid FROM job_tasks WHERE company_id = v_company AND msp_uid <= k_uid_cap) s"
- },
- {
-  "name": "uid 0 can be handed out",
-  "find": "coalesce(max(u), 0)",
-  "replace": "coalesce(max(u), -1)"
- },
- {
   "name": "readers assign too",
   "find": "IF v_write AND v_read THEN",
   "replace": "IF true THEN"
@@ -48,11 +28,6 @@
   "name": "task order descending",
   "find": "row_number() OVER (ORDER BY sort_order, id) AS rn\n                 FROM job_tasks",
   "replace": "row_number() OVER (ORDER BY sort_order DESC, id) AS rn\n                 FROM job_tasks"
- },
- {
-  "name": "tasks reuse the phase uid range",
-  "find": "v_max := v_max + v_n;",
-  "replace": "NULL;"
  },
  {
   "name": "existing phase uids reassigned",
@@ -140,16 +115,6 @@
   "replace": "RETURNS integer LANGUAGE plpgsql SECURITY INVOKER SET search_path = public, pg_temp AS $$\nBEGIN\n  IF p_kind"
  },
  {
-  "name": "h1: max uid counts rows of other companies (phases)",
-  "find": "FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap\n",
-  "replace": "FROM job_phases WHERE job_id = p_job_id AND msp_uid <= k_uid_cap\n"
- },
- {
-  "name": "h1: max uid counts rows of other companies (tasks)",
-  "find": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap) s;",
-  "replace": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND msp_uid <= k_uid_cap) s;"
- },
- {
   "name": "h1: phase numbering touches rows of other companies",
   "find": "FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid IS NULL)\n    UPDATE job_phases p",
   "replace": "FROM job_phases WHERE job_id = p_job_id AND msp_uid IS NULL)\n    UPDATE job_phases p"
@@ -170,48 +135,33 @@
   "replace": "SELECT count(*) INTO v_tasks  FROM job_tasks  WHERE job_id = p_job_id;"
  },
  {
-  "name": "m3: stored uids above the cap are not ignored (phases)",
-  "find": "FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap\n",
-  "replace": "FROM job_phases WHERE job_id = p_job_id AND company_id = v_company\n"
+  "name": "counter: export does not use the counter",
+  "find": "IF v_pnull + v_tnull > 0 THEN v_free := sched_next_uids(p_job_id, v_company, v_pnull + v_tnull); END IF;",
+  "replace": "IF false THEN v_free := sched_next_uids(p_job_id, v_company, v_pnull + v_tnull); END IF;"
  },
  {
-  "name": "m3: stored uids above the cap are not ignored (tasks)",
-  "find": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap) s;",
-  "replace": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company) s;"
+  "name": "counter: phases take the tasks' slice of the numbers",
+  "find": "UPDATE job_phases p SET msp_uid = v_free[n.rn] FROM n WHERE p.id = n.id;",
+  "replace": "UPDATE job_phases p SET msp_uid = v_free[v_pnull + n.rn] FROM n WHERE p.id = n.id;"
  },
  {
-  "name": "m3: exhaustion check removed",
-  "find": "IF v_max::bigint + v_pnull + v_tnull > k_uid_cap THEN",
-  "replace": "IF false THEN"
+  "name": "counter: tasks reuse the phases' numbers",
+  "find": "UPDATE job_tasks t SET msp_uid = v_free[v_pnull + n.rn] FROM n WHERE t.id = n.id;",
+  "replace": "UPDATE job_tasks t SET msp_uid = v_free[n.rn] FROM n WHERE t.id = n.id;"
  },
  {
-  "name": "m3: exhaustion off by one (refuses a fill to exactly the cap)",
-  "find": "IF v_max::bigint + v_pnull + v_tnull > k_uid_cap THEN",
-  "replace": "IF v_max::bigint + v_pnull + v_tnull >= k_uid_cap THEN"
+  "name": "counter: numbers are asked for one row fewer",
+  "find": "v_free := sched_next_uids(p_job_id, v_company, v_pnull + v_tnull);",
+  "replace": "v_free := sched_next_uids(p_job_id, v_company, v_pnull + v_tnull - 1);"
  },
  {
-  "name": "m3: cap is the integer maximum",
-  "find": "k_uid_cap  constant integer := 100000000;",
-  "replace": "k_uid_cap  constant integer := 2147483000;"
+  "name": "counter: numbers are asked for another company",
+  "find": "v_free := sched_next_uids(p_job_id, v_company, v_pnull + v_tnull);",
+  "replace": "v_free := sched_next_uids(p_job_id, '00000000-0000-0000-0000-000000000000'::uuid, v_pnull + v_tnull);"
  },
  {
-  "name": "l1: export never takes free numbers",
-  "find": "IF v_max::bigint + v_pnull + v_tnull > k_uid_cap THEN\n      v_free :=",
-  "replace": "IF false THEN\n      v_free :="
- },
- {
-  "name": "l1: phases take the tasks' slice of the free numbers",
-  "find": "ELSE v_free[n.rn] END FROM n WHERE p.id = n.id",
-  "replace": "ELSE v_free[v_pnull + n.rn] END FROM n WHERE p.id = n.id"
- },
- {
-  "name": "l1: tasks reuse the phases' free numbers",
-  "find": "ELSE v_free[v_pnull + n.rn] END FROM n WHERE t.id = n.id",
-  "replace": "ELSE v_free[n.rn] END FROM n WHERE t.id = n.id"
- },
- {
-  "name": "l1: free numbers are asked for one row fewer",
-  "find": "v_free := sched_free_uids(p_job_id, v_company, v_pnull + v_tnull);",
-  "replace": "v_free := sched_free_uids(p_job_id, v_company, v_pnull + v_tnull - 1);"
+  "name": "counter: export treats itself as a replace",
+  "find": "v_free := sched_next_uids(p_job_id, v_company, v_pnull + v_tnull);",
+  "replace": "v_free := sched_next_uids(p_job_id, v_company, v_pnull + v_tnull, true);"
  }
 ]

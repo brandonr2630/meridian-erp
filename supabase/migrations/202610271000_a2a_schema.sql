@@ -62,22 +62,47 @@ DROP TRIGGER IF EXISTS job_task_links_company_guard ON job_task_links;
 CREATE TRIGGER job_task_links_company_guard BEFORE INSERT OR UPDATE OF job_id, company_id ON job_task_links
   FOR EACH ROW EXECUTE FUNCTION job_schedule_company_guard();
 
--- ===== L1 (review 2): free uids =====
--- The uid space of a job is 1..100000000 across phases and tasks. A writer can set one row's msp_uid to 100000000 (inside the CHECK range),
--- so "max + n" was already over the cap and import and export refused for good. When max + n does not fit, import and export take the
--- first n UNUSED numbers (gaps) instead. Pure read, invoker, only rows of this job and company. Returns fewer than p_n numbers only when
--- all 100000000 are taken.
-CREATE OR REPLACE FUNCTION sched_free_uids(p_job_id uuid, p_company uuid, p_n integer) RETURNS integer[]
-LANGUAGE plpgsql STABLE SET search_path = public, pg_temp AS $$
+-- ===== uid counter (owner decision 2026-10-28; X26: a uid is never handed out twice; review 2, L1) =====
+-- The uid space of a job is 1..100000000 across phases and tasks. Numbers come from a per-job counter that only moves forward, so a number
+-- is never given again even after its row was deleted (replace, delete, a re-import). A writer who sets one msp_uid to the cap cannot
+-- block the job (review L1): the counter ignores stored uids, and a number a stored row already holds is simply skipped.
+-- The counter table is touched only by the definer functions (RLS on, no policy, no grant to any API role).
+-- First use of a job: the counter starts at the highest stored uid of the job's own company (so numbering continues the Phase-A style
+-- sequence), unless that would leave no room (a planted row at the cap): then it starts at 0 and the used numbers are skipped.
+CREATE TABLE IF NOT EXISTS job_schedule_uid_counter (
+  job_id     uuid PRIMARY KEY REFERENCES jobs (id) ON DELETE CASCADE,
+  last_uid   integer NOT NULL CHECK (last_uid BETWEEN 0 AND 100000000),
+  updated_at timestamptz NOT NULL DEFAULT now());
+ALTER TABLE job_schedule_uid_counter ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON job_schedule_uid_counter FROM PUBLIC, anon, authenticated, service_role;
+
+-- Returns p_n numbers above the counter that no stored row of the job holds, in ascending order, and moves the counter to the last of them.
+-- p_replace: the stored rows are about to be deleted (replace), so they do not count as used; the counter still never goes back.
+-- Raises 'uid space exhausted' (22023) only when fewer than p_n numbers are left. Invoker, called only by the definer export and import
+-- functions inside their transaction (a failed import rolls the counter back with everything else); callers hold the job's advisory lock.
+CREATE OR REPLACE FUNCTION sched_next_uids(p_job_id uuid, p_company uuid, p_n integer, p_replace boolean DEFAULT false) RETURNS integer[]
+LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
 DECLARE
   k_cap constant integer := 100000000;
+  v_last integer; v_init integer;
   v_out integer[] := ARRAY[]::integer[]; r record; v_hi integer; v_want integer;
 BEGIN
   IF p_n IS NULL OR p_n <= 0 THEN RETURN v_out; END IF;
+  SELECT c.last_uid INTO v_last FROM job_schedule_uid_counter c WHERE c.job_id = p_job_id FOR UPDATE;
+  IF NOT FOUND THEN
+    SELECT coalesce(max(s.u), 0) INTO v_init
+      FROM (SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap
+            UNION ALL
+            SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) s;
+    INSERT INTO job_schedule_uid_counter (job_id, last_uid)
+      VALUES (p_job_id, CASE WHEN v_init::bigint + p_n > k_cap THEN 0 ELSE v_init END)
+      ON CONFLICT (job_id) DO NOTHING;
+    SELECT c.last_uid INTO v_last FROM job_schedule_uid_counter c WHERE c.job_id = p_job_id FOR UPDATE;
+  END IF;
   FOR r IN SELECT z.u AS prev, lead(z.u) OVER (ORDER BY z.u) AS nxt
-             FROM (SELECT 0 AS u
-                   UNION SELECT msp_uid FROM job_phases WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap
-                   UNION SELECT msp_uid FROM job_tasks  WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) z
+             FROM (SELECT v_last AS u
+                   UNION SELECT msp_uid FROM job_phases WHERE NOT p_replace AND job_id = p_job_id AND company_id = p_company AND msp_uid > v_last AND msp_uid <= k_cap
+                   UNION SELECT msp_uid FROM job_tasks  WHERE NOT p_replace AND job_id = p_job_id AND company_id = p_company AND msp_uid > v_last AND msp_uid <= k_cap) z
             ORDER BY z.u LOOP
     v_want := p_n - cardinality(v_out);
     EXIT WHEN v_want <= 0;
@@ -86,9 +111,11 @@ BEGIN
       v_out := v_out || ARRAY(SELECT g FROM generate_series(r.prev + 1, LEAST(v_hi, r.prev + v_want)) g);
     END IF;
   END LOOP;
+  IF cardinality(v_out) < p_n THEN RAISE EXCEPTION 'uid space exhausted' USING ERRCODE = '22023'; END IF;
+  UPDATE job_schedule_uid_counter SET last_uid = v_out[p_n], updated_at = now() WHERE job_id = p_job_id;
   RETURN v_out;
 END $$;
-REVOKE ALL ON FUNCTION sched_free_uids(uuid, uuid, integer) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION sched_next_uids(uuid, uuid, integer, boolean) FROM PUBLIC, anon, authenticated, service_role;
 
 -- ===== L3 (review 2): a job with schedule rows keeps its company =====
 -- If jobs.company_id changed after the job had a schedule, its rows would belong to the old company and import / export would

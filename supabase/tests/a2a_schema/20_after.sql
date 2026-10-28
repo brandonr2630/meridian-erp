@@ -367,36 +367,105 @@ BEGIN
       WHERE table_schema='public' AND table_name IN ('job_phases','job_tasks') AND column_name='msp_uid'), 'integerYES,integerYES');
 END $$;
 
--- L1 (review 2): sched_free_uids returns the first n unused numbers of a job's uid space; L3: the jobs company guard
+-- uid counter (owner decision 2026-10-28, X26): sched_next_uids hands out numbers from a per-job counter that never goes back
 DO $$
 DECLARE
   c1 constant uuid := 'c1000000-0000-0000-0000-000000000001'; c2 constant uuid := 'c2000000-0000-0000-0000-000000000002';
-  j constant uuid := 'b5000000-0000-0000-0000-0000000f1ee1'; jn constant uuid := 'b5000000-0000-0000-0000-0000000f1ee2'; r text;
+  j constant uuid := 'b5000000-0000-0000-0000-0000000f1ee1'; jn constant uuid := 'b5000000-0000-0000-0000-0000000f1ee2';
+  jm constant uuid := 'b5000000-0000-0000-0000-0000000f1ee5'; jr constant uuid := 'b5000000-0000-0000-0000-0000000f1ee6';
+  jp constant uuid := 'b5000000-0000-0000-0000-0000000f1ee7'; jx constant uuid := 'b5000000-0000-0000-0000-0000000f1ee8';
+  jc constant uuid := 'b5000000-0000-0000-0000-0000000f1ee9'; jq constant uuid := 'b5000000-0000-0000-0000-0000000f1eea'; jz constant uuid := 'b5000000-0000-0000-0000-0000000f1eeb';
+  jf constant uuid := 'b5000000-0000-0000-0000-0000000f1eec'; jg constant uuid := 'b5000000-0000-0000-0000-0000000f1eed'; jh constant uuid := 'b5000000-0000-0000-0000-0000000f1eee'; jk constant uuid := 'b5000000-0000-0000-0000-0000000f1eef'; r text;
 BEGIN
-  INSERT INTO jobs (id, company_id, job_no, status) VALUES (j, c1, 'WO-FREE1', 'Open'), (jn, c1, 'WO-FREE2', 'Open');
+  INSERT INTO jobs (id, company_id, job_no, status) VALUES (j, c1, 'WO-FREE1', 'Open'), (jn, c1, 'WO-FREE2', 'Open'), (jm, c1, 'WO-FREE5', 'Open'),
+    (jr, c1, 'WO-FREE6', 'Open'), (jp, c1, 'WO-FREE7', 'Open'), (jx, c1, 'WO-FREE8', 'Open'), (jc, c1, 'WO-FREE9', 'Open'), (jq, c1, 'WO-FREEA', 'Open'), (jz, c1, 'WO-FREEB', 'Open'), (jf, c1, 'WO-FREEC', 'Open'), (jg, c1, 'WO-FREED', 'Open'), (jh, c1, 'WO-FREEE', 'Open'), (jk, c1, 'WO-FREEF', 'Open');
   INSERT INTO job_phases (id, company_id, job_id, sort_order, name, msp_uid) VALUES ('f4000000-0000-0000-0000-0000000f1ee1', c1, j, 1, 'p', 2);
   INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES
     ('f5000000-0000-0000-0000-0000000f1ee1', c1, j, 1, 'a', 1), ('f5000000-0000-0000-0000-0000000f1ee2', c1, j, 2, 'b', 4),
     ('f5000000-0000-0000-0000-0000000f1ee3', c1, j, 3, 'c', 100000000), ('f5000000-0000-0000-0000-0000000f1ee4', c1, j, 4, 'd', NULL);
-  PERFORM t_expect('l1: free uids skip the used ones of phases and tasks (1, 2, 4 and the cap are used)', sched_free_uids(j, c1, 3)::text, '{3,5,6}');
-  PERFORM t_expect('l1: one number', sched_free_uids(j, c1, 1)::text, '{3}');
-  PERFORM t_expect('l1: zero, negative and NULL ask for nothing', sched_free_uids(j, c1, 0)::text || sched_free_uids(j, c1, -2)::text || sched_free_uids(j, c1, NULL)::text, '{}{}{}');
-  PERFORM t_expect('l1: an empty job starts at 1', sched_free_uids(jn, c1, 3)::text, '{1,2,3}');
-  PERFORM t_expect('l1: only rows of the given company count (a row under another company id is ignored)', sched_free_uids(j, c2, 2)::text, '{1,2}');
-  PERFORM t_expect('l1: the helper is not callable by API roles',
-    has_function_privilege('authenticated', 'sched_free_uids(uuid, uuid, integer)', 'EXECUTE')::text || has_function_privilege('anon', 'sched_free_uids(uuid, uuid, integer)', 'EXECUTE')::text, 'falsefalse');
+  -- first use with a row planted at the cap: there is no room after the highest stored uid, so the counter starts at 0 and used numbers are skipped
+  PERFORM t_expect('counter: a job with a row at the cap still gets numbers: the first free ones skipping 1, 2, 4 and the cap', sched_next_uids(j, c1, 3)::text, '{3,5,6}');
+  PERFORM t_expect('counter: the counter moved to the last number handed out', (SELECT last_uid::text FROM job_schedule_uid_counter WHERE job_id = j), '6');
+  PERFORM t_expect('counter: the next call continues above the counter (7, 8), the cap row does not move it', sched_next_uids(j, c1, 2)::text, '{7,8}');
+  PERFORM t_expect('counter: zero, negative and NULL ask for nothing and move nothing',
+    sched_next_uids(j, c1, 0)::text || sched_next_uids(j, c1, -2)::text || sched_next_uids(j, c1, NULL)::text || (SELECT last_uid::text FROM job_schedule_uid_counter WHERE job_id = j), '{}{}{}8');
+  -- a number is never handed out twice, even when its row was deleted
+  PERFORM t_expect('counter: an empty job starts at 1', sched_next_uids(jn, c1, 3)::text, '{1,2,3}');
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f5000000-0000-0000-0000-0000000f1ef1', c1, jn, 1, 'three', 3);
+  DELETE FROM job_tasks WHERE id = 'f5000000-0000-0000-0000-0000000f1ef1';
+  PERFORM t_expect('counter: number 3 was handed out and its row deleted; it is not given again (X26)', sched_next_uids(jn, c1, 1)::text, '{4}');
+  -- first use continues after the highest stored uid
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f5000000-0000-0000-0000-0000000f1ef2', c1, jm, 1, 'five', 5), ('f5000000-0000-0000-0000-0000000f1ef3', c1, jm, 2, 'nine', 9);
+  PERFORM t_expect('counter: first use continues after the highest stored uid (9): 10 and 11', sched_next_uids(jm, c1, 2)::text, '{10,11}');
+  -- replace: the stored rows are about to be deleted, so they are not "used"
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f5000000-0000-0000-0000-0000000f1ef4', c1, jr, 1, 'one', 1), ('f5000000-0000-0000-0000-0000000f1ef5', c1, jr, 2, 'cap', 100000000);
+  PERFORM t_expect('counter: replace ignores the stored rows (1 and the cap): 1 and 2', sched_next_uids(jr, c1, 2, true)::text, '{1,2}');
+  PERFORM t_expect('counter: replace does not take the counter back: the next replace continues at 3', sched_next_uids(jr, c1, 1, true)::text, '{3}');
+  -- a stored number above the counter is skipped, not reused
+  PERFORM t_expect('counter: setup (job p)', sched_next_uids(jp, c1, 1)::text, '{1}');
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f5000000-0000-0000-0000-0000000f1ef6', c1, jp, 1, 'planted', 2);
+  INSERT INTO job_phases (id, company_id, job_id, sort_order, name, msp_uid) VALUES ('f4000000-0000-0000-0000-0000000f1ef8', c1, jp, 1, 'planted phase', 4);
+  PERFORM t_expect('counter: stored uids above the counter (task 2, phase 4) are skipped', sched_next_uids(jp, c1, 3)::text, '{3,5,6}');
+  -- first use: the highest stored uid may be a phase's; and a fit that is exactly the cap still continues after it
+  INSERT INTO job_phases (id, company_id, job_id, sort_order, name, msp_uid) VALUES ('f4000000-0000-0000-0000-0000000f1ef9', c1, jq, 1, 'phase 20', 20);
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f5000000-0000-0000-0000-0000000f1efa', c1, jq, 1, 'five', 5);
+  PERFORM t_expect('counter: first use continues after the highest stored uid even when it belongs to a phase (20): 21', sched_next_uids(jq, c1, 1)::text, '{21}');
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f5000000-0000-0000-0000-0000000f1efb', c1, jz, 1, 'top', 99999999);
+  PERFORM t_expect('counter: a first use that fits exactly up to the cap continues after the highest stored uid: 100000000', sched_next_uids(jz, c1, 1)::text, '{100000000}');
+  -- the space can really run out (only the counter can do it now, a planted uid cannot)
+  INSERT INTO job_schedule_uid_counter (job_id, last_uid) VALUES (jx, 99999999);
+  BEGIN PERFORM sched_next_uids(jx, c1, 2); r := 'no error'; EXCEPTION WHEN SQLSTATE '22023' THEN r := SQLERRM; END;
+  PERFORM t_expect('counter: asking for more than is left raises and keeps the counter', r || '|' || (SELECT last_uid::text FROM job_schedule_uid_counter WHERE job_id = jx), 'uid space exhausted|99999999');
+  PERFORM t_expect('counter: the last number (100000000) can be handed out', sched_next_uids(jx, c1, 1)::text, '{100000000}');
+  BEGIN PERFORM sched_next_uids(jx, c1, 1); r := 'no error'; EXCEPTION WHEN SQLSTATE '22023' THEN r := SQLERRM; END;
+  PERFORM t_expect('counter: and then the space is exhausted', r, 'uid space exhausted');
+  -- only rows of the given company count when the counter starts
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f5000000-0000-0000-0000-0000000f1ef7', c1, jc, 1, 'c1 row', 7);
+  PERFORM t_expect('counter: rows of another company id are ignored: a company that has none starts at 1', sched_next_uids(jc, c2, 2)::text, '{1,2}');
+  -- rows of another company that carry this job's id (planted as the owner with the triggers off) are ignored at first use and when skipping
+  SET LOCAL session_replication_role = replica;
+  INSERT INTO job_phases (id, company_id, job_id, sort_order, name, msp_uid) VALUES ('f4000000-0000-0000-0000-0000000f1efc', c2, jf, 1, 'foreign phase', 50);
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f5000000-0000-0000-0000-0000000f1efd', c1, jf, 1, 'own', 3);
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f5000000-0000-0000-0000-0000000f1efe', c2, jg, 1, 'foreign task', 1);
+  SET LOCAL session_replication_role = origin;
+  PERFORM t_expect('counter: a foreign-company phase (uid 50) does not move the first-use counter: own max 3, next is 4', sched_next_uids(jf, c1, 1)::text, '{4}');
+  INSERT INTO job_schedule_uid_counter (job_id, last_uid) VALUES (jg, 0);
+  PERFORM t_expect('counter: a foreign-company task (uid 1) is not a used number of this company: 1', sched_next_uids(jg, c1, 1)::text, '{1}');
+  -- a stored uid above the cap (a database that predates the range CHECK) is ignored at first use
+  ALTER TABLE job_tasks DROP CONSTRAINT IF EXISTS job_tasks_msp_uid_range;
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f5000000-0000-0000-0000-0000000f1eff', c1, jh, 1, 'huge', 2147483647), ('f5000000-0000-0000-0000-0000000f1f00', c1, jh, 2, 'five', 5);
+  PERFORM t_expect('counter: a stored uid above the cap is ignored at first use: continues after 5', sched_next_uids(jh, c1, 1)::text, '{6}');
+  -- replace with a counter that is behind the stored rows (rows numbered by hand): the stored phase does not count as used
+  INSERT INTO job_schedule_uid_counter (job_id, last_uid) VALUES (jk, 0);
+  INSERT INTO job_phases (id, company_id, job_id, sort_order, name, msp_uid) VALUES ('f4000000-0000-0000-0000-0000000f1f01', c1, jk, 1, 'hand numbered', 1);
+  PERFORM t_expect('counter: replace ignores a stored phase uid ahead of the counter: 1', sched_next_uids(jk, c1, 1, true)::text, '{1}');
+  PERFORM t_expect('counter: the same without replace skips it (counter is now 1, next 2)', sched_next_uids(jk, c1, 1)::text, '{2}');
+  BEGIN INSERT INTO job_schedule_uid_counter (job_id, last_uid) VALUES (jq, -1); r := 'inserted'; EXCEPTION WHEN check_violation THEN r := 'check'; END;
+  PERFORM t_expect('counter: a negative counter is refused', r, 'check');
+  BEGIN UPDATE job_schedule_uid_counter SET last_uid = 100000001 WHERE job_id = jk; r := 'updated'; EXCEPTION WHEN check_violation THEN r := 'check'; END;
+  PERFORM t_expect('counter: a counter above the cap is refused', r, 'check');
+  -- the counter table and the helper are closed to every API role
+  PERFORM t_expect('counter: no API role can read or write the counter table',
+    (SELECT string_agg(has_table_privilege(ro, 'job_schedule_uid_counter', pv)::text, ',') FROM unnest(ARRAY['authenticated', 'anon', 'service_role']) ro, unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE']) pv),
+    'false,false,false,false,false,false,false,false,false,false,false,false');
+  PERFORM t_expect('counter: row level security is on', (SELECT relrowsecurity::text FROM pg_class WHERE oid = 'public.job_schedule_uid_counter'::regclass), 'true');
+  PERFORM t_expect('counter: the helper is not callable by API roles',
+    has_function_privilege('authenticated', 'sched_next_uids(uuid, uuid, integer, boolean)', 'EXECUTE')::text || has_function_privilege('anon', 'sched_next_uids(uuid, uuid, integer, boolean)', 'EXECUTE')::text, 'falsefalse');
+  DELETE FROM jobs WHERE id = jx;
+  PERFORM t_expect('counter: deleting the job deletes its counter row', (SELECT count(*)::text FROM job_schedule_uid_counter WHERE job_id = jx), '0');
+  PERFORM t_expect('counter: the old free-uid helper is gone', (SELECT count(*)::text FROM pg_proc WHERE proname = 'sched_free_uids'), '0');
+
+  -- L3: the jobs company guard
   BEGIN UPDATE jobs SET company_id = c2 WHERE id = j; r := 'changed'; EXCEPTION WHEN SQLSTATE 'A2C02' THEN r := 'A2C02'; END;
   PERFORM t_expect('l3: a job with schedule rows keeps its company', r, 'A2C02');
-  BEGIN UPDATE jobs SET company_id = c2 WHERE id = jn; r := 'changed'; EXCEPTION WHEN SQLSTATE 'A2C02' THEN r := 'A2C02'; END;
-  PERFORM t_expect('l3: a job without schedule rows can still change company', r, 'changed');
-  -- a job that has only phases, and one that has only tasks, are protected too; setting the same company is not a change
+  BEGIN UPDATE jobs SET company_id = c2 WHERE id = jc; r := 'changed'; EXCEPTION WHEN SQLSTATE 'A2C02' THEN r := 'A2C02'; END;
+  PERFORM t_expect('l3: ... and a job whose only rows are tasks too', r, 'A2C02');
   INSERT INTO jobs (id, company_id, job_no, status) VALUES ('b5000000-0000-0000-0000-0000000f1ee3', c1, 'WO-FREE3', 'Open'), ('b5000000-0000-0000-0000-0000000f1ee4', c1, 'WO-FREE4', 'Open');
+  BEGIN UPDATE jobs SET company_id = c2 WHERE id = 'b5000000-0000-0000-0000-0000000f1ee4'; r := 'changed'; EXCEPTION WHEN SQLSTATE 'A2C02' THEN r := 'A2C02'; END;
+  PERFORM t_expect('l3: a job without schedule rows can still change company', r, 'changed');
   INSERT INTO job_phases (id, company_id, job_id, sort_order, name) VALUES ('f4000000-0000-0000-0000-0000000f1ee3', c1, 'b5000000-0000-0000-0000-0000000f1ee3', 1, 'only a phase');
-  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES ('f5000000-0000-0000-0000-0000000f1ee5', c1, 'b5000000-0000-0000-0000-0000000f1ee4', 1, 'only a task');
   BEGIN UPDATE jobs SET company_id = c2 WHERE id = 'b5000000-0000-0000-0000-0000000f1ee3'; r := 'changed'; EXCEPTION WHEN SQLSTATE 'A2C02' THEN r := 'A2C02'; END;
   PERFORM t_expect('l3: a job with only a phase keeps its company', r, 'A2C02');
-  BEGIN UPDATE jobs SET company_id = c2 WHERE id = 'b5000000-0000-0000-0000-0000000f1ee4'; r := 'changed'; EXCEPTION WHEN SQLSTATE 'A2C02' THEN r := 'A2C02'; END;
-  PERFORM t_expect('l3: a job with only a task keeps its company', r, 'A2C02');
   BEGIN UPDATE jobs SET company_id = company_id WHERE id = j; r := 'ok'; EXCEPTION WHEN SQLSTATE 'A2C02' THEN r := 'A2C02'; END;
   PERFORM t_expect('l3: writing the same company back is not a change', r, 'ok');
   PERFORM t_expect('l3: the guard trigger exists and its function is not callable by API roles',

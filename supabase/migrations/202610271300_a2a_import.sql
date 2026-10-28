@@ -135,7 +135,6 @@ DECLARE
   k_max_tasks constant integer := 2000;   k_max_phases constant integer := 500;
   k_max_links constant integer := 5000;   k_max_job_tasks constant integer := 10000;
   k_max_depth constant integer := 6;      k_max_bytes constant integer := 6000000;
-  k_uid_cap constant integer := 100000000;   -- msp_uid CHECK range (a2a_schema, M3); the payload uid range is the same
   v_job_no text; v_company uuid; v_approver boolean; v_reason text; v_username text;
   v_file text; v_based timestamptz; v_puid text; v_pm text; v_temp boolean := false;
   v_phases jsonb; v_tasks jsonb; r record; lrec record; w text; lw text;
@@ -144,7 +143,7 @@ DECLARE
   n_trunc integer := 0; n_defaulted integer := 0; n_bl_partial integer := 0; n_bl_ignored integer := 0; n_kind integer := 0; n_res integer := 0;
   n_links integer := 0; n_total_links integer := 0;
   v_cur timestamptz; v_ex_p integer := 0; v_ex_t integer := 0; v_matched integer := 0;
-  v_base integer; v_new_p integer; v_new_t integer; v_free integer[];
+  v_new_p integer; v_new_t integer; v_free integer[];
   v_created integer := 0; v_updated integer := 0; v_kept integer := 0; v_skipped integer := 0; n integer;
   v_has_bl boolean; v_locked boolean := false; v_bl_ok boolean := false; v_nb integer := 0;
   v_recovery jsonb := NULL; v_del_p integer := 0; v_del_t integer := 0; v_del_l integer := 0; v_links_written integer := 0;
@@ -445,25 +444,14 @@ BEGIN
     RAISE EXCEPTION 'task hierarchy is deeper than % levels', k_max_depth USING ERRCODE = '23514';
   END IF;
 
-  -- ---- 5. uid assignment from the shared counter (phases and tasks of the job share one space; never 0, never reused)
-  -- stored uids above the cap (impossible through the CHECK, possible only in a database that predates it) are ignored, so the
-  -- counter can never overflow integer; the new uids always stay inside 1..k_uid_cap
-  SELECT coalesce(max(m), 0) INTO v_base FROM (SELECT max(msp_uid) AS m FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap
-                                              UNION ALL SELECT max(msp_uid) FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid <= k_uid_cap) s;
+  -- ---- 5. uid assignment from the per-job counter (phases and tasks of the job share one space; never 0; never handed out twice, X26)
+  -- sched_next_uids returns the next free numbers above a counter that only moves forward (review L1: a planted uid cannot block the job;
+  -- stored uids above the cap are ignored). Replace deletes every stored row, so those numbers are not "used", but the counter does not go back.
   SELECT count(*) INTO v_new_p FROM pg_temp.imp_p WHERE NOT matched;
   SELECT count(*) INTO v_new_t FROM pg_temp.imp_t WHERE NOT matched;
-  -- L1 (review 2): max + n not fitting must not lock the job for good (a writer can set one msp_uid to the cap). Replace deletes every stored
-  -- row, so its counter restarts at 0; append and merge take the first unused numbers (gaps).
-  IF v_base::bigint + v_new_p + v_new_t > k_uid_cap AND p_mode = 'replace' THEN v_base := 0; END IF;
-  IF v_base::bigint + v_new_p + v_new_t > k_uid_cap THEN
-    v_free := sched_free_uids(p_job_id, v_company, v_new_p + v_new_t);
-    IF coalesce(cardinality(v_free), 0) < v_new_p + v_new_t THEN RAISE EXCEPTION 'uid space exhausted' USING ERRCODE = '22023'; END IF;
-    UPDATE pg_temp.imp_p ip SET new_uid = v_free[s.rn] FROM (SELECT uid, row_number() OVER (ORDER BY idx) AS rn FROM pg_temp.imp_p WHERE NOT matched) s WHERE s.uid = ip.uid;
-    UPDATE pg_temp.imp_t it SET new_uid = v_free[v_new_p + s.rn] FROM (SELECT uid, row_number() OVER (ORDER BY idx) AS rn FROM pg_temp.imp_t WHERE NOT matched) s WHERE s.uid = it.uid;
-  ELSE
-    UPDATE pg_temp.imp_p ip SET new_uid = v_base + s.rn FROM (SELECT uid, row_number() OVER (ORDER BY idx) AS rn FROM pg_temp.imp_p WHERE NOT matched) s WHERE s.uid = ip.uid;
-    UPDATE pg_temp.imp_t it SET new_uid = v_base + v_new_p + s.rn FROM (SELECT uid, row_number() OVER (ORDER BY idx) AS rn FROM pg_temp.imp_t WHERE NOT matched) s WHERE s.uid = it.uid;
-  END IF;
+  v_free := sched_next_uids(p_job_id, v_company, v_new_p + v_new_t, p_mode = 'replace');
+  UPDATE pg_temp.imp_p ip SET new_uid = v_free[s.rn] FROM (SELECT uid, row_number() OVER (ORDER BY idx) AS rn FROM pg_temp.imp_p WHERE NOT matched) s WHERE s.uid = ip.uid;
+  UPDATE pg_temp.imp_t it SET new_uid = v_free[v_new_p + s.rn] FROM (SELECT uid, row_number() OVER (ORDER BY idx) AS rn FROM pg_temp.imp_t WHERE NOT matched) s WHERE s.uid = it.uid;
 
   -- ---- 6. baseline decision (Baseline on import): approver, >= 1 complete baseline, and no baseline locked yet unless replacing
   SELECT EXISTS (SELECT 1 FROM pg_temp.imp_t WHERE bstart IS NOT NULL AND bend IS NOT NULL) INTO v_has_bl;
