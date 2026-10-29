@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-29 · Session 75*
+*Last updated: 2026-10-29 · Session 76*
 
 ---
 
@@ -30,7 +30,7 @@
 8. Older: PO module live click-through (S48) and PO list search/pagination (S49); `www.erp` alias/cert (S51); rotate the ERP password; confirm the BMS Bar Stock cost in Job Config; watch for GreenGeeks WAF block recurrence (S47).
 
 **Claude-side, waiting on a go-ahead or a trigger:**
-- **A2a SQL (S73-S74): built, fixed after two independent attack reviews, uid counter done (X26), all gates green. MERGED to master as files in PR #187 (49a8ad3, 2026-10-29); NOT applied to prod** (`supabase/` and `scripts/` are not deployed and the PR touched no web file). The four migrations are `supabase/migrations/202610271000..1300_a2a_*.sql` (rollbacks in `supabase/rollbacks/`). See Session 74 for what is proven, the open item M2 and the prod pre-checks; E1 is closed as a separate migration in Session 75 (PR open, not applied).
+- **A2a SQL (S73-S74): built, fixed after two independent attack reviews, uid counter done (X26), all gates green. MERGED to master as files in PR #187 (49a8ad3, 2026-10-29); NOT applied to prod** (`supabase/` and `scripts/` are not deployed and the PR touched no web file). **Update S76: M2 (#190) and E1 (#189, audit reserved actions) are also merged as files, and the JS Apply/Replace import is merged and deployed but dormant (#191). Still nothing applied to prod.** The four migrations are `supabase/migrations/202610271000..1300_a2a_*.sql` (rollbacks in `supabase/rollbacks/`). See Session 74 for what is proven, the open item M2 and the prod pre-checks; E1 is closed as a separate migration in Session 75 (PR open, not applied).
 - **A2a, JS side DONE and merged (S71)**: link types FS/SS/FF/SF and task hierarchy in `jcSchedCompute` (PRs #175, #176), the MSPDI codec `schedule-msp.js` (#176), the read-only schedule window with Export XML and an import dry run (#177), and (S72) **Gantt arrows by link type** (#180, dormant until the migration adds `link_type`). **A2a still open:** (1) the SQL side, which needs **Docker** (not installed on the machine used in S71; install it first): the A2 migration (`link_type`, `msp_uid`, `parent_task_id` + cycle guard, depth cap), `job_schedule_status` rewritten with the same link-type and hierarchy rules as the JS (the 52+3 shared fixture cases must pass on SQL too: update `scripts/tests/schedule/sql-fixture-runner.mjs`, which does not pass `link_type` or the new `parent` key yet, so the new cases fail loudly against the old SQL), `prepare_schedule_export`, `import_job_schedule` (needs an independent attack review like D0d), all proven on throwaway Postgres with mutation checks and then applied to prod one step at a time; (2) window editing and Apply import once the RPCs exist; (3) audit row per export; (4) Gantt nesting by `parent_task_id` (summary rows, indent, collapse) once that column exists. Then **A2b** (resources, `task_id` on labour and equipment entries, `jcSaveJobData` change) and **A2c** (undo/redo).
 - A2 spec accepted (S71) and **recorded 2026-10-27 (S72, PR #179)**: roadmap row, sequencing steps 2a/2b/2c, decisions 24-25, risks, effort, X1 amendment and rules X24-X30 are in `00-overview.md` / `99-roadmap.md`, and the shared-codec note is at the top of `phase-d-client-portal.md`. Still to settle in the specs when their SQL is written: names of the Phase D agreement tables (X29), and the A2b table names are only reserved (`job_resources`, `job_task_assignments`).
 - Pre-existing, not from S72: `node scripts/verify-spec.mjs phase-a-schedule-v2.md` fails on master ("DROP in up-migration without a -- down section"; the Phase A spec embeds the migration executed in Session 61). Decide whether to fix the spec text or relax the check.
@@ -39,6 +39,34 @@
 - Parked: staging deploy gate (S52, blocked on the Supabase project cap); Supabase Branching `main` record stuck in `MIGRATIONS_FAILED` (S52, not the prod database).
 
 **Gotcha:** Edit/Write are blocked on the base repo's worktrees. Write the file to the scratchpad and `cp` it in. Pull or branch from `origin/master` before reading this file (a stale checkout once stopped at Session 51).
+
+---
+
+## Session 76 - M2 and E1 merged, JS Apply/Replace import built and deployed (dormant) (2026-10-29)
+
+**Master at the end of this session: `65d007f` (PR #191).** All merges were confirmed by the owner one by one. Nothing was applied to prod.
+
+**Merged as files (not applied):**
+- #189 `feature/audit-reserved-actions`: migration `202610290900_d0c_audit_reserved.sql` + rollback + test family + `scripts/verify-audit-reserved.mjs` (E1, see Session 75).
+- #190 `feature/a2a-status-perf`: M2 fixed in `202610271100_a2a_status.sql`. Links are visited in topological order (Kahn over IN/OUT nodes; a cycle falls back to stored order). 6,000-task chain 31 s -> 1.2 s. Status suite 138, 43+ mutants caught (cyclic-case tests added for the survivors).
+
+**Merged and deployed (dormant until the SQL is applied):**
+- #191 `feature/schedule-apply-import`: the schedule window can now **Apply import** with Append, Merge or Replace. Functions in the `SCHEDULE WINDOW` block: `schedWinImportModes`, `schedWinBasedOn`, `schedWinImportBody`, `schedWinImportError`, `schedWinReplaceCounts`, `schedWinImportApply` (calls `jcRpc('import_job_schedule', ...)`). Replace asks for a confirmation and a reason (max 500). Merge is only offered for files exported by Meridian for the same job. Until the migrations exist, the call fails and the panel says the feature is not available yet.
+- Tests: `scripts/tests/ui/schedule-window.test.mjs` 49 tests; `schedule-window-mutate.mjs` 103 mutants, all killed. A visual check of the real page found a bug the tests missed (result panel title) and it was fixed.
+
+**Shown to the owner (no code change):** mockups, then real screenshots of the import preview, the "not available" message, the Replace dialog and the Gantt (phase rows, progress, critical bars, today line, arrows per link type, milestone, predecessor column such as `Strip stator FF+2d`).
+
+**NOT built yet:** export through `prepare_schedule_export` (stable IDs, so Merge becomes available for real exports); editing inside the window; Gantt nesting by `parent_task_id` (needs the schema migration applied); A2b (resources, `task_id` on labour/equipment entries); A2c (undo/redo); Phases B, C, D.
+
+**Next (in order):**
+1. Owner runs the combined read-only 5-row pre-check in the Supabase SQL Editor (cross-company counts, audit checks, audit policies, baseline owner, dates outside 2000-2100) and sends the result.
+2. With the owner's explicit go-ahead, apply one migration at a time, verifying with a simulated identity after each: schema -> status -> export -> import, then audit-reserved. Each has a rollback in `supabase/rollbacks/`.
+3. Owner live checks: Open schedule on a real work order; ProjectLibre round trip (item 9); lawyer's client agreement (item 7).
+4. After the SQL is live: wire export to `prepare_schedule_export`, then Gantt nesting, then window editing.
+
+**Housekeeping:** many merged worktrees remain under `.worktrees/` (a2a-sql*, status-perf, sched-apply, audit-reserved, handoff-s74*); `git worktree remove` them when convenient (`a2a-sql-r2` is locked). The root checkout `z-master` is 29 commits behind origin/master (read-only by convention); its `CLAUDE.md` edits are uncommitted.
+
+**Gotcha:** Docker commands need `...DockerDesktopesourcesin` on PATH and Docker Desktop running; from PowerShell call Git Bash explicitly.
 
 ---
 
