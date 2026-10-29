@@ -72,6 +72,20 @@ const targeted = [
   C("a parent that sits in another job is ignored (task stays a leaf)", [T("A", 10, "2026-03-09", "2026-03-13", { parent: OTHER }), T("B", 20, "2026-03-09", "2026-03-11")]),
   C("a link from a leaf to its own summary does not raise: one row, passes stop", [
     T("S", 10, "2026-03-09", "2026-03-13"), T("C1", 20, "2026-03-09", "2026-03-12", { parent: "S" })], [{ task: "S", pred: "C1", lag: 0, type: "FS" }]),
+  // M2: a cycle made by the hierarchy (a link between a summary and its own leaf) keeps the stored link order, like JS; the follower chain N<-M<-L is
+  // listed BEFORE the closing link, so visiting the links in rank order instead would let N see L's value of the same pass and end somewhere else
+  C("cycle: a leaf linked to its own summary, with a follower chain: the stored link order decides what the passes leave", [
+    T("S", 10, "2026-03-09", "2026-03-13"), T("L", 20, "2026-03-09", "2026-03-12", { parent: "S" }), T("M", 30, "2026-03-09", "2026-03-11"), T("N", 40, "2026-03-09", "2026-03-10")],
+    [{ task: "N", pred: "M", lag: 0, type: "FS" }, { task: "M", pred: "L", lag: 0, type: "FS" }, { task: "S", pred: "L", lag: 0, type: "FS" }]),
+  C("cycle: a summary linked to its own leaf, with a follower chain: the stored link order decides what the passes leave", [
+    T("S", 10, "2026-03-09", "2026-03-13"), T("L", 20, "2026-03-09", "2026-03-12", { parent: "S" }), T("M", 30, "2026-03-09", "2026-03-11"), T("N", 40, "2026-03-09", "2026-03-10")],
+    [{ task: "N", pred: "M", lag: 0, type: "FS" }, { task: "M", pred: "L", lag: 0, type: "FS" }, { task: "L", pred: "S", lag: 0, type: "FS" }]),
+  // M2: a chain U1->...->U6 that FEEDS the cycle is stored backwards. Visited in stored order its push reaches L on pass 6, visited by rank on pass 1;
+  // the cycle keeps growing until the pass cap, so the two orders leave different values (the engine must keep the stored order, like JS)
+  C("cycle: a chain feeding a leaf that is linked to its own summary, stored backwards", [
+    ...[1, 2, 3, 4, 5, 6].map((k) => T("U" + k, k * 10, "2026-03-09", "2026-03-19")),
+    T("S", 70, "2026-03-09", "2026-03-13"), T("L", 80, "2026-03-09", "2026-03-12", { parent: "S" })],
+    [...[6, 5, 4, 3, 2].map((k) => ({ task: "U" + k, pred: "U" + (k - 1), lag: 0, type: "FS" })), { task: "L", pred: "U6", lag: 0, type: "FS" }, { task: "S", pred: "L", lag: 0, type: "FS" }]),
   C("undated summary with dated leaves takes its span from the leaves", [
     T("S", 10, null, null), T("C1", 20, "2026-03-09", "2026-03-12", { parent: "S" }), T("C2", 30, "2026-03-10", "2026-03-16", { parent: "S" }), T("X", 40, "2026-03-09", "2026-03-10")],
     [{ task: "X", pred: "S", lag: 0, type: "FS" }]),
