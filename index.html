@@ -1657,6 +1657,15 @@ body {
 .sw-imp-warn { margin:6px 0; padding-left:18px; font-size:12px; color:var(--amber); }
 .sw-imp-tbl { max-height:320px; overflow:auto; margin:8px 0; }
 .sw-imp-apply { display:flex; align-items:center; gap:10px; font-size:12px; flex-wrap:wrap; }
+.sw-mode { display:block; margin:4px 0; font-size:13px; cursor:pointer; }
+.sw-mode input { margin-right:6px; }
+.sw-mode-off { opacity:.6; cursor:default; }
+.sw-danger { background:var(--red-bg); border:1px solid var(--red); color:var(--red); border-radius:var(--radius); padding:8px 10px; font-size:13px; margin:8px 0; }
+.sw-confirm { border:1px solid var(--border); border-radius:var(--radius); padding:12px; margin:8px 0; background:var(--bg-3); }
+.sw-confirm-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:8px 0; font-size:13px; }
+.sw-confirm-grid > div { background:var(--bg-2); border-radius:var(--radius); padding:8px 10px; }
+.sw-confirm input[type=text] { width:100%; }
+.sw-res-n { font-size:13px; margin:6px 0; }
 /* schedule-window:end */
 /* schedule-table:begin */
 .jc-sched-notice { margin:6px 0; padding:6px 10px; font-size:12px; color:var(--text-2); background:var(--bg-3); border:1px solid var(--border); border-radius:var(--radius); }
@@ -9172,9 +9181,9 @@ function jcRenderJobGantt() {
 // ── END SCHEDULE GANTT RENDERER ──
 // ── SCHEDULE WINDOW ──
 // Phase A2a: the full-screen schedule window, route #/schedule/<job_id>, opened in a new tab from the Work Order's Schedule card.
-// READ-ONLY in this version: task table, Gantt (the Phase A renderer), details pane, KPI summary, Export XML (MS Project XML via
-// schedule-msp.js) and an Import XML DRY RUN (parse + preview). Editing stays on the Work Order card; applying an import needs the
-// A2 database migration (link_type, msp_uid, import_job_schedule), which does not exist yet, so Apply is disabled and says why.
+// Task table, Gantt (the Phase A renderer), details pane, KPI summary, Export XML (MS Project XML via schedule-msp.js) and Import XML:
+// preview, then Apply (Append / Merge / Replace) through the import_job_schedule RPC. Editing stays on the Work Order card. The RPC comes
+// with the A2a database upgrade: until it is installed, Apply says so and changes nothing (the call fails with "function not found").
 // Exports use TEMPORARY UIDs (1,000,001 and up) and the read-only marker in Project/Manager, because stable UIDs are assigned by
 // prepare_schedule_export (not built yet). Every dynamic string goes through textContent / escHTML; the codec rejects hostile files.
 const SCHED_WIN_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -9374,12 +9383,14 @@ function schedWinImportPick() { const f = schedWinEl('sw-file'); if (f) { f.valu
 async function schedWinImportFile(file) {
   if (!file) return;
   if (typeof MspCodec === 'undefined') { showToast('The import module did not load. Reload the page.', 'error'); return; }
-  const imp = { name: String(file.name || 'file').slice(0, 120), size: file.size, error: '', parsed: null, payload: null };
+  const imp = { name: String(file.name || 'file').slice(0, 120), size: file.size, error: '', parsed: null, payload: null,
+    mode: null, confirm: false, reason: '', reasonErr: '', applyErr: '', busy: false, result: null };
   schedWin.imp = imp; schedWinImportRender();
   if (file.size > SCHED_WIN_MAX_BYTES) { imp.error = 'The file is larger than 5 MB.'; schedWinImportRender(); return; }
   try {
     const text = await file.text();
     imp.parsed = MspCodec.parse(text); imp.payload = MspCodec.toPayload(imp.parsed);
+    if (!schedWin.tasks.length && !schedWin.phases.length) imp.mode = 'append';          // an empty schedule: the only sensible mode is preselected
   } catch (e) { imp.error = e && e.name === 'MspError' ? e.message : 'The file could not be read.'; }
   if (schedWin.imp === imp) schedWinImportRender();
 }
@@ -9392,27 +9403,134 @@ function schedWinImportSummary(payload) {
     milestones: tasks.filter(t => t.is_milestone).length, links: types.FS + types.SS + types.FF + types.SF, types,
     resources: ((payload && payload.resources) || []).length };
 }
+// The three ways to import. Append and Merge need the write permission, Replace also the approver permission (the database checks again).
+// Merge is only for a file exported from THIS work order with stable IDs; the read-only export marker means temporary IDs, i.e. a foreign file.
+const SCHED_WIN_REASON_MAX = 500;
+const schedWinN = (n, word) => schedWinEsc(n) + ' ' + word + (+n === 1 ? '' : 's');   // '1 task', '13 tasks'
+function schedWinImportModes(parsed, job, canWrite, canApprove) {
+  const p = (parsed && parsed.project) || {};
+  const own = !!(job && p.uid && String(p.uid).toLowerCase() === String(job.id).toLowerCase() && p.manager !== SCHED_WIN_MARKER);
+  const w = !!canWrite, noWrite = 'Needs the Work Orders write permission.';
+  return [
+    { id: 'append', label: 'Append', help: "Add the file's tasks as new rows. Nothing existing changes.", ok: w, why: w ? '' : noWrite },
+    { id: 'merge', label: 'Merge', help: 'Update the rows this work order exported (matched by ID). Other rows are kept.', ok: w && own, why: !w ? noWrite : 'Only for a file exported from this work order.' },
+    { id: 'replace', label: 'Replace', help: 'Delete the current schedule and load the file instead.', ok: w && !!canApprove, why: !w ? noWrite : 'Needs the approver permission.' }
+  ];
+}
+// The schedule the window was loaded from: the newest updated_at over its tasks, phases and links (the string as the server sent it).
+// The database refuses the import when the stored schedule is newer, so an edit made elsewhere in the meantime is never overwritten.
+function schedWinBasedOn(tasks, phases, links) {
+  let best = null, bestMs = -Infinity;
+  for (const list of [tasks, phases, links]) for (const r of Array.isArray(list) ? list : []) {
+    const s = r && r.updated_at; if (typeof s !== 'string') continue;
+    const ms = Date.parse(s); if (Number.isFinite(ms) && ms > bestMs) { bestMs = ms; best = s; }
+  }
+  return best;
+}
+function schedWinImportBody(payload, fileName, basedOn) {
+  return Object.assign({}, payload, { file_name: fileName ? String(fileName).slice(0, 255) : null, based_on: basedOn || null });
+}
+// Server messages -> what to tell the user. Matched on the message text (the REST wrapper keeps only the message).
+function schedWinImportError(msg) {
+  const m = String(msg == null ? '' : msg);
+  if (/could not find the function|does not exist|HTTP 404/i.test(m)) return { kind: 'missing', text: 'Applying imports is not available on this server yet: the schedule database upgrade has not been applied.' };
+  if (/schedule changed since preview|based_on is required/i.test(m)) return { kind: 'stale', text: 'The schedule changed after this window loaded (someone edited it). Reload the schedule, then import the file again.' };
+  if (/replace requires a reason/i.test(m)) return { kind: 'reason', text: 'Enter a reason.' };
+  if (/permission denied|row-level security|HTTP 40[13]/i.test(m)) return { kind: 'permission', text: 'You do not have permission to import this way.' };
+  if (/invalid payload|cycle|deeper than|uid space|merge requires|too many|exceed/i.test(m)) return { kind: 'invalid', text: 'The server refused the file: ' + m };
+  return { kind: 'other', text: 'The import failed: ' + m };
+}
+function schedWinReplaceCounts(w) {
+  return { phases: (w.phases || []).length, tasks: (w.tasks || []).length, links: (w.links || []).length, baseline: (w.tasks || []).some(x => x && x.baseline_locked_at) };
+}
+function schedWinImportSetMode(mode) {
+  const imp = schedWin.imp; if (!imp || imp.busy) return;
+  imp.mode = ['append', 'merge', 'replace'].includes(mode) ? mode : null; imp.confirm = false; imp.applyErr = ''; imp.reasonErr = ''; schedWinImportRender();
+}
+function schedWinImportReason(v) {
+  const imp = schedWin.imp; if (!imp) return;
+  imp.reason = String(v == null ? '' : v).slice(0, SCHED_WIN_REASON_MAX);
+  if (imp.reasonErr) { imp.reasonErr = ''; schedWinSet('sw-reason-err', ''); }
+}
+function schedWinImportCancelConfirm() { const imp = schedWin.imp; if (!imp || imp.busy) return; imp.confirm = false; imp.reasonErr = ''; imp.applyErr = ''; schedWinImportRender(); }
+async function schedWinImportApply() {
+  const w = schedWin, imp = w.imp;
+  if (!imp || !imp.payload || imp.busy || !w.job) return;
+  const modes = schedWinImportModes(imp.parsed, w.job, can('ops:work-orders:write'), can('ops:work-orders:approve')), cur = modes.find(x => x.id === imp.mode);
+  if (!cur) { imp.applyErr = 'Choose how to import the file.'; schedWinImportRender(); return; }
+  if (!cur.ok) { imp.applyErr = cur.why; schedWinImportRender(); return; }
+  if (imp.mode === 'replace' && !imp.confirm) { imp.confirm = true; imp.applyErr = ''; imp.reasonErr = ''; schedWinImportRender(); return; }   // Replace asks first
+  let reason = null;
+  if (imp.mode === 'replace') {
+    reason = String(imp.reason == null ? '' : imp.reason).trim().slice(0, SCHED_WIN_REASON_MAX);
+    if (!reason) { imp.reasonErr = 'Enter a reason.'; schedWinImportRender(); return; }
+  }
+  imp.busy = true; imp.applyErr = ''; imp.reasonErr = ''; schedWinImportRender();
+  try {
+    const body = schedWinImportBody(imp.payload, imp.name, schedWinBasedOn(w.tasks, w.phases, w.links));
+    const res = await jcRpc('import_job_schedule', { p_job_id: w.job.id, p_mode: imp.mode, p_payload: body, p_reason: reason });
+    if (w.imp !== imp) return;                                   // the preview was closed or the window reloaded meanwhile
+    const n = x => (res && Number.isFinite(+res[x]) ? +res[x] : 0);
+    const result = { mode: imp.mode, name: imp.name, created: n('created'), updated: n('updated'), kept: n('kept'), skipped: n('skipped'), warnings: Array.isArray(res && res.warnings) ? res.warnings : [] };
+    await loadScheduleWindow();                                  // show what the database now holds
+    schedWin.imp = { name: imp.name, result }; schedWinImportRender();
+    showToast('Import applied.', 'success');
+  } catch (e) {
+    if (w.imp !== imp) return;
+    imp.busy = false; const er = schedWinImportError(e && e.message);
+    if (er.kind === 'reason') imp.reasonErr = er.text; else imp.applyErr = er.text;
+    schedWinImportRender();
+  }
+}
+// The part of the preview below the table: mode choice, the Replace confirmation, or the result of an applied import.
+function schedWinImportApplyHtml(imp) {
+  const w = schedWin;
+  if (imp.result) {
+    const r = imp.result;
+    return `<div class="sw-res-n"><b>Import applied</b> (${schedWinEsc(r.mode)}): ${schedWinEsc(r.created)} created, ${schedWinEsc(r.updated)} updated, ${schedWinEsc(r.kept)} kept, ${schedWinEsc(r.skipped)} skipped.</div>` +
+      (r.warnings.length ? '<ul class="sw-imp-warn">' + r.warnings.map(x => `<li>${schedWinEsc(x && x.message)}${x && x.count > 1 ? ' (' + schedWinEsc(x.count) + ')' : ''}</li>`).join('') + '</ul>' : '');
+  }
+  const canW = can('ops:work-orders:write'), modes = schedWinImportModes(imp.parsed, w.job, canW, can('ops:work-orders:approve'));
+  if (!canW) return '<div class="sw-dim">You can preview the file, but importing it needs the Work Orders write permission.</div>';
+  const err = imp.applyErr ? `<div class="sw-err">${schedWinEsc(imp.applyErr)}</div>` : '';
+  if (imp.confirm && imp.mode === 'replace') {
+    const d = schedWinReplaceCounts(w), c = schedWinImportSummary(imp.payload);
+    return `<div class="sw-confirm"><div class="sw-dtitle">Replace schedule</div>` +
+      `<div class="sw-danger">This deletes the current schedule and loads the file instead.</div>` +
+      `<div class="sw-confirm-grid"><div><div class="sw-dim">Will be deleted</div>${schedWinN(d.phases, 'phase')}<br>${schedWinN(d.tasks, 'task')}<br>${schedWinN(d.links, 'link')}${d.baseline ? '<br>Baseline locked' : ''}</div>` +
+      `<div><div class="sw-dim">Will be created</div>${schedWinN(c.phases, 'phase')}<br>${schedWinN(c.tasks, 'task')}<br>${schedWinN(c.links, 'link')}<br>Hidden from clients</div></div>` +
+      `<div class="field"><label class="field-label" for="sw-reason">Reason (required)</label>` +
+      `<input id="sw-reason" type="text" maxlength="${SCHED_WIN_REASON_MAX}" value="${schedWinEsc(imp.reason)}" placeholder="Programme re-planned after the inspection" oninput="schedWinImportReason(this.value)"></div>` +
+      `<div class="sw-err" id="sw-reason-err">${schedWinEsc(imp.reasonErr)}</div>${err}` +
+      `<div class="sw-dim" style="margin:4px 0 10px">Only approvers can replace. A full copy of the deleted rows is saved in the audit log.</div>` +
+      `<div style="display:flex;justify-content:flex-end;gap:8px"><button class="btn btn-ghost btn-sm" onclick="schedWinImportCancelConfirm()"${imp.busy ? ' disabled' : ''}>Cancel</button>` +
+      `<button class="btn btn-danger btn-sm" onclick="schedWinImportApply()"${imp.busy ? ' disabled' : ''}>${imp.busy ? 'Applying…' : 'Replace schedule'}</button></div></div>`;
+  }
+  const opts = modes.map(m => `<label class="sw-mode${m.ok ? '' : ' sw-mode-off'}"><input type="radio" name="sw-mode" value="${schedWinEsc(m.id)}"${imp.mode === m.id ? ' checked' : ''}${m.ok && !imp.busy ? '' : ' disabled'} onchange="schedWinImportSetMode('${schedWinEsc(m.id)}')"><b>${schedWinEsc(m.label)}</b> <span class="sw-dim">${schedWinEsc(m.help)}${m.ok ? '' : ' (' + schedWinEsc(m.why) + ')'}</span></label>`).join('');
+  return opts + err + `<div class="sw-imp-apply"><button class="btn btn-primary btn-sm" onclick="schedWinImportApply()"${imp.busy ? ' disabled' : ''}>${imp.busy ? 'Applying…' : imp.mode === 'replace' ? 'Replace schedule…' : 'Apply import'}</button></div>`;
+}
 function schedWinImportRender() {
   const host = schedWinEl('sw-import-panel'); if (!host) return;
   const imp = schedWin.imp;
   if (!imp) { host.style.display = 'none'; host.textContent = ''; return; }
   host.style.display = '';
-  let html = `<div class="sw-imp-head"><b>Import preview</b> · ${schedWinEsc(imp.name)} <button class="btn btn-ghost btn-sm" onclick="schedWinImportClose()">Close</button></div>`;
-  if (!imp.parsed && !imp.error) html += '<div class="sw-dim">Reading the file…</div>';
+  let html = `<div class="sw-imp-head"><b>${imp.result ? 'Import result' : 'Import preview'}</b> · ${schedWinEsc(imp.name)} <button class="btn btn-ghost btn-sm" onclick="schedWinImportClose()">Close</button></div>`;
+  if (!imp.parsed && !imp.error && !imp.result) html += '<div class="sw-dim">Reading the file…</div>';
   if (imp.error) html += `<div class="sw-err">${schedWinEsc(imp.error)}</div>`;
   if (imp.payload) {
     const s = schedWinImportSummary(imp.payload), p = imp.parsed.project, own = schedWin.job && p.uid && p.uid === schedWin.job.id && p.manager !== SCHED_WIN_MARKER;
     html += `<div class="sw-imp-sum">${schedWinEsc(s.phases)} phase${s.phases === 1 ? '' : 's'} · ${schedWinEsc(s.tasks)} task${s.tasks === 1 ? '' : 's'} (${schedWinEsc(s.milestones)} milestone${s.milestones === 1 ? '' : 's'}, ${schedWinEsc(s.summaries)} summary) · ` +
       `${schedWinEsc(s.links)} link${s.links === 1 ? '' : 's'} (FS ${schedWinEsc(s.types.FS)}, SS ${schedWinEsc(s.types.SS)}, FF ${schedWinEsc(s.types.FF)}, SF ${schedWinEsc(s.types.SF)}) · ${schedWinEsc(s.resources)} resource${s.resources === 1 ? '' : 's'}</div>`;
-    html += `<div class="sw-imp-src">${own ? 'Exported from this work order: Merge, Append and Replace would be available.' : 'Not exported from this work order (or exported without stable IDs): only Append and Replace would be available.'}</div>`;
+    html += `<div class="sw-imp-src">${own ? 'Exported from this work order.' : 'Not exported from this work order (or exported without stable IDs): Merge is not available.'}</div>`;
     const warns = imp.payload.warnings || [];
     if (warns.length) html += '<ul class="sw-imp-warn">' + warns.map(x => `<li>${schedWinEsc(x.message)}${x.count > 1 ? ' (' + schedWinEsc(x.count) + ')' : ''}</li>`).join('') + '</ul>';
     const all = imp.payload.phases.map(x => ({ kind: 'Phase', name: x.name })).concat(imp.payload.tasks.map(x => ({ kind: x.is_milestone ? 'Milestone' : x.is_summary ? 'Summary' : 'Task', name: x.name, start: x.start_date, end: x.end_date, pct: x.progress, links: x.links.length })));
     html += '<div class="sw-imp-tbl"><table class="dyn-table"><thead><tr><th style="width:90px">Type</th><th>Name</th><th style="width:96px">Start</th><th style="width:96px">End</th><th style="width:60px">Done</th><th style="width:60px">Links</th></tr></thead><tbody>' +
       all.slice(0, 200).map(x => `<tr><td>${schedWinEsc(x.kind)}</td><td>${schedWinEsc(x.name)}</td><td>${x.start ? schedWinEsc(jcKpiFmtDate(x.start)) : ''}</td><td>${x.end ? schedWinEsc(jcKpiFmtDate(x.end)) : ''}</td><td>${x.pct != null ? schedWinEsc(x.pct) + '%' : ''}</td><td>${x.links ? schedWinEsc(x.links) : ''}</td></tr>`).join('') +
       '</tbody></table>' + (all.length > 200 ? `<div class="sw-dim">… and ${schedWinEsc(all.length - 200)} more rows</div>` : '') + '</div>';
-    html += '<div class="sw-imp-apply"><button class="btn btn-primary btn-sm" disabled>Apply import</button> <span class="sw-dim">Applying an import is not available yet: it needs the schedule database upgrade (a later step). This preview only checks the file.</span></div>';
+    html += schedWinImportApplyHtml(imp);
   }
+  if (imp.result && !imp.payload) html += schedWinImportApplyHtml(imp);
   host.innerHTML = html;
 }
 // ── END SCHEDULE WINDOW ──
