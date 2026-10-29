@@ -35,15 +35,21 @@ run() { docker exec -i "$C" psql -U postgres -v ON_ERROR_STOP=1 -q "$@"; }
 apply() { local out; out=$(run < "$1" 2>&1) || { echo "$out" | grep -E "ERROR|FAIL|DETAIL" | head -6; echo "FAILED applying $1"; return 1; }; }
 assert() { local out; out=$(run < "$1" 2>&1) || { echo "$out" | grep -E "ERROR|FAIL" | head -6; echo "FAILED: $1"; return 1; }; echo "   PASS count: $(echo "$out" | grep -c 'NOTICE:  PASS')"; }
 
+# Optional $T/requires.txt: repo-relative files (one per line, # comments ok) applied after D0a and before the family stub.
+# Used by families that build on later migrations (e.g. a2a_* needs the Phase A schema).
+requires() { [ -f "$T/requires.txt" ] || return 0; local f; while IFS= read -r f || [ -n "$f" ]; do f="${f%$'\r'}"; case "$f" in ""|"#"*) continue;; esac; apply "$ROOT/$f" >/dev/null || return 1; done < "$T/requires.txt"; }
+
 if [ -n "$MUT" ]; then
   apply "$BASE" >/dev/null || exit 2
   apply "$D0A" >/dev/null || exit 2
+  requires || exit 2
   [ -f "$T/10_stub_extra.sql" ] && { apply "$T/10_stub_extra.sql" >/dev/null || exit 2; }
   apply "$MIG" >/dev/null 2>&1 || { echo "MUTANT CAUGHT (migration no longer applies)"; exit 0; }
   if run < "$T/20_after.sql" >/dev/null 2>&1; then echo "MUTANT SURVIVED"; exit 1; else echo "MUTANT CAUGHT"; exit 0; fi
 fi
 
 echo "== stub live schema + D0a";    apply "$BASE"; apply "$D0A"
+echo "== requires";                 requires
 [ -f "$T/10_stub_extra.sql" ] && { echo "== family stub"; apply "$T/10_stub_extra.sql"; }
 echo "== BEFORE: legacy holes exist"; assert "$T/15_before.sql"
 echo "== apply $FAM";                apply "$MIG"

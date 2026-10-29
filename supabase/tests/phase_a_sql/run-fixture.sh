@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Runs the shared schedule fixture against SQL (job_schedule_status + job_task_weight/job_task_planned_pct) on a throwaway
-# Postgres 17 (Docker): D0a stub, phase_a_sql family stub, the Phase A migration, then scripts/tests/schedule/sql-fixture-runner.mjs.
+# Postgres 17 (Docker): D0a stub + D0a migration, phase_a_sql family stub, the Phase A migration, the A2a schema columns
+# (202610271000_a2a_schema.sql), the A2a status function (202610271100_a2a_status.sql), then scripts/tests/schedule/sql-fixture-runner.mjs.
 # Usage:  bash supabase/tests/phase_a_sql/run-fixture.sh [fixture.json]
 #   default fixture: scripts/tests/schedule/fixture.json (the shared one); a tiny self-made sample lives next to this script
 #   (fixture-sample.json) and is used when the shared file is absent.
@@ -21,7 +22,8 @@ for i in $(seq 1 90); do
   sleep 1
 done
 for f in "$ROOT/supabase/tests/d0a/00_stub_schema.sql" "$ROOT/supabase/migrations/202610200900_d0a_staff_only_storage.sql" \
-         "$ROOT/supabase/tests/phase_a_sql/10_stub_extra.sql" "$ROOT"/supabase/migrations/*_phase_a_sql.sql; do
+         "$ROOT/supabase/tests/phase_a_sql/10_stub_extra.sql" "$ROOT"/supabase/migrations/*_phase_a_sql.sql \
+         "$ROOT/supabase/migrations/202610271000_a2a_schema.sql" "$ROOT/supabase/migrations/202610271100_a2a_status.sql"; do
   out=$(docker exec -i "$C" psql -U postgres -v ON_ERROR_STOP=1 -q < "$f" 2>&1) || { echo "$out" | grep -E "ERROR|DETAIL" | head -5; echo "FAILED applying $f"; exit 1; }
 done
 echo "fixture: $FX"

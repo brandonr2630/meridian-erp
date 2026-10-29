@@ -1,0 +1,233 @@
+{
+ "project": {
+  "uid": null,
+  "manager": "B Rampersad",
+  "name": "02-link-types",
+  "title": "02-link-types",
+  "minutesPerDay": 480,
+  "calendar": "working-days",
+  "saveVersion": 14
+ },
+ "phases": [
+  {
+   "uid": 1,
+   "name": "Motor Repairs",
+   "sort_order": 10
+  }
+ ],
+ "tasks": [
+  {
+   "uid": 2,
+   "name": "Receive Motor",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-21",
+   "end_date": "2026-10-21",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 10,
+   "links": []
+  },
+  {
+   "uid": 3,
+   "name": "Prepare Documentation",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-21",
+   "end_date": "2026-10-21",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 20,
+   "links": [
+    {
+     "pred_uid": 2,
+     "link_type": "SS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 4,
+   "name": "Inspect Motor",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-23",
+   "end_date": "2026-10-26",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 30,
+   "links": [
+    {
+     "pred_uid": 3,
+     "link_type": "FS",
+     "lag_days": 2
+    }
+   ]
+  },
+  {
+   "uid": 5,
+   "name": "Report Findings & Quote",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-26",
+   "end_date": "2026-10-27",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 40,
+   "links": [
+    {
+     "pred_uid": 4,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 6,
+   "name": "Confirm customer PO",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-27",
+   "end_date": "2026-10-28",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 50,
+   "links": [
+    {
+     "pred_uid": 5,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 7,
+   "name": "Disassemble Motor",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-28",
+   "end_date": "2026-10-28",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 60,
+   "links": [
+    {
+     "pred_uid": 6,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 8,
+   "name": "Rewind Stator",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-28",
+   "end_date": "2026-11-02",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 70,
+   "links": [
+    {
+     "pred_uid": 7,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 9,
+   "name": "Check Runout of Rotor Shaft",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-29",
+   "end_date": "2026-10-30",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 80,
+   "links": [
+    {
+     "pred_uid": 8,
+     "link_type": "FF",
+     "lag_days": -1
+    }
+   ]
+  },
+  {
+   "uid": 10,
+   "name": "assemble motor",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-30",
+   "end_date": "2026-11-02",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 90,
+   "links": [
+    {
+     "pred_uid": 9,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  },
+  {
+   "uid": 11,
+   "name": "test motor",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-11-02",
+   "end_date": "2026-11-03",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 100,
+   "links": [
+    {
+     "pred_uid": 10,
+     "link_type": "SF",
+     "lag_days": 2
+    }
+   ]
+  }
+ ],
+ "resources": [],
+ "assignments": [],
+ "warnings": [
+  {
+   "code": "calendar-working-days",
+   "message": "The file uses a working-day calendar; Meridian schedules in calendar days, so task spans may look longer here than in the file.",
+   "count": 1
+  }
+ ]
+}

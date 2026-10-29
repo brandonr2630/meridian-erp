@@ -4,12 +4,16 @@
 // job_schedule_status(job_id, today) and computes overall / plannedToday with the same sums over job_task_weight /
 // job_task_planned_pct that the migration uses, then compares to `expect` (2 dp value AND the half-up displayed integer).
 //
+// A2a: `parent` (a task key) is written to job_tasks.parent_task_id and `type` (FS|SS|FF|SF, default FS) to job_task_links.link_type;
+// both columns come from supabase/migrations/202610271000_a2a_schema.sql. Overall / planned sums EXCLUDE summary rows (tasks that have
+// children), mirroring the X1 amendment and the SQL function.
+//
 // Usage:  node scripts/tests/schedule/sql-fixture-runner.mjs --container <docker container> [--fixture file.json] [--company <uuid>]
 //   or    bash supabase/tests/phase_a_sql/run-fixture.sh [fixture.json]     (starts its own throwaway container)
 // Prints "SQL FIXTURE PASSED n/n cases" on success; exits 1 and prints every mismatch otherwise.
 //
 // Contract: { "cases": [ { name, today, job: {status, due_date}, baselineLocked, tasks: [ {key, sort_order, start_date, end_date,
-//   progress, is_milestone, weight, baseline_start, baseline_end} ], links: [ {task, pred, lag} ],
+//   progress, is_milestone, weight, baseline_start, baseline_end, parent?} ], links: [ {task, pred, lag, type?} ],
 //   expect: { overall, overallDisplay, plannedToday, plannedDisplay, forecastEnd, status, slipDays } } ] }
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -50,9 +54,14 @@ function caseSql(c, ci) {
          t.is_milestone ? "true" : "false", num(t.weight), date(t.baseline_start), date(t.baseline_end),
          c.baselineLocked && hasBl ? "now()" : "NULL"].join(", ") + ");");
   }
+  for (const t of c.tasks) {
+    if (t.parent == null) continue;
+    if (!keys.has(t.parent)) throw new Error("parent refers to an unknown task key in case " + c.name);
+    s.push(`UPDATE job_tasks SET parent_task_id = ${lit(keys.get(t.parent))} WHERE id = ${lit(keys.get(t.key))};`);
+  }
   for (const l of c.links || []) {
     if (!keys.has(l.task) || !keys.has(l.pred)) throw new Error("link refers to an unknown task key in case " + c.name);
-    s.push(`INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days) VALUES (${lit(company)}, ${lit(job)}, ${lit(keys.get(l.task))}, ${lit(keys.get(l.pred))}, ${num(l.lag ?? 0)});`);
+    s.push(`INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days, link_type) VALUES (${lit(company)}, ${lit(job)}, ${lit(keys.get(l.task))}, ${lit(keys.get(l.pred))}, ${num(l.lag ?? 0)}, ${lit(l.type ?? "FS")});`);
   }
   s.push("SELECT set_config('app.baseline_rpc', 'off', true);");
   const today = date(c.today);
@@ -65,7 +74,8 @@ function caseSql(c, ci) {
   FROM (SELECT COALESCE(ROUND(SUM(w * progress) / NULLIF(SUM(w), 0), 2), 0) AS overall,
                COALESCE(ROUND(SUM(w * job_task_planned_pct(baseline_start, baseline_end, start_date, end_date, ${today})) / NULLIF(SUM(w), 0), 2), 0) AS planned
           FROM (SELECT job_task_weight(is_milestone, weight, start_date, end_date) AS w, progress, baseline_start, baseline_end, start_date, end_date
-                  FROM job_tasks WHERE job_id = ${lit(job)}::uuid) x WHERE w > 0) a;`);
+                  FROM job_tasks WHERE job_id = ${lit(job)}::uuid
+                   AND id NOT IN (SELECT parent_task_id FROM job_tasks WHERE job_id = ${lit(job)}::uuid AND parent_task_id IS NOT NULL)) x WHERE w > 0) a;`);
   s.push("ROLLBACK;");
   return s.join("\n");
 }

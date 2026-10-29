@@ -1,0 +1,114 @@
+{
+ "project": {
+  "uid": null,
+  "manager": null,
+  "name": "07-synthetic-material",
+  "title": "07-synthetic-material",
+  "minutesPerDay": 480,
+  "calendar": "working-days",
+  "saveVersion": 14
+ },
+ "phases": [
+  {
+   "uid": 1,
+   "name": "Bearing replacement",
+   "sort_order": 10
+  }
+ ],
+ "tasks": [
+  {
+   "uid": 2,
+   "name": "Remove old bearings",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-26",
+   "end_date": "2026-10-27",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 10,
+   "links": []
+  },
+  {
+   "uid": 3,
+   "name": "Fit new bearings",
+   "phase_uid": 1,
+   "parent_uid": null,
+   "start_date": "2026-10-28",
+   "end_date": "2026-10-28",
+   "progress": 0,
+   "is_milestone": false,
+   "is_summary": false,
+   "baseline_start": null,
+   "baseline_end": null,
+   "sort_order": 20,
+   "links": [
+    {
+     "pred_uid": 2,
+     "link_type": "FS",
+     "lag_days": 0
+    }
+   ]
+  }
+ ],
+ "resources": [
+  {
+   "uid": 1,
+   "name": "Technician",
+   "kind": "work",
+   "materialLike": false,
+   "materialLabel": null
+  },
+  {
+   "uid": 2,
+   "name": "Bearing set",
+   "kind": "material",
+   "materialLike": true,
+   "materialLabel": "set"
+  }
+ ],
+ "assignments": [
+  {
+   "taskUid": 2,
+   "resourceUid": 1,
+   "units": 1,
+   "workHours": 16
+  },
+  {
+   "taskUid": 3,
+   "resourceUid": 1,
+   "units": 1,
+   "workHours": 8
+  },
+  {
+   "taskUid": 3,
+   "resourceUid": 2,
+   "units": null,
+   "workHours": null
+  }
+ ],
+ "warnings": [
+  {
+   "code": "calendar-working-days",
+   "message": "The file uses a working-day calendar; Meridian schedules in calendar days, so task spans may look longer here than in the file.",
+   "count": 1
+  },
+  {
+   "code": "resource-rates-dropped",
+   "message": "Resource rates were not imported.",
+   "count": 2
+  },
+  {
+   "code": "material-resource",
+   "message": "Material resources are not imported as quantities; they were kept by name only.",
+   "count": 1
+  },
+  {
+   "code": "material-quantity-dropped",
+   "message": "Quantities on material-like resources were not trusted and were dropped.",
+   "count": 1
+  }
+ ]
+}

@@ -1,0 +1,366 @@
+[
+ {
+  "name": "guard: same-job and same-company check dropped",
+  "find": "IF v_pj IS DISTINCT FROM NEW.job_id OR v_pc IS DISTINCT FROM NEW.company_id THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "guard: company half of the check dropped",
+  "find": "IF v_pj IS DISTINCT FROM NEW.job_id OR v_pc IS DISTINCT FROM NEW.company_id THEN",
+  "replace": "IF v_pj IS DISTINCT FROM NEW.job_id THEN"
+ },
+ {
+  "name": "guard: job half of the check dropped",
+  "find": "IF v_pj IS DISTINCT FROM NEW.job_id OR v_pc IS DISTINCT FROM NEW.company_id THEN",
+  "replace": "IF v_pc IS DISTINCT FROM NEW.company_id THEN"
+ },
+ {
+  "name": "guard: depth cap off by one (6)",
+  "find": "c_max_depth CONSTANT integer := 5;",
+  "replace": "c_max_depth CONSTANT integer := 6;"
+ },
+ {
+  "name": "guard: depth cap off by one (4)",
+  "find": "c_max_depth CONSTANT integer := 5;",
+  "replace": "c_max_depth CONSTANT integer := 4;"
+ },
+ {
+  "name": "guard: depth check dropped entirely",
+  "find": "IF v_anc + v_height > c_max_depth THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "guard: cycle check skipped",
+  "find": "IF v_cycle THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "guard: ancestor walk stops after the parent (no real walk)",
+  "find": "JOIN up u ON t.id = u.parent_id WHERE u.lvl < 50",
+  "replace": "JOIN up u ON t.id = u.parent_id WHERE u.lvl < 1"
+ },
+ {
+  "name": "guard: subtree depth check skipped on re-parenting",
+  "find": "  IF TG_OP = 'UPDATE' THEN\n    WITH RECURSIVE down",
+  "replace": "  IF false THEN\n    WITH RECURSIVE down"
+ },
+ {
+  "name": "guard: subtree height uses min instead of max",
+  "find": "SELECT max(lvl) INTO v_height FROM down;",
+  "replace": "SELECT min(lvl) INTO v_height FROM down;"
+ },
+ {
+  "name": "guard: subtree walk only sees direct children",
+  "find": "FROM job_tasks c JOIN down d ON c.parent_task_id = d.id WHERE d.lvl < 50",
+  "replace": "FROM job_tasks c JOIN down d ON c.parent_task_id = d.id WHERE d.lvl < 2"
+ },
+ {
+  "name": "guard: self-parent check removed",
+  "find": "IF NEW.parent_task_id = NEW.id THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "guard: missing-parent check removed",
+  "find": "IF NOT FOUND THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "guard: job/company change rule removed",
+  "find": "AND (OLD.parent_task_id IS NOT NULL OR EXISTS (SELECT 1 FROM job_tasks c WHERE c.parent_task_id = OLD.id)) THEN",
+  "replace": "AND false THEN"
+ },
+ {
+  "name": "guard: job change ignores tasks that have children",
+  "find": "(OLD.parent_task_id IS NOT NULL OR EXISTS (SELECT 1 FROM job_tasks c WHERE c.parent_task_id = OLD.id))",
+  "replace": "(OLD.parent_task_id IS NOT NULL)"
+ },
+ {
+  "name": "guard: job change ignores tasks that have a parent",
+  "find": "(OLD.parent_task_id IS NOT NULL OR EXISTS (SELECT 1 FROM job_tasks c WHERE c.parent_task_id = OLD.id))",
+  "replace": "(EXISTS (SELECT 1 FROM job_tasks c WHERE c.parent_task_id = OLD.id))"
+ },
+ {
+  "name": "guard: early return also skips job/company changes",
+  "find": "     AND NEW.job_id = OLD.job_id AND NEW.company_id = OLD.company_id THEN",
+  "replace": "     THEN"
+ },
+ {
+  "name": "guard: trigger no longer fires on job_id / company_id updates",
+  "find": "BEFORE INSERT OR UPDATE OF parent_task_id, job_id, company_id ON job_tasks",
+  "replace": "BEFORE INSERT OR UPDATE OF parent_task_id ON job_tasks"
+ },
+ {
+  "name": "guard: trigger fires on UPDATE only (inserts unguarded)",
+  "find": "BEFORE INSERT OR UPDATE OF parent_task_id, job_id, company_id ON job_tasks",
+  "replace": "BEFORE UPDATE OF parent_task_id, job_id, company_id ON job_tasks"
+ },
+ {
+  "name": "link_type: CHECK accepts an extra value",
+  "find": "CHECK (link_type IN ('FS', 'SS', 'FF', 'SF'))",
+  "replace": "CHECK (link_type IN ('FS', 'SS', 'FF', 'SF', 'XX'))"
+ },
+ {
+  "name": "link_type: CHECK drops SF",
+  "find": "CHECK (link_type IN ('FS', 'SS', 'FF', 'SF'))",
+  "replace": "CHECK (link_type IN ('FS', 'SS', 'FF'))"
+ },
+ {
+  "name": "link_type: default is SS",
+  "find": "NOT NULL DEFAULT 'FS' CHECK",
+  "replace": "NOT NULL DEFAULT 'SS' CHECK"
+ },
+ {
+  "name": "link_type: column nullable",
+  "find": "link_type text NOT NULL DEFAULT 'FS'",
+  "replace": "link_type text DEFAULT 'FS'"
+ },
+ {
+  "name": "msp_uid: task uniqueness widened to the whole table",
+  "find": "ON job_tasks  (job_id, msp_uid) WHERE msp_uid IS NOT NULL;",
+  "replace": "ON job_tasks  (msp_uid) WHERE msp_uid IS NOT NULL;"
+ },
+ {
+  "name": "msp_uid: phase uniqueness dropped to non-unique",
+  "find": "CREATE UNIQUE INDEX IF NOT EXISTS job_phases_msp_uid_uq",
+  "replace": "CREATE INDEX IF NOT EXISTS job_phases_msp_uid_uq"
+ },
+ {
+  "name": "msp_uid: phase unique index loses its NOT NULL predicate (NULLs collide)",
+  "equivalent": true,
+  "reason": "Postgres unique indexes treat NULLs as distinct, so the partial predicate only saves index space; behaviour is identical",
+  "find": "ON job_phases (job_id, msp_uid) WHERE msp_uid IS NOT NULL;",
+  "replace": "ON job_phases (job_id, msp_uid);"
+ },
+ {
+  "name": "msp_uid: task CHECK allows zero",
+  "find": "ADD CONSTRAINT job_tasks_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid > 0 AND msp_uid <= 100000000)) NOT VALID;",
+  "replace": "ADD CONSTRAINT job_tasks_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid >= 0 AND msp_uid <= 100000000)) NOT VALID;"
+ },
+ {
+  "name": "parent_task_id: FK is ON DELETE CASCADE",
+  "find": "REFERENCES job_tasks(id) ON DELETE SET NULL;",
+  "replace": "REFERENCES job_tasks(id) ON DELETE CASCADE;"
+ },
+ {
+  "name": "guard: advisory lock removed",
+  "equivalent": true,
+  "reason": "serialises concurrent hierarchy writes of one job; the single-session test harness cannot interleave two transactions, so removing it is not observable here (covered by review, not by a test)",
+  "find": "PERFORM pg_advisory_xact_lock(hashtextextended('job_tasks_parent:' || NEW.job_id::text, 0));",
+  "replace": "NULL;"
+ },
+ {
+  "name": "h1: company guard compares nothing (any existing job passes)",
+  "find": "WHERE j.id = NEW.job_id AND j.company_id = NEW.company_id) THEN",
+  "replace": "WHERE j.id = NEW.job_id) THEN"
+ },
+ {
+  "name": "h1: company guard never raises",
+  "find": "IF NOT EXISTS (SELECT 1 FROM jobs j WHERE j.id = NEW.job_id AND j.company_id = NEW.company_id) THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "h1: no company guard on job_task_links",
+  "find": "CREATE TRIGGER job_task_links_company_guard BEFORE INSERT OR UPDATE OF job_id, company_id ON job_task_links",
+  "replace": "CREATE TRIGGER job_task_links_company_guard BEFORE DELETE ON job_task_links"
+ },
+ {
+  "name": "h1: company guard on job_tasks is INSERT only",
+  "find": "CREATE TRIGGER job_tasks_company_guard BEFORE INSERT OR UPDATE OF job_id, company_id ON job_tasks",
+  "replace": "CREATE TRIGGER job_tasks_company_guard BEFORE INSERT ON job_tasks"
+ },
+ {
+  "name": "h1: company guard on job_phases is UPDATE only",
+  "find": "CREATE TRIGGER job_phases_company_guard BEFORE INSERT OR UPDATE OF job_id, company_id ON job_phases",
+  "replace": "CREATE TRIGGER job_phases_company_guard BEFORE UPDATE OF job_id, company_id ON job_phases"
+ },
+ {
+  "name": "h1: company guard function is SECURITY INVOKER (cannot see the other company's job under RLS)",
+  "find": "LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$\nBEGIN\n  IF NOT EXISTS (SELECT 1 FROM jobs j",
+  "replace": "LANGUAGE plpgsql SET search_path = public, pg_temp AS $$\nBEGIN\n  IF NOT EXISTS (SELECT 1 FROM jobs j"
+ },
+ {
+  "name": "h1: guard executable by authenticated",
+  "find": "REVOKE ALL ON FUNCTION job_schedule_company_guard() FROM PUBLIC, anon, authenticated, service_role;",
+  "replace": "REVOKE ALL ON FUNCTION job_schedule_company_guard() FROM PUBLIC, anon, service_role;"
+ },
+ {
+  "name": "m3: task uid cap is the integer maximum",
+  "find": "ADD CONSTRAINT job_tasks_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid > 0 AND msp_uid <= 100000000)) NOT VALID;",
+  "replace": "ADD CONSTRAINT job_tasks_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid > 0 AND msp_uid <= 2147483647)) NOT VALID;"
+ },
+ {
+  "name": "m3: phase uid cap is the integer maximum",
+  "find": "ADD CONSTRAINT job_phases_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid > 0 AND msp_uid <= 100000000)) NOT VALID;",
+  "replace": "ADD CONSTRAINT job_phases_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid > 0 AND msp_uid <= 2147483647)) NOT VALID;"
+ },
+ {
+  "name": "m3: phase uid cap is exclusive (100000000 refused)",
+  "find": "ADD CONSTRAINT job_phases_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid > 0 AND msp_uid <= 100000000)) NOT VALID;",
+  "replace": "ADD CONSTRAINT job_phases_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid > 0 AND msp_uid < 100000000)) NOT VALID;"
+ },
+ {
+  "name": "m3: the legacy inline check is not dropped (two checks, legacy name remains)",
+  "find": "ALTER TABLE job_tasks  DROP CONSTRAINT IF EXISTS job_tasks_msp_uid_range;",
+  "replace": "ALTER TABLE job_tasks  ADD CONSTRAINT job_tasks_msp_uid_check CHECK (msp_uid IS NULL OR msp_uid > 0);"
+ },
+ {
+  "name": "msp_uid: phase CHECK allows zero",
+  "find": "ADD CONSTRAINT job_phases_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid > 0 AND msp_uid <= 100000000)) NOT VALID;",
+  "replace": "ADD CONSTRAINT job_phases_msp_uid_range CHECK (msp_uid IS NULL OR (msp_uid >= 0 AND msp_uid <= 100000000)) NOT VALID;"
+ },
+ {
+  "name": "l1: a gap hands out one number too many",
+  "find": "LEAST(v_hi, r.prev + v_want)",
+  "replace": "LEAST(v_hi, r.prev + v_want + 1)"
+ },
+ {
+  "name": "l1: a gap hands out one number too few",
+  "find": "LEAST(v_hi, r.prev + v_want)",
+  "replace": "LEAST(v_hi, r.prev + v_want - 1)"
+ },
+ {
+  "name": "l1: the gap starts on the used number",
+  "find": "generate_series(r.prev + 1, ",
+  "replace": "generate_series(r.prev, "
+ },
+ {
+  "name": "l1: the gap ends on the next used number",
+  "find": "v_hi := coalesce(r.nxt - 1, k_cap);",
+  "replace": "v_hi := coalesce(r.nxt, k_cap);"
+ },
+ {
+  "name": "l3: the company guard fires on any update of the column",
+  "find": "IF NEW.company_id IS DISTINCT FROM OLD.company_id AND (",
+  "replace": "IF true AND ("
+ },
+ {
+  "name": "l3: phases are not looked at",
+  "find": "EXISTS (SELECT 1 FROM job_phases WHERE job_id = OLD.id) OR ",
+  "replace": "false OR "
+ },
+ {
+  "name": "l3: tasks are not looked at",
+  "find": "OR EXISTS (SELECT 1 FROM job_tasks WHERE job_id = OLD.id)\n",
+  "replace": "OR false\n"
+ },
+ {
+  "name": "l3: the guard never fires",
+  "find": "IF NEW.company_id IS DISTINCT FROM OLD.company_id AND (",
+  "replace": "IF false AND ("
+ },
+ {
+  "name": "l3: the trigger is not installed on update of company_id",
+  "find": "CREATE TRIGGER jobs_company_change_guard BEFORE UPDATE OF company_id ON jobs",
+  "replace": "CREATE TRIGGER jobs_company_change_guard BEFORE UPDATE OF job_no ON jobs"
+ },
+ {
+  "name": "counter: the counter does not move after handing out numbers",
+  "find": "UPDATE job_schedule_uid_counter SET last_uid = v_out[p_n], updated_at = now() WHERE job_id = p_job_id;",
+  "replace": "UPDATE job_schedule_uid_counter SET updated_at = now() WHERE job_id = p_job_id;"
+ },
+ {
+  "name": "counter: the counter moves only to the first number handed out",
+  "find": "SET last_uid = v_out[p_n], updated_at",
+  "replace": "SET last_uid = v_out[1], updated_at"
+ },
+ {
+  "name": "counter: asking for more than is left does not raise",
+  "find": "IF cardinality(v_out) < p_n THEN RAISE EXCEPTION 'uid space exhausted' USING ERRCODE = '22023'; END IF;",
+  "replace": "IF false THEN RAISE EXCEPTION 'uid space exhausted' USING ERRCODE = '22023'; END IF;"
+ },
+ {
+  "name": "counter: first use ignores the phases",
+  "find": "SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap\n            UNION ALL",
+  "replace": "SELECT 0 AS u FROM job_phases WHERE false\n            UNION ALL"
+ },
+ {
+  "name": "counter: first use ignores the tasks",
+  "find": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) s;",
+  "replace": "SELECT 0 FROM job_tasks WHERE false) s;"
+ },
+ {
+  "name": "counter: first use counts the rows of every company (tasks)",
+  "find": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) s;",
+  "replace": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND msp_uid BETWEEN 1 AND k_cap) s;"
+ },
+ {
+  "name": "counter: first use counts the rows of every job (tasks)",
+  "find": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) s;",
+  "replace": "SELECT msp_uid FROM job_tasks WHERE company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) s;"
+ },
+ {
+  "name": "counter: first use counts the rows of every company (phases)",
+  "find": "SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap\n            UNION ALL",
+  "replace": "SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id AND msp_uid BETWEEN 1 AND k_cap\n            UNION ALL"
+ },
+ {
+  "name": "counter: first use counts the uids above the cap",
+  "find": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) s;",
+  "replace": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = p_company AND msp_uid >= 1) s;"
+ },
+ {
+  "name": "counter: first use always starts from the highest stored uid (a planted cap blocks the job)",
+  "find": "VALUES (p_job_id, CASE WHEN v_init::bigint + p_n > k_cap THEN 0 ELSE v_init END)",
+  "replace": "VALUES (p_job_id, v_init)"
+ },
+ {
+  "name": "counter: first use falls back to 0 even when the fit is exact",
+  "find": "CASE WHEN v_init::bigint + p_n > k_cap THEN 0 ELSE v_init END",
+  "replace": "CASE WHEN v_init::bigint + p_n >= k_cap THEN 0 ELSE v_init END"
+ },
+ {
+  "name": "counter: first use never continues after the highest stored uid",
+  "find": "CASE WHEN v_init::bigint + p_n > k_cap THEN 0 ELSE v_init END",
+  "replace": "0"
+ },
+ {
+  "name": "counter: used numbers of the phases are not skipped",
+  "find": "UNION SELECT msp_uid FROM job_phases WHERE NOT p_replace AND job_id = p_job_id AND company_id = p_company AND msp_uid > v_last AND msp_uid <= k_cap",
+  "replace": "UNION SELECT 0 FROM job_phases WHERE false"
+ },
+ {
+  "name": "counter: used numbers of the tasks are not skipped",
+  "find": "UNION SELECT msp_uid FROM job_tasks  WHERE NOT p_replace AND job_id = p_job_id AND company_id = p_company AND msp_uid > v_last AND msp_uid <= k_cap) z",
+  "replace": "UNION SELECT 0 FROM job_tasks WHERE false) z"
+ },
+ {
+  "name": "counter: replace still skips the stored numbers (tasks)",
+  "find": "UNION SELECT msp_uid FROM job_tasks  WHERE NOT p_replace AND",
+  "replace": "UNION SELECT msp_uid FROM job_tasks  WHERE true AND"
+ },
+ {
+  "name": "counter: replace still skips the stored numbers (phases)",
+  "find": "UNION SELECT msp_uid FROM job_phases WHERE NOT p_replace AND",
+  "replace": "UNION SELECT msp_uid FROM job_phases WHERE true AND"
+ },
+ {
+  "name": "counter: used numbers of other companies are skipped (tasks)",
+  "find": "UNION SELECT msp_uid FROM job_tasks  WHERE NOT p_replace AND job_id = p_job_id AND company_id = p_company AND",
+  "replace": "UNION SELECT msp_uid FROM job_tasks  WHERE NOT p_replace AND job_id = p_job_id AND"
+ },
+ {
+  "name": "counter: the counter starts at 1 on an empty job",
+  "find": "FROM (SELECT v_last AS u\n",
+  "replace": "FROM (SELECT v_last + 1 AS u\n"
+ },
+ {
+  "name": "counter: the counter row is not removed with its job",
+  "find": "job_id     uuid PRIMARY KEY REFERENCES jobs (id) ON DELETE CASCADE,",
+  "replace": "job_id     uuid PRIMARY KEY REFERENCES jobs (id),"
+ },
+ {
+  "name": "counter: row level security is off",
+  "find": "ALTER TABLE job_schedule_uid_counter ENABLE ROW LEVEL SECURITY;",
+  "replace": "-- rls off"
+ },
+ {
+  "name": "counter: the helper can be called by API roles",
+  "find": "REVOKE ALL ON FUNCTION sched_next_uids(uuid, uuid, integer, boolean) FROM PUBLIC, anon, authenticated, service_role;",
+  "replace": "GRANT EXECUTE ON FUNCTION sched_next_uids(uuid, uuid, integer, boolean) TO authenticated;"
+ },
+ {
+  "name": "counter: the counter may hold more than the cap",
+  "find": "last_uid   integer NOT NULL CHECK (last_uid BETWEEN 0 AND 100000000),",
+  "replace": "last_uid   integer NOT NULL,"
+ }
+]

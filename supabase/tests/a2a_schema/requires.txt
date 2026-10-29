@@ -1,0 +1,3 @@
+# applied after D0a, before the family stub
+supabase/tests/phase_a_sql/10_stub_extra.sql
+supabase/migrations/202610210600_phase_a_sql.sql
