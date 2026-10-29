@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-28 · Session 74*
+*Last updated: 2026-10-29 · Session 75*
 
 ---
 
@@ -30,7 +30,7 @@
 8. Older: PO module live click-through (S48) and PO list search/pagination (S49); `www.erp` alias/cert (S51); rotate the ERP password; confirm the BMS Bar Stock cost in Job Config; watch for GreenGeeks WAF block recurrence (S47).
 
 **Claude-side, waiting on a go-ahead or a trigger:**
-- **A2a SQL (S73-S74): built, fixed after two independent attack reviews, uid counter done (X26), all gates green. MERGED to master as files in PR #187 (49a8ad3, 2026-10-29); NOT applied to prod** (`supabase/` and `scripts/` are not deployed and the PR touched no web file). The four migrations are `supabase/migrations/202610271000..1300_a2a_*.sql` (rollbacks in `supabase/rollbacks/`). See Session 74 for what is proven, the open items (M2, E1) and the prod pre-checks.
+- **A2a SQL (S73-S74): built, fixed after two independent attack reviews, uid counter done (X26), all gates green. MERGED to master as files in PR #187 (49a8ad3, 2026-10-29); NOT applied to prod** (`supabase/` and `scripts/` are not deployed and the PR touched no web file). The four migrations are `supabase/migrations/202610271000..1300_a2a_*.sql` (rollbacks in `supabase/rollbacks/`). See Session 74 for what is proven, the open item M2 and the prod pre-checks; E1 is closed as a separate migration in Session 75 (PR open, not applied).
 - **A2a, JS side DONE and merged (S71)**: link types FS/SS/FF/SF and task hierarchy in `jcSchedCompute` (PRs #175, #176), the MSPDI codec `schedule-msp.js` (#176), the read-only schedule window with Export XML and an import dry run (#177), and (S72) **Gantt arrows by link type** (#180, dormant until the migration adds `link_type`). **A2a still open:** (1) the SQL side, which needs **Docker** (not installed on the machine used in S71; install it first): the A2 migration (`link_type`, `msp_uid`, `parent_task_id` + cycle guard, depth cap), `job_schedule_status` rewritten with the same link-type and hierarchy rules as the JS (the 52+3 shared fixture cases must pass on SQL too: update `scripts/tests/schedule/sql-fixture-runner.mjs`, which does not pass `link_type` or the new `parent` key yet, so the new cases fail loudly against the old SQL), `prepare_schedule_export`, `import_job_schedule` (needs an independent attack review like D0d), all proven on throwaway Postgres with mutation checks and then applied to prod one step at a time; (2) window editing and Apply import once the RPCs exist; (3) audit row per export; (4) Gantt nesting by `parent_task_id` (summary rows, indent, collapse) once that column exists. Then **A2b** (resources, `task_id` on labour and equipment entries, `jcSaveJobData` change) and **A2c** (undo/redo).
 - A2 spec accepted (S71) and **recorded 2026-10-27 (S72, PR #179)**: roadmap row, sequencing steps 2a/2b/2c, decisions 24-25, risks, effort, X1 amendment and rules X24-X30 are in `00-overview.md` / `99-roadmap.md`, and the shared-codec note is at the top of `phase-d-client-portal.md`. Still to settle in the specs when their SQL is written: names of the Phase D agreement tables (X29), and the A2b table names are only reserved (`job_resources`, `job_task_assignments`).
 - Pre-existing, not from S72: `node scripts/verify-spec.mjs phase-a-schedule-v2.md` fails on master ("DROP in up-migration without a -- down section"; the Phase A spec embeds the migration executed in Session 61). Decide whether to fix the spec text or relax the check.
@@ -39,6 +39,28 @@
 - Parked: staging deploy gate (S52, blocked on the Supabase project cap); Supabase Branching `main` record stuck in `MIGRATIONS_FAILED` (S52, not the prod database).
 
 **Gotcha:** Edit/Write are blocked on the base repo's worktrees. Write the file to the scratchpad and `cp` it in. Pull or branch from `origin/master` before reading this file (a stale checkout once stopped at Session 51).
+
+---
+
+## Session 75 - E1 closed as a migration (audit reserved actions), with drift guards (2026-10-29)
+
+**Branch `feature/audit-reserved-actions` (PR open, NOT applied to prod).** Files only: a migration, its rollback, a test family, a guard script and a CLAUDE.md rule.
+
+**Why:** the second attack review's E1 (a writer forging audit rows) was proven only on the Phase A test stub. The real D0c insert policy (`202610210100_d0c_audit.sql`) already requires `user_id = auth.uid()`, the write atom, an own-company job and no `staff.access.%`, so a forged identity is already blocked. What was left: a writer inserting a made-up row under their OWN name with a type the database functions write (`schedule_imported` with a fake recovery copy, `baseline_locked`, ...).
+
+**What it does:** `202610290900_d0c_audit_reserved.sql` recreates the same policy (`d0c_job_audit_log_insert`) with `action_type NOT IN ('baseline_locked','baseline_reset','visibility_changed','schedule_exported','schedule_imported')`. These are written only by SECURITY DEFINER functions (lock_job_baseline, job_visibility_guard, schedule_export_core, import_job_schedule), which bypass RLS. A DENY-list on purpose: the web app ignores audit write errors, so an allow-list would silently lose any new type the app starts writing. The app writes only `job_saved` and `job_deleted`. The policy carries a COMMENT listing the rule.
+
+**Configuration safeguards (so it does not bite later):**
+- The migration stops with SQLSTATE 55000 if another permissive INSERT/ALL policy for the API roles exists (the legacy "authenticated users full access", or one added by hand in the dashboard): otherwise it would silently do nothing. Proven by a one-off run (legacy policy and a hand-made policy: refused; a SELECT-only policy: applies).
+- `scripts/verify-audit-reserved.mjs` (13 tests in `scripts/tests/audit/reserved.test.mjs`): every action type written by a migration must be reserved, the writer must be SECURITY DEFINER, no type the app writes may be reserved, and a dynamic action_type it cannot read is an error. Run it before merging anything that touches job_audit_log writers.
+- A rule in the project `CLAUDE.md` ("Audit log rule") says the same for future sessions.
+
+**Proof:** family `d0c_audit_reserved`: 4 before, 42 after, 7 after rollback; 17 mutants: 15 caught, 2 equivalent with written reasons (the `job_id IS NOT NULL` clause is redundant with the `IN (SELECT ...)` check, since NULL IN is never true; the guard failure path cannot be re-applied by the harness and was proven by the one-off run). Rollback restores the exact D0c policy.
+
+**Before applying to prod:** pre-check 2 (live `job_audit_log` policies) must show the D0c policies and no other permissive INSERT/ALL policy; otherwise the migration refuses by design. Apply AFTER the A2a migrations or independently (it does not depend on them).
+
+**Gotcha:** the D0a base stub has no `t_val`; use `t_dml` with a SELECT (`rows:1`) in the d0c_* families.
+**Gotcha:** Docker Desktop must be running (engine up) before any suite: after a reboot start it first (`Docker Desktop.exe` in `%LOCALAPPDATA%\Programs\DockerDesktop`).
 
 ---
 
@@ -2184,4 +2206,4 @@ See "Open items" at the top for the live list. Product to-dos not yet scheduled:
 - [ ] **Job -> Invoice link** - completed job's costing summary pre-fills a Meridian invoice (Session 21)
 - [ ] **Job Cards PDF** - printable job card / work order report for the workshop floor
 - [ ] **Work Orders in Client 360** - add `contact_id` FK to `jobs`, then wire into `loadClient360()`
-- [ ] **Orphaned storage cleanup** - job deletion cascades DB rows but leaves `job-drawings` storage objects; consider an Edge Function or pg trigger
+- [ ] **Orphaned storage cleanup** - job deletion cascades DB rows but leaves `job-
