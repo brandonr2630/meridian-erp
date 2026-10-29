@@ -305,7 +305,7 @@ BEGIN
   INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f7000000-0000-0000-0000-0000000000d1', c1, 'b1000000-0000-0000-0000-0000000000a4', 1, 'top', 99999999);
   INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES ('f7000000-0000-0000-0000-0000000000d2', c1, 'b1000000-0000-0000-0000-0000000000a4', 2, 'n1');
   res := t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', 'b1000000-0000-0000-0000-0000000000a4'));
-  PERFORM t_expect('m3: exactly filling the space to 100000000 is accepted', res || '|' || (SELECT msp_uid::text FROM job_tasks WHERE id = 'f7000000-0000-0000-0000-0000000000d2'), 'ok:1|100000000');
+  PERFORM t_expect('m3/r3: a planted 99999999 is an outlier (2 rows): the counter starts at 0, the new row gets 1', res || '|' || (SELECT msp_uid::text FROM job_tasks WHERE id = 'f7000000-0000-0000-0000-0000000000d2'), 'ok:1|1');
   -- L1 as the reviewer found it: one row planted at the cap, three rows still to number; used numbers 1, 2 and 4 are skipped
   INSERT INTO jobs (id, company_id, job_no, status) VALUES ('b1000000-0000-0000-0000-0000000000a5', c1, 'WO-EA5', 'Open');
   INSERT INTO job_phases (id, company_id, job_id, sort_order, name, msp_uid) VALUES ('f6000000-0000-0000-0000-0000000000d3', c1, 'b1000000-0000-0000-0000-0000000000a5', 1, 'ph', 2), ('f6000000-0000-0000-0000-0000000000d4', c1, 'b1000000-0000-0000-0000-0000000000a5', 2, 'ph2', NULL);
@@ -363,6 +363,28 @@ BEGIN
   res := t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', jd));
   PERFORM t_expect('x26: a second export with nothing new assigns nothing', res, 'ok:0');
 END $$;
+-- ===== r3 (MEDIUM): a planted msp_uid cannot lock the export / uid space of a job =====
+DO $$
+DECLARE
+  ops uuid := '11111111-1111-1111-1111-111111111111'; wrt uuid := '12121212-1212-1212-1212-121212121212'; c1 constant uuid := 'c1000000-0000-0000-0000-000000000001';
+  j constant uuid := 'b1000000-0000-0000-0000-0000000000a9'; jd constant uuid := 'b1000000-0000-0000-0000-0000000000aa'; res text;
+BEGIN
+  INSERT INTO jobs (id, company_id, job_no, status) VALUES (j, c1, 'WO-EA9', 'Open'), (jd, c1, 'WO-EAA', 'Open');
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES ('f7000000-0000-0000-0000-0000000001b1', c1, j, 1, 'T');
+  PERFORM t_expect('r3: writer cannot plant 99999999 on the task', t_dml_api('authenticated', wrt, 'UPDATE job_tasks SET msp_uid = 99999999 WHERE id = ''f7000000-0000-0000-0000-0000000001b1'''), 'err:A2U01');
+  res := t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', j));
+  PERFORM t_expect('r3: export still numbers the task (1)', res || '|' || (SELECT msp_uid::text FROM job_tasks WHERE id = 'f7000000-0000-0000-0000-0000000001b1'), 'ok:1|1');
+  -- owner-planted outlier before the first uid request: the counter does not jump to the cap
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f7000000-0000-0000-0000-0000000001b2', c1, jd, 1, 'planted', 99999999);
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES ('f7000000-0000-0000-0000-0000000001b3', c1, jd, 2, 'n');
+  res := t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', jd));
+  PERFORM t_expect('r3: net: export numbers the new task 1 and leaves the counter at 1', res || '|' || (SELECT msp_uid::text FROM job_tasks WHERE id = 'f7000000-0000-0000-0000-0000000001b3')
+    || '|' || (SELECT last_uid::text FROM job_schedule_uid_counter WHERE job_id = jd), 'ok:1|1|1');
+  UPDATE job_tasks SET msp_uid = NULL WHERE id = 'f7000000-0000-0000-0000-0000000001b2';
+  res := t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', jd));
+  PERFORM t_expect('r3: net: after the outlier is cleared the next export still works (uid 2, 1 not reused)', res || '|' || (SELECT msp_uid::text FROM job_tasks WHERE id = 'f7000000-0000-0000-0000-0000000001b2'), 'ok:1|2');
+END $$;
+
 ROLLBACK;
 
 -- ===== 7. committed marker (idempotent) so 30_rollback can prove audit rows and uids survive the rollback =====

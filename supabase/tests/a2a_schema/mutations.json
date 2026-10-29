@@ -452,5 +452,97 @@
   "name": "r3: depends_on error class changed",
   "find": "'job_tasks.depends_on must reference a task of the same job' USING ERRCODE = 'A2C01'",
   "replace": "'job_tasks.depends_on must reference a task of the same job' USING ERRCODE = 'A2C02'"
+ },
+ {
+  "name": "r3 uid guard: authenticated not blocked",
+  "find": "IF current_user IN ('authenticated', 'anon', 'service_role')",
+  "replace": "IF current_user IN ('anon', 'service_role')"
+ },
+ {
+  "name": "r3 uid guard: anon not blocked",
+  "find": "IF current_user IN ('authenticated', 'anon', 'service_role')",
+  "replace": "IF current_user IN ('authenticated', 'service_role')",
+  "equivalent": true,
+  "reason": "anon has no INSERT/UPDATE privilege on the schedule tables (and no RLS write policy), so it fails with 42501 before the trigger runs; the name stays in the guard as defence in depth."
+ },
+ {
+  "name": "r3 uid guard: service_role not blocked",
+  "find": "IF current_user IN ('authenticated', 'anon', 'service_role')",
+  "replace": "IF current_user IN ('authenticated', 'anon')"
+ },
+ {
+  "name": "r3 uid guard: never blocks",
+  "find": "IF current_user IN ('authenticated', 'anon', 'service_role')",
+  "replace": "IF false AND current_user IN ('authenticated', 'anon', 'service_role')"
+ },
+ {
+  "name": "r3 uid guard: insert with msp_uid allowed",
+  "find": "(TG_OP = 'INSERT' AND NEW.msp_uid IS NOT NULL) OR ",
+  "replace": "false OR "
+ },
+ {
+  "name": "r3 uid guard: update of msp_uid allowed",
+  "find": "(TG_OP = 'UPDATE' AND NEW.msp_uid IS DISTINCT FROM OLD.msp_uid)",
+  "replace": "(TG_OP = 'UPDATE' AND false)"
+ },
+ {
+  "name": "r3 uid guard: a same-value write is refused too",
+  "find": "NEW.msp_uid IS DISTINCT FROM OLD.msp_uid)",
+  "replace": "true)"
+ },
+ {
+  "name": "r3 uid guard: error class changed",
+  "find": "'msp_uid is assigned by schedule export / import only' USING ERRCODE = 'A2U01'",
+  "replace": "'msp_uid is assigned by schedule export / import only' USING ERRCODE = 'A2U02'"
+ },
+ {
+  "name": "r3 uid guard: phases trigger missing",
+  "find": "CREATE TRIGGER job_phases_msp_uid_guard BEFORE INSERT OR UPDATE OF msp_uid ON job_phases",
+  "replace": "CREATE TRIGGER job_phases_msp_uid_guard BEFORE DELETE ON job_phases"
+ },
+ {
+  "name": "r3 uid guard: tasks trigger missing",
+  "find": "CREATE TRIGGER job_tasks_msp_uid_guard BEFORE INSERT OR UPDATE OF msp_uid ON job_tasks",
+  "replace": "CREATE TRIGGER job_tasks_msp_uid_guard BEFORE DELETE ON job_tasks"
+ },
+ {
+  "name": "r3 uid guard: trigger only on INSERT (phases)",
+  "find": "CREATE TRIGGER job_phases_msp_uid_guard BEFORE INSERT OR UPDATE OF msp_uid ON job_phases",
+  "replace": "CREATE TRIGGER job_phases_msp_uid_guard BEFORE INSERT ON job_phases"
+ },
+ {
+  "name": "r3 net: plausibility limit dropped",
+  "find": " OR v_init > 4::bigint * v_rows + 1000",
+  "replace": ""
+ },
+ {
+  "name": "r3 net: limit off by one (+1001)",
+  "find": "4::bigint * v_rows + 1000",
+  "replace": "4::bigint * v_rows + 1001"
+ },
+ {
+  "name": "r3 net: limit off by one (+999)",
+  "find": "4::bigint * v_rows + 1000",
+  "replace": "4::bigint * v_rows + 999"
+ },
+ {
+  "name": "r3 net: multiplier 3",
+  "find": "4::bigint * v_rows + 1000",
+  "replace": "3::bigint * v_rows + 1000"
+ },
+ {
+  "name": "r3 net: row count ignores unnumbered rows",
+  "find": "count(*) INTO v_init, v_rows",
+  "replace": "count(s.u) INTO v_init, v_rows"
+ },
+ {
+  "name": "r3 net: outlier seeds the cap instead of 0",
+  "find": "OR v_init > 4::bigint * v_rows + 1000 THEN 0 ELSE",
+  "replace": "OR v_init > 4::bigint * v_rows + 1000 THEN k_cap ELSE"
+ },
+ {
+  "name": "r3 guard function granted to authenticated",
+  "find": "REVOKE ALL ON FUNCTION job_schedule_msp_uid_guard() FROM PUBLIC, anon, authenticated, service_role;",
+  "replace": "GRANT EXECUTE ON FUNCTION job_schedule_msp_uid_guard() TO authenticated;"
  }
 ]

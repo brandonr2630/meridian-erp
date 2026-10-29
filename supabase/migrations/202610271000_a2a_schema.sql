@@ -102,18 +102,20 @@ CREATE OR REPLACE FUNCTION sched_next_uids(p_job_id uuid, p_company uuid, p_n in
 LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
 DECLARE
   k_cap constant integer := 100000000;
-  v_last integer; v_init integer;
+  v_last integer; v_init integer; v_rows bigint;
   v_out integer[] := ARRAY[]::integer[]; r record; v_hi integer; v_want integer;
 BEGIN
   IF p_n IS NULL OR p_n <= 0 THEN RETURN v_out; END IF;
   SELECT c.last_uid INTO v_last FROM job_schedule_uid_counter c WHERE c.job_id = p_job_id FOR UPDATE;
   IF NOT FOUND THEN
-    SELECT coalesce(max(s.u), 0) INTO v_init
-      FROM (SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap
+    SELECT coalesce(max(s.u) FILTER (WHERE s.u BETWEEN 1 AND k_cap), 0), count(*) INTO v_init, v_rows
+      FROM (SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id AND company_id = p_company
             UNION ALL
-            SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) s;
+            SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = p_company) s;
+    -- r3 safety net: only a plausible highest uid seeds the counter. An outlier (a value planted by a DBA or legacy data; API roles can no
+    -- longer write msp_uid, see the guard below) would otherwise push the counter to the cap for good. Skipping used numbers keeps uids unique.
     INSERT INTO job_schedule_uid_counter (job_id, last_uid)
-      VALUES (p_job_id, CASE WHEN v_init::bigint + p_n > k_cap THEN 0 ELSE v_init END)
+      VALUES (p_job_id, CASE WHEN v_init::bigint + p_n > k_cap OR v_init > 4::bigint * v_rows + 1000 THEN 0 ELSE v_init END)
       ON CONFLICT (job_id) DO NOTHING;
     SELECT c.last_uid INTO v_last FROM job_schedule_uid_counter c WHERE c.job_id = p_job_id FOR UPDATE;
   END IF;
@@ -134,6 +136,29 @@ BEGIN
   RETURN v_out;
 END $$;
 REVOKE ALL ON FUNCTION sched_next_uids(uuid, uuid, integer, boolean) FROM PUBLIC, anon, authenticated, service_role;
+
+-- ===== r3 (MEDIUM): API roles never write msp_uid =====
+-- msp_uid is assigned only by the definer export/import code. A writer without approve could otherwise plant msp_uid = 99999999 and make the
+-- next uid request push the job's counter to the cap, blocking append / replace / export for good. SQLSTATE A2U01 (class A2, "uid").
+-- Invoker trigger on purpose: inside a definer function current_user is the function owner, so only that code (and a DBA) passes; an API
+-- session has current_user = authenticated / anon / service_role and no flag can be set by a caller. The client never writes the column
+-- (index.html and schedule-msp.js only read it); import goes through import_job_schedule. A write that leaves msp_uid as it was is allowed.
+CREATE OR REPLACE FUNCTION job_schedule_msp_uid_guard() RETURNS trigger
+LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
+BEGIN
+  IF current_user IN ('authenticated', 'anon', 'service_role')
+     AND ((TG_OP = 'INSERT' AND NEW.msp_uid IS NOT NULL) OR (TG_OP = 'UPDATE' AND NEW.msp_uid IS DISTINCT FROM OLD.msp_uid)) THEN
+    RAISE EXCEPTION 'msp_uid is assigned by schedule export / import only' USING ERRCODE = 'A2U01';
+  END IF;
+  RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION job_schedule_msp_uid_guard() FROM PUBLIC, anon, authenticated, service_role;
+DROP TRIGGER IF EXISTS job_phases_msp_uid_guard ON job_phases;
+CREATE TRIGGER job_phases_msp_uid_guard BEFORE INSERT OR UPDATE OF msp_uid ON job_phases
+  FOR EACH ROW EXECUTE FUNCTION job_schedule_msp_uid_guard();
+DROP TRIGGER IF EXISTS job_tasks_msp_uid_guard ON job_tasks;
+CREATE TRIGGER job_tasks_msp_uid_guard BEFORE INSERT OR UPDATE OF msp_uid ON job_tasks
+  FOR EACH ROW EXECUTE FUNCTION job_schedule_msp_uid_guard();
 
 -- ===== L3 (review 2): a job with schedule rows keeps its company =====
 -- If jobs.company_id changed after the job had a schedule, its rows would belong to the old company and import / export would

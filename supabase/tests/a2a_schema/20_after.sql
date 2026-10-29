@@ -70,7 +70,7 @@ BEGIN
        AND conkey = ARRAY[(SELECT attnum FROM pg_attribute WHERE attrelid='public.job_tasks'::regclass AND attname='parent_task_id')]), 'n');
   PERFORM t_expect('struct: job_tasks triggers',
     (SELECT string_agg(tgname, ',' ORDER BY tgname) FROM pg_trigger WHERE tgrelid='public.job_tasks'::regclass AND NOT tgisinternal),
-    'job_tasks_baseline_guard,job_tasks_company_guard,job_tasks_parent_guard,job_tasks_set_updated_at,job_tasks_visibility_guard');
+    'job_tasks_baseline_guard,job_tasks_company_guard,job_tasks_msp_uid_guard,job_tasks_parent_guard,job_tasks_set_updated_at,job_tasks_visibility_guard');
   PERFORM t_expect('struct: parent guard is BEFORE INSERT OR UPDATE OF parent_task_id, job_id, company_id',
     (SELECT (pg_get_triggerdef(oid) LIKE '%BEFORE INSERT OR UPDATE OF parent_task_id, job_id, company_id ON%')::text
        FROM pg_trigger WHERE tgname='job_tasks_parent_guard'), 'true');
@@ -498,7 +498,7 @@ BEGIN
   INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f5000000-0000-0000-0000-0000000f1efa', c1, jq, 1, 'five', 5);
   PERFORM t_expect('counter: first use continues after the highest stored uid even when it belongs to a phase (20): 21', sched_next_uids(jq, c1, 1)::text, '{21}');
   INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f5000000-0000-0000-0000-0000000f1efb', c1, jz, 1, 'top', 99999999);
-  PERFORM t_expect('counter: a first use that fits exactly up to the cap continues after the highest stored uid: 100000000', sched_next_uids(jz, c1, 1)::text, '{100000000}');
+  PERFORM t_expect('counter: r3 safety net: an implausible highest uid (99999999 among 1 row) does not seed the counter: starts at 0, 99999999 is skipped: 1', sched_next_uids(jz, c1, 1)::text, '{1}');
   -- the space can really run out (only the counter can do it now, a planted uid cannot)
   INSERT INTO job_schedule_uid_counter (job_id, last_uid) VALUES (jx, 99999999);
   BEGIN PERFORM sched_next_uids(jx, c1, 2); r := 'no error'; EXCEPTION WHEN SQLSTATE '22023' THEN r := SQLERRM; END;
@@ -557,6 +557,58 @@ BEGIN
   PERFORM t_expect('l3: writing the same company back is not a change', r, 'ok');
   PERFORM t_expect('l3: the guard trigger exists and its function is not callable by API roles',
     (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'jobs_company_change_guard') || has_function_privilege('authenticated', 'jobs_company_change_guard()', 'EXECUTE')::text, '1false');
+END $$;
+
+-- ===== 13. r3 (MEDIUM): API roles never write msp_uid; a planted value cannot lock the uid space =====
+DO $$
+DECLARE
+  c1 constant uuid := 'c1000000-0000-0000-0000-000000000001'; w1 constant uuid := '11111111-1111-1111-1111-111111111111';
+  j constant uuid := 'b5000000-0000-0000-0000-0000000f3001'; jd constant uuid := 'b5000000-0000-0000-0000-0000000f3002'; jb constant uuid := 'b5000000-0000-0000-0000-0000000f3003';
+  t1 constant uuid := 'f5000000-0000-0000-0000-0000000f3001'; ph constant uuid := 'f4000000-0000-0000-0000-0000000f3001'; r text;
+BEGIN
+  INSERT INTO jobs (id, company_id, job_no, status) VALUES (j, c1, 'WO-R3U1', 'Open'), (jd, c1, 'WO-R3U2', 'Open'), (jb, c1, 'WO-R3U3', 'Open');
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES (t1, c1, j, 1, 'T');
+  INSERT INTO job_phases (id, company_id, job_id, sort_order, name) VALUES (ph, c1, j, 1, 'P');
+  PERFORM t_expect('r3: struct: guard triggers on both tables, function not executable by API roles, invoker with pinned search_path',
+    (SELECT count(*)::text FROM pg_trigger WHERE tgname IN ('job_phases_msp_uid_guard', 'job_tasks_msp_uid_guard') AND NOT tgisinternal)
+    || (SELECT (NOT prosecdef AND array_to_string(proconfig, ',') LIKE '%search_path=public, pg_temp%')::text
+          || has_function_privilege('authenticated', oid, 'EXECUTE')::text || has_function_privilege('anon', oid, 'EXECUTE')::text
+          || has_function_privilege('service_role', oid, 'EXECUTE')::text FROM pg_proc WHERE proname = 'job_schedule_msp_uid_guard'),
+    '2truefalsefalsefalse');
+  -- the attack: a writer (no approve needed) plants the highest allowed-by-CHECK uid
+  PERFORM t_expect('r3: writer cannot plant msp_uid 99999999 on a task (UPDATE)', t_dml_api('authenticated', w1, format('UPDATE job_tasks SET msp_uid = 99999999 WHERE id = %L', t1)), 'err:A2U01');
+  PERFORM t_expect('r3: writer cannot plant msp_uid on a phase (UPDATE)', t_dml_api('authenticated', w1, format('UPDATE job_phases SET msp_uid = 99999999 WHERE id = %L', ph)), 'err:A2U01');
+  PERFORM t_expect('r3: writer cannot insert a task with an msp_uid', t_dml_api('authenticated', w1, format('INSERT INTO job_tasks (company_id, job_id, task_name, msp_uid) VALUES (%L, %L, ''x'', 5)', c1, j)), 'err:A2U01');
+  PERFORM t_expect('r3: writer cannot insert a phase with an msp_uid', t_dml_api('authenticated', w1, format('INSERT INTO job_phases (company_id, job_id, name, msp_uid) VALUES (%L, %L, ''x'', 5)', c1, j)), 'err:A2U01');
+  UPDATE job_tasks SET msp_uid = 7 WHERE id = t1;
+  PERFORM t_expect('r3: writer cannot clear or change an existing msp_uid',
+    t_dml_api('authenticated', w1, format('UPDATE job_tasks SET msp_uid = NULL WHERE id = %L', t1)) || t_dml_api('authenticated', w1, format('UPDATE job_tasks SET msp_uid = 8 WHERE id = %L', t1)), 'err:A2U01err:A2U01');
+  PERFORM t_expect('r3: the refusals changed nothing', (SELECT msp_uid::text FROM job_tasks WHERE id = t1) || (SELECT count(*)::text FROM job_tasks WHERE job_id = j), '71');
+  -- positive: everything the UI really does keeps working
+  PERFORM t_expect('r3: writer inserts a task and a phase without msp_uid', t_dml_api('authenticated', w1, format('INSERT INTO job_tasks (company_id, job_id, task_name) VALUES (%L, %L, ''ui'')', c1, j))
+    || t_dml_api('authenticated', w1, format('INSERT INTO job_phases (company_id, job_id, name) VALUES (%L, %L, ''ui'')', c1, j)), 'rows:1rows:1');
+  PERFORM t_expect('r3: writer edits other columns of a numbered row', t_dml_api('authenticated', w1, format('UPDATE job_tasks SET task_name = ''renamed'', progress = 10 WHERE id = %L', t1)), 'rows:1');
+  PERFORM t_expect('r3: writing the same msp_uid back is not a change', t_dml_api('authenticated', w1, format('UPDATE job_tasks SET msp_uid = 7 WHERE id = %L', t1)), 'rows:1');
+  PERFORM t_expect('r3: anon is refused too (RLS or guard, never a write)', (t_dml_api('anon', NULL, format('UPDATE job_tasks SET msp_uid = 9 WHERE id = %L', t1)) IN ('err:A2U01', 'err:42501', 'rows:0'))::text, 'true');
+  PERFORM t_expect('r3: service_role is refused too', t_dml_api('service_role', NULL, format('UPDATE job_tasks SET msp_uid = 9 WHERE id = %L', t1)), 'err:A2U01');
+  PERFORM t_expect('r3: the owner (definer code, DBA) can still write msp_uid', pg_temp.try(format('UPDATE job_tasks SET msp_uid = 9 WHERE id = %L', t1)), 'ok');
+  -- safety net: a value planted by the owner (DBA, legacy data) cannot lock the job
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f5000000-0000-0000-0000-0000000f3002', c1, jd, 1, 'planted', 99999999);
+  PERFORM t_expect('r3: net: a planted 99999999 does not move the counter: numbers 1..3 are handed out', sched_next_uids(jd, c1, 3)::text, '{1,2,3}');
+  PERFORM t_expect('r3: net: the counter is at 3, not at the cap', (SELECT last_uid::text FROM job_schedule_uid_counter WHERE job_id = jd), '3');
+  UPDATE job_tasks SET msp_uid = NULL WHERE id = 'f5000000-0000-0000-0000-0000000f3002';
+  PERFORM t_expect('r3: net: clearing the planted uid, the job keeps counting (X26: 4 next, 1..3 never again)', sched_next_uids(jd, c1, 1)::text, '{4}');
+  PERFORM t_expect('r3: net: the space is not exhausted after a replace-style request either', sched_next_uids(jd, c1, 2, true)::text, '{5,6}');
+  -- the net still continues after a plausible highest uid (up to 4 per row + 1000)
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f5000000-0000-0000-0000-0000000f3003', c1, jb, 1, 'edge', 1004);
+  PERFORM t_expect('r3: net: highest uid 1004 with 1 row (limit 4*1+1000) is plausible: continues at 1005', sched_next_uids(jb, c1, 1)::text, '{1005}');
+  INSERT INTO jobs (id, company_id, job_no, status) VALUES ('b5000000-0000-0000-0000-0000000f3004', c1, 'WO-R3U4', 'Open');
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f5000000-0000-0000-0000-0000000f3004', c1, 'b5000000-0000-0000-0000-0000000f3004', 1, 'edge', 1005);
+  PERFORM t_expect('r3: net: highest uid 1005 with 1 row is an outlier: starts at 0, skips 1005: 1', sched_next_uids('b5000000-0000-0000-0000-0000000f3004', c1, 1)::text, '{1}');
+  INSERT INTO jobs (id, company_id, job_no, status) VALUES ('b5000000-0000-0000-0000-0000000f3005', c1, 'WO-R3U5', 'Open');
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f5000000-0000-0000-0000-0000000f3005', c1, 'b5000000-0000-0000-0000-0000000f3005', 1, 'edge', 1005);
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES ('f5000000-0000-0000-0000-0000000f3006', c1, 'b5000000-0000-0000-0000-0000000f3005', 2, 'unnumbered');
+  PERFORM t_expect('r3: net: unnumbered rows count too: highest 1005 with 2 rows (limit 1008) is plausible: 1006', sched_next_uids('b5000000-0000-0000-0000-0000000f3005', c1, 1)::text, '{1006}');
 END $$;
 
 ROLLBACK;

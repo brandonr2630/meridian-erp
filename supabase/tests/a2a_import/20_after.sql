@@ -943,7 +943,7 @@ BEGIN
   -- the space is 1..100000000: + 1 new row fills it exactly (plain max + n); + 2 new rows no longer fit past the top, so (L1) they take unused numbers
   INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('fa000000-0000-0000-0000-000000000002', c1, jx, 1, 'top', 99999999);
   res := t_imp('authenticated', t_u('ops'), jx, 'append', t_pl(jsonb_build_array(t_ph(1, 'P')), '[]', jx));
-  PERFORM t_expect('m3: exactly filling the space is accepted: the last uid is 100000000', left(res, 3) || '|' || (SELECT msp_uid::text FROM job_phases WHERE job_id = jx), 'ok:|100000000');
+  PERFORM t_expect('m3/r3: a planted 99999999 is an outlier (1 row): the counter starts at 0 and the new row gets 1 (not the cap)', left(res, 3) || '|' || (SELECT msp_uid::text FROM job_phases WHERE job_id = jx), 'ok:|1');
   INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('fa000000-0000-0000-0000-000000000004', c1, j2, 1, 'top', 99999999);
   res := t_imp('authenticated', t_u('ops'), j2, 'append', t_pl(jsonb_build_array(t_ph(1, 'P')), jsonb_build_array(t_tk(2, 'A', 1)), j2));
   PERFORM t_expect('l1: a payload needing uids past 100000000 takes the first unused numbers (phase 1, task 2) instead of refusing',
@@ -1091,6 +1091,37 @@ BEGIN
   PERFORM t_expect('x26: and again: Y and Z get 4 and 5', left(res, 3) || '|' || (SELECT string_agg(task_name || '=' || msp_uid::text, ',' ORDER BY msp_uid) FROM job_tasks WHERE job_id = jr), 'ok:|Y=4,Z=5');
   res := t_imp('authenticated', t_u('ops'), jr, 'append', t_pl('[]', jsonb_build_array(t_tk(1, 'W'), t_tk(2, 'V', NULL, 99)), jr));
   PERFORM t_expect('x26: a refused import (parent 99 does not exist) does not move the counter', (left(res, 3) = 'ok:')::text || '|' || (SELECT last_uid::text FROM job_schedule_uid_counter WHERE job_id = jr), 'false|5');
+END $$;
+
+-- ===== r3 (MEDIUM): a writer without approve cannot lock a job's uid space by planting msp_uid =====
+-- Exact attack: writer sets one task to 99999999, a uid request runs, the writer clears it; the old code left every append / replace failing
+-- with "uid space exhausted" for good. Now the plant is refused (A2U01) and, if an owner/legacy value is there anyway, it cannot move the counter.
+DO $$
+DECLARE
+  c1 constant uuid := 'c1000000-0000-0000-0000-000000000001'; j uuid := t_job(195); jd uuid := t_job(196); res text; p jsonb;
+  t1 constant uuid := 'fa000000-0000-0000-0000-0000000000a1'; t2 constant uuid := 'fa000000-0000-0000-0000-0000000000a2';
+BEGIN
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES (t1, c1, j, 1, 'T');
+  PERFORM t_expect('r3: the writer cannot plant msp_uid 99999999 through the API', t_dml_api('authenticated', t_u('wrt'), format('UPDATE job_tasks SET msp_uid = 99999999 WHERE id = %L', t1)), 'err:A2U01');
+  -- the rest of the attack, as far as it can still be run: a writer append, the (no-op) clear, an approver replace
+  p := t_pl(jsonb_build_array(t_ph(1, 'P')), jsonb_build_array(t_tk(2, 'A', 1)), j);
+  PERFORM t_expect('r3: writer append still assigns uids', left(t_imp('authenticated', t_u('wrt'), j, 'append', p), 3), 'ok:');
+  PERFORM t_expect('r3: ... the new rows are numbered from the counter (task T is not numbered by append)',
+    (SELECT string_agg(msp_uid::text, ',' ORDER BY msp_uid) FROM (SELECT msp_uid FROM job_phases WHERE job_id = j UNION ALL SELECT msp_uid FROM job_tasks WHERE job_id = j AND msp_uid IS NOT NULL) s), '1,2');
+  PERFORM t_expect('r3: writer clearing a uid is a no-op write on NULL and works', t_dml_api('authenticated', t_u('wrt'), format('UPDATE job_tasks SET msp_uid = NULL WHERE id = %L', t1)), 'rows:1');
+  res := t_imp('authenticated', t_u('ops'), j, 'replace', t_pl(jsonb_build_array(t_ph(1, 'P')), jsonb_build_array(t_tk(2, 'A', 1)), j), 'r3 replace');
+  PERFORM t_expect('r3: an approver replace works and numbers from the counter, never reusing 1 or 2 (X26)',
+    left(res, 3) || '|' || (SELECT string_agg(msp_uid::text, ',' ORDER BY msp_uid) FROM (SELECT msp_uid FROM job_phases WHERE job_id = j UNION ALL SELECT msp_uid FROM job_tasks WHERE job_id = j) s), 'ok:|3,4');
+  -- append then merge assign uids too (positive)
+  res := t_imp('authenticated', t_u('wrt'), j, 'append', t_pl('[]', jsonb_build_array(t_tk(1, 'M')), j));
+  PERFORM t_expect('r3: append after the replace continues above the counter: 5', left(res, 3) || '|' || (SELECT msp_uid::text FROM job_tasks WHERE job_id = j AND task_name = 'M'), 'ok:|5');
+  -- safety net: the same lock planted by the owner (DBA, legacy rows) before the first uid request
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES (t2, c1, jd, 1, 'planted', 99999999);
+  res := t_imp('authenticated', t_u('wrt'), jd, 'append', t_pl(jsonb_build_array(t_ph(1, 'P')), jsonb_build_array(t_tk(2, 'A', 1)), jd));
+  PERFORM t_expect('r3: net: an owner-planted 99999999 does not exhaust the job: append assigns 1 and 2', left(res, 3) || '|' || (SELECT last_uid::text FROM job_schedule_uid_counter WHERE job_id = jd), 'ok:|2');
+  UPDATE job_tasks SET msp_uid = NULL WHERE id = t2;
+  res := t_imp('authenticated', t_u('ops'), jd, 'replace', t_pl(jsonb_build_array(t_ph(1, 'P')), jsonb_build_array(t_tk(2, 'A', 1)), jd), 'r3 net');
+  PERFORM t_expect('r3: net: after clearing it, an approver replace works', left(res, 3) || '|' || (SELECT last_uid::text FROM job_schedule_uid_counter WHERE job_id = jd), 'ok:|4');
 END $$;
 
 ROLLBACK;
