@@ -28,16 +28,17 @@ function makeEl(id) {
     set innerHTML(v) { this._html = String(v); }, get innerHTML() { return this._html; },
     querySelectorAll() { return []; }, addEventListener(t, f) { (this.listeners[t] ??= []).push(f); }, click() { this.clicked++; }, appendChild(c) { this.children.push(c); }, remove() {} };
 }
-function load({ perms = ["ops:work-orders:read"], data = {} } = {}) {
+function load({ perms = ["ops:work-orders:read"], data = {}, rpc } = {}) {
   const els = {}, toasts = [], downloads = [], anchors = [], opened = [], gantt = { layout: [], draw: [] };
   const getEl = (id) => (els[id] ??= makeEl(id));
   for (const id of ["sw-title", "sw-sub", "sw-msg", "sw-main", "sw-export", "sw-import", "sw-notice", "sw-kpis", "sw-table", "sw-detail", "sw-gantt", "sw-import-panel", "sw-file"]) getEl(id);
-  class FakeDate { getFullYear() { return 2026; } getMonth() { return 2; } getDate() { return 2; } }
-  const calls = [];
+  class FakeDate { getFullYear() { return 2026; } getMonth() { return 2; } getDate() { return 2; } static parse(s) { return Date.parse(s); } }
+  const calls = [], rpcCalls = [];
   const ctx = {
     document: { getElementById: (id) => els[id] ?? null, createElement: (t) => { const a = makeEl(t); anchors.push(a); return a; }, body: makeEl("body") },
     window: { open: (...a) => opened.push(a) }, location: { pathname: "/index.html" }, Date: FakeDate, console: { warn() {}, log() {} },
     can: (p) => perms.includes(p), showToast: (m, t) => toasts.push([m, t]),
+    jcRpc: async (name, args) => { rpcCalls.push([name, args]); if (rpc instanceof Error) throw rpc; return typeof rpc === "function" ? rpc(name, args) : (rpc ?? { created: 0, updated: 0, kept: 0, skipped: 0, warnings: [] }); },
     sbGet: async (table, q) => { calls.push([table, q]); const h = data[table]; if (h instanceof Error) throw h; return typeof h === "function" ? h(q) : h; },
     jcGanttToday: () => "2026-03-02", JC_GANTT_ZOOM: { Day: 28, Week: 8, Month: 3 }, JC_GANTT_LEFT_W: 320,
     jcGanttLayout: (m) => { gantt.layout.push(m); return { today: null, empty: false }; }, jcGanttDraw: (el, layout, ui) => { gantt.draw.push({ el, layout, ui }); return { wrap: null }; },
@@ -47,10 +48,11 @@ function load({ perms = ["ops:work-orders:read"], data = {} } = {}) {
   vm.createContext(ctx);
   const src = `(function(){\n${escSrc}\n${compute}\n${kpiHelpers}\n${codecSrc}\n${winBlock}\n` +
     `return { schedWin, schedWinJobIdFromHash, schedWinOpen, schedWinPredText, schedWinRows, schedWinBuildModel, schedWinFileName, loadScheduleWindow, schedWinRender,\n` +
-    `  schedWinExport, schedWinImportFile, schedWinImportSummary, schedWinImportClose, schedWinSetZoom, schedWinRenderGantt, MspCodec, SCHED_WIN_MARKER, SCHED_WIN_NOTICE, escHTML,\n` +
+    `  schedWinExport, schedWinImportFile, schedWinImportSummary, schedWinImportClose, schedWinSetZoom, schedWinImportModes, schedWinBasedOn, schedWinImportBody, schedWinImportError,\n` +
+    `  schedWinReplaceCounts, schedWinImportSetMode, schedWinImportReason, schedWinImportCancelConfirm, schedWinImportApply, SCHED_WIN_REASON_MAX, schedWinRenderGantt, MspCodec, SCHED_WIN_MARKER, SCHED_WIN_NOTICE, escHTML,\n` +
     `  setJob(id) { _schedWinJobId = id; } };\n})()`;
   const api = vm.runInContext(src, ctx);   // trusted: sliced from this repo's own files
-  return { api, els, toasts, downloads, anchors, opened, gantt, calls };
+  return { api, els, toasts, downloads, anchors, opened, gantt, calls, rpcCalls };
 }
 const uuid = (n) => "0a1b2c3d-0000-4000-8000-" + String(n).padStart(12, "0");
 const task = (n, over = {}) => ({ id: uuid(n), task_name: "T" + n, sort_order: n * 10, start_date: "2026-03-09", end_date: "2026-03-12", progress: 0, is_milestone: false, phase_id: null, ...over });
@@ -265,7 +267,7 @@ test("export: builds MS Project XML with the temporary-UID marker and downloads 
 });
 
 // ---------- import dry run ----------
-test("import: a ProjectLibre file is parsed and previewed; Apply is disabled and says why", async () => {
+test("import: a ProjectLibre file is parsed and previewed; a user without the write permission cannot apply it", async () => {
   const t = load({ data: okData() });
   t.api.setJob(JOB); await t.api.loadScheduleWindow();
   const xml = fx("01-simple-fs.xml");
@@ -277,8 +279,8 @@ test("import: a ProjectLibre file is parsed and previewed; Apply is disabled and
   assert.ok(h.includes("FS 8, SS 2, FF 1, SF 1"));
   assert.ok(h.includes("0 resources") && h.includes("0 summary"), "zero counts are printed, not dropped");
   assert.ok(h.includes("Receive Motor"));
-  assert.ok(/<button class="btn btn-primary btn-sm" disabled>Apply import<\/button>/.test(h));
-  assert.ok(h.includes("not available yet"));
+  assert.ok(!h.includes("Apply import") && h.includes("needs the Work Orders write permission"), "a reader sees the preview and why there is no Apply");
+  assert.equal(t.rpcCalls.length, 0);
   assert.ok(h.includes("Not exported from this work order"));
   assert.equal(t.els["sw-import-panel"].style.display, "");
   t.api.schedWinImportClose();
@@ -360,8 +362,288 @@ test("wiring: route, guard, loader, card button, view markup, script tag", () =>
   for (const id of ["sw-title", "sw-sub", "sw-msg", "sw-main", "sw-notice", "sw-kpis", "sw-table", "sw-detail", "sw-gantt", "sw-import-panel", "sw-file", "sw-export", "sw-import", "sw-zoom"]) assert.ok(html.includes(`id="${id}"`), id);
   assert.ok(/id="sw-import"[^>]*disabled/.test(html) && /id="sw-export"[^>]*disabled/.test(html), "buttons start disabled until a schedule has loaded");
 });
-test("the window block never talks to the network except through sbGet reads", () => {
-  assert.ok(!/\bfetch\s*\(|XMLHttpRequest|sbPost|sbPatch|sbDelete|rpc\//.test(winBlock), "read-only: no writes, no RPC");
+test("the window block never talks to the network except through sbGet reads and the one import RPC", () => {
+  assert.ok(!/\bfetch\s*\(|XMLHttpRequest|sbPost|sbPatch|sbDelete|rpc\//.test(winBlock), "no direct writes");
+  assert.deepEqual([...winBlock.matchAll(/jcRpc\(\s*'([a-z_]+)'/g)].map((m) => m[1]), ["import_job_schedule"], "exactly one RPC, the import");
   assert.ok(!/localStorage|sessionStorage/.test(winBlock));
   assert.ok(!/requestFullscreen/.test(winBlock));
+});
+
+// ---------- Apply import (A2a) ----------
+const W = ["ops:work-orders:read", "ops:work-orders:write"], A = [...W, "ops:work-orders:approve"];
+const stamped = () => ({ ...okData(), job_tasks: tasks.map((x, i) => ({ ...x, updated_at: "2026-10-28T10:00:0" + i + ".123456+00:00" })), job_phases: phases.map((x) => ({ ...x, updated_at: "2026-10-28T09:00:00.500000+00:00" })), job_task_links: links.map((x) => ({ ...x, updated_at: "2026-10-28T08:00:00+00:00" })) });
+const foreignXml = fx("01-simple-fs.xml");
+async function preview({ perms = A, data = stamped(), rpc, xml = foreignXml, name = "01-simple-fs.xml" } = {}) {
+  const t = load({ perms, data, rpc });
+  t.api.setJob(JOB); await t.api.loadScheduleWindow();
+  await t.api.schedWinImportFile({ name, size: xml.length, text: async () => xml });
+  return t;
+}
+const ownXml = (t) => t.api.MspCodec.build(t.api.schedWinBuildModel(t.api.schedWin.job, tasks, phases, links));
+const html_ = (t) => t.els["sw-import-panel"].innerHTML;
+const deferred = () => { let resolve, reject; const p = new Promise((a, b) => { resolve = a; reject = b; }); return { p, resolve, reject }; };
+
+test("apply: the three modes and who may use them", () => {
+  const { api } = load();
+  const own = { project: { uid: JOB, manager: "someone" } }, foreign = { project: { uid: null, manager: "x" } }, marker = { project: { uid: JOB, manager: api.SCHED_WIN_MARKER } };
+  const job = { id: JOB };
+  const ids = (ms) => ms.filter((m) => m.ok).map((m) => m.id).join(",");
+  assert.equal(ids(api.schedWinImportModes(own, job, false, false)), "", "no write permission: nothing");
+  assert.equal(ids(api.schedWinImportModes(own, job, false, true)), "", "approver without write: nothing");
+  assert.equal(ids(api.schedWinImportModes(own, job, true, false)), "append,merge");
+  assert.equal(ids(api.schedWinImportModes(own, job, true, true)), "append,merge,replace");
+  assert.equal(ids(api.schedWinImportModes(foreign, job, true, true)), "append,replace", "a foreign file cannot be merged");
+  assert.equal(ids(api.schedWinImportModes(marker, job, true, true)), "append,replace", "the read-only export marker means temporary IDs: not mergeable");
+  assert.equal(ids(api.schedWinImportModes({ project: { uid: JOB.toUpperCase(), manager: "x" } }, job, true, false)), "append,merge", "job ids compare case-insensitively");
+  assert.equal(ids(api.schedWinImportModes({ project: { uid: "0a1b2c3d-0000-4000-8000-000000000998", manager: "x" } }, job, true, false)), "append", "another job's file");
+  assert.equal(ids(api.schedWinImportModes(null, null, true, true)), "append,replace", "missing data does not throw");
+  const m = api.schedWinImportModes(foreign, job, true, false);
+  assert.equal(m.find((x) => x.id === "merge").why, "Only for a file exported from this work order.");
+  assert.equal(m.find((x) => x.id === "replace").why, "Needs the approver permission.");
+  assert.equal(api.schedWinImportModes(foreign, job, false, false)[0].why, "Needs the Work Orders write permission.");
+});
+test("apply: based_on is the newest updated_at over tasks, phases and links, as the server sent it", () => {
+  const { api } = load(), f = api.schedWinBasedOn;
+  assert.equal(f([{ updated_at: "2026-10-28T10:00:00.100000+00:00" }], [{ updated_at: "2026-10-28T11:00:00+00:00" }], [{ updated_at: "2026-10-28T09:00:00+00:00" }]), "2026-10-28T11:00:00+00:00", "from the phases");
+  assert.equal(f([{ updated_at: "2026-10-28T12:00:00.250000+00:00" }], [], [{ updated_at: "2026-10-28T11:00:00+00:00" }]), "2026-10-28T12:00:00.250000+00:00", "from the tasks, string kept whole");
+  assert.equal(f([], [], [{ updated_at: "2026-10-29T00:00:00+00:00" }, { updated_at: "2026-10-28T00:00:00+00:00" }]), "2026-10-29T00:00:00+00:00", "from the links, any position");
+  assert.equal(f([{ updated_at: "2026-10-28T10:00:00.9+00:00" }, { updated_at: "2026-10-28T10:00:00.1+00:00" }], [], []), "2026-10-28T10:00:00.9+00:00");
+  assert.equal(f([], [], []), null); assert.equal(f(null, undefined, "x"), null);
+  assert.equal(f([{ updated_at: null }, { updated_at: 5 }, { updated_at: "not a date" }, {}, null], [], []), null, "unusable values are skipped");
+  assert.equal(f([{ updated_at: "garbage" }, { updated_at: "2026-10-28T10:00:00+00:00" }], [], []), "2026-10-28T10:00:00+00:00");
+});
+test("apply: the request body is the codec payload plus file_name and based_on, without touching the payload", () => {
+  const { api } = load(), payload = { format: "mspdi", tasks: [{ uid: 1 }] };
+  const b = plain(api.schedWinImportBody(payload, "a.xml", "2026-10-28T10:00:00+00:00"));
+  assert.deepEqual(b, { format: "mspdi", tasks: [{ uid: 1 }], file_name: "a.xml", based_on: "2026-10-28T10:00:00+00:00" });
+  assert.deepEqual(plain(payload), { format: "mspdi", tasks: [{ uid: 1 }] }, "the original is not modified");
+  assert.equal(api.schedWinImportBody(payload, "", null).file_name, null); assert.equal(api.schedWinImportBody(payload, "x", undefined).based_on, null);
+  assert.equal(api.schedWinImportBody(payload, "x".repeat(300), null).file_name.length, 255);
+});
+test("apply: server messages become clear text, by kind", () => {
+  const { api } = load(), e = api.schedWinImportError;
+  assert.equal(e("Could not find the function public.import_job_schedule(p_job_id) in the schema cache").kind, "missing");
+  assert.equal(e("function import_job_schedule(uuid, text, jsonb, text) does not exist").kind, "missing");
+  assert.equal(e("HTTP 404").kind, "missing");
+  assert.equal(e("schedule changed since preview").kind, "stale");
+  assert.equal(e("invalid payload: based_on is required for a job that already has a schedule").kind, "stale");
+  assert.equal(e("replace requires a reason").kind, "reason");
+  assert.equal(e("permission denied: ops:work-orders:approve required for replace").kind, "permission");
+  assert.equal(e("new row violates row-level security policy").kind, "permission");
+  assert.equal(e("invalid payload: tasks[3].name is required").kind, "invalid");
+  assert.equal(e("dependency cycle in the imported schedule").kind, "invalid");
+  assert.equal(e("task hierarchy is deeper than 6 levels").kind, "invalid");
+  assert.equal(e("merge requires a file exported from this job (use append, or replace as an approver)").kind, "invalid");
+  assert.equal(e("something odd").kind, "other"); assert.equal(e(undefined).kind, "other"); assert.equal(e(null).text, "The import failed: ");
+  assert.match(e("invalid payload: x").text, /^The server refused the file: invalid payload: x$/);
+  assert.match(e("schedule changed since preview").text, /Reload the schedule/);
+  assert.match(e("HTTP 404").text, /upgrade has not been applied/);
+});
+test("apply: what a Replace would delete is counted from the loaded schedule, with the baseline flag", async () => {
+  const t = load({ data: stamped() }); t.api.setJob(JOB); await t.api.loadScheduleWindow();
+  assert.deepEqual(plain(t.api.schedWinReplaceCounts(t.api.schedWin)), { phases: phases.length, tasks: tasks.length, links: links.length, baseline: false });
+  assert.equal(t.api.schedWinReplaceCounts({ tasks: [{ baseline_locked_at: "2026-10-01" }] }).baseline, true);
+  assert.deepEqual(plain(t.api.schedWinReplaceCounts({})), { phases: 0, tasks: 0, links: 0, baseline: false });
+});
+test("apply: a writer sees the modes, merge is greyed out for a foreign file, and nothing is preselected on a schedule that has rows", async () => {
+  const t = await preview({ perms: W });
+  const h = html_(t);
+  assert.ok(h.includes("<b>Append</b>") && h.includes("<b>Merge</b>") && h.includes("<b>Replace</b>"));
+  assert.ok(/value="merge"[^>]* disabled/.test(h) && /value="replace"[^>]* disabled/.test(h) && !/value="append"[^>]* disabled/.test(h));
+  assert.ok(h.includes("Only for a file exported from this work order.") && h.includes("Needs the approver permission."));
+  assert.equal(t.api.schedWin.imp.mode, null);
+  assert.ok(!/checked/.test(h), "no mode preselected");
+  assert.ok(h.includes("Apply import"));
+});
+test("apply: an empty schedule preselects Append", async () => {
+  const t = await preview({ perms: W, data: { ...okData(), job_tasks: [], job_phases: [], job_task_links: [] } });
+  assert.equal(t.api.schedWin.imp.mode, "append");
+  assert.ok(/value="append" checked/.test(html_(t)));
+});
+test("apply: pressing Apply without a mode asks for one and calls nothing", async () => {
+  const t = await preview({ perms: W });
+  await t.api.schedWinImportApply();
+  assert.ok(html_(t).includes("Choose how to import the file."));
+  assert.equal(t.rpcCalls.length, 0);
+});
+test("apply: Append calls the import RPC once with the file, its name and the schedule it was based on, then reloads and shows the result", async () => {
+  const t = await preview({ perms: W, rpc: { created: 8, updated: 0, kept: 3, skipped: 1, warnings: [{ code: "x", message: "Resources were not imported.", count: 2 }] } });
+  t.api.schedWinImportSetMode("append");
+  const before = t.calls.length;
+  await t.api.schedWinImportApply();
+  assert.equal(t.rpcCalls.length, 1);
+  const [name, args] = t.rpcCalls[0];
+  assert.equal(name, "import_job_schedule");
+  assert.deepEqual(Object.keys(args).sort(), ["p_job_id", "p_mode", "p_payload", "p_reason"]);
+  assert.equal(args.p_job_id, JOB); assert.equal(args.p_mode, "append"); assert.equal(args.p_reason, null);
+  assert.equal(args.p_payload.file_name, "01-simple-fs.xml");
+  assert.equal(args.p_payload.based_on, "2026-10-28T10:00:03.123456+00:00", "the newest updated_at of the loaded schedule");
+  assert.equal(args.p_payload.tasks.length, 13); assert.equal(args.p_payload.phases.length, 1); assert.equal(args.p_payload.project.name, "01-simple-fs", "the codec payload is sent whole");
+  assert.ok(t.calls.length > before, "the schedule is reloaded after a successful import");
+  const h = html_(t);
+  assert.ok(h.includes("Import applied") && h.includes("(append)") && h.includes("8 created, 0 updated, 3 kept, 1 skipped."));
+  assert.ok(h.includes("Resources were not imported. (2)"));
+  assert.ok(t.toasts.some((x) => x[0] === "Import applied." && x[1] === "success"));
+  assert.equal(t.api.schedWin.imp.result.created, 8);
+  assert.ok(!h.includes("Apply import"), "the preview is replaced by the result");
+});
+test("apply: a result with missing or odd numbers shows zeros, not NaN", async () => {
+  const t = await preview({ perms: W, rpc: { created: "x", warnings: "no" } });
+  t.api.schedWinImportSetMode("append"); await t.api.schedWinImportApply();
+  assert.ok(html_(t).includes("0 created, 0 updated, 0 kept, 0 skipped."));
+  const t2 = await preview({ perms: W, rpc: null }); t2.api.schedWinImportSetMode("append"); await t2.api.schedWinImportApply();
+  assert.ok(html_(t2).includes("0 created"));
+});
+test("apply: Merge works for a file exported from this work order and is refused for a foreign one", async () => {
+  const probe = load({ data: stamped() }); probe.api.setJob(JOB); await probe.api.loadScheduleWindow();
+  const own = await preview({ perms: W, xml: ownXml(probe), name: "own.xml" });
+  assert.ok(!/value="merge"[^>]* disabled/.test(html_(own)));
+  own.api.schedWinImportSetMode("merge"); await own.api.schedWinImportApply();
+  assert.equal(own.rpcCalls.length, 1); assert.equal(own.rpcCalls[0][1].p_mode, "merge"); assert.equal(own.rpcCalls[0][1].p_reason, null);
+  const foreign = await preview({ perms: W });
+  foreign.api.schedWinImportSetMode("merge"); await foreign.api.schedWinImportApply();
+  assert.equal(foreign.rpcCalls.length, 0, "a disabled mode cannot be forced through the function");
+  assert.ok(html_(foreign).includes("Only for a file exported from this work order."));
+});
+test("apply: Replace asks first, needs a reason, and sends the trimmed reason", async () => {
+  const t = await preview({ perms: A });
+  t.api.schedWinImportSetMode("replace");
+  assert.ok(html_(t).includes("Replace schedule…"), "the button says it opens a confirmation");
+  await t.api.schedWinImportApply();
+  const h = html_(t);
+  assert.equal(t.rpcCalls.length, 0, "the first press only opens the confirmation");
+  assert.ok(h.includes("This deletes the current schedule and loads the file instead."));
+  assert.ok(h.includes("Will be deleted") && h.includes("Will be created") && h.includes("Hidden from clients"));
+  assert.ok(h.includes(tasks.length + " tasks") && h.includes("13 tasks"), "both counts are shown");
+  assert.ok(h.includes("Only approvers can replace.") && h.includes("audit log"));
+  assert.ok(h.includes('maxlength="500"'), "the field itself stops at 500 characters");
+  assert.ok(h.includes('<div class="field"><label class="field-label" for="sw-reason">Reason (required)'), "the reason field uses the app field style");
+  await t.api.schedWinImportApply();
+  assert.equal(t.rpcCalls.length, 0, "no reason, no call");
+  assert.ok(html_(t).includes("Enter a reason."));
+  t.api.schedWinImportReason("   ");
+  await t.api.schedWinImportApply();
+  assert.equal(t.rpcCalls.length, 0, "a blank reason is no reason");
+  t.api.schedWinImportReason("  Re-planned after inspection  ");
+  await t.api.schedWinImportApply();
+  assert.equal(t.rpcCalls.length, 1);
+  assert.equal(t.rpcCalls[0][1].p_mode, "replace"); assert.equal(t.rpcCalls[0][1].p_reason, "Re-planned after inspection");
+  assert.ok(html_(t).includes("Import applied"));
+});
+test("apply: the Replace confirmation shows the locked baseline and can be cancelled without a call", async () => {
+  const d = stamped(); d.job_tasks[0].baseline_locked_at = "2026-10-01T00:00:00+00:00";
+  const t = await preview({ perms: A, data: d });
+  t.api.schedWinImportSetMode("replace"); await t.api.schedWinImportApply();
+  assert.ok(html_(t).includes("Baseline locked"));
+  t.api.schedWinImportCancelConfirm();
+  assert.ok(!html_(t).includes("Replace schedule</div>") && html_(t).includes("Apply import") === false && html_(t).includes("Replace schedule…"));
+  assert.equal(t.rpcCalls.length, 0); assert.equal(t.api.schedWin.imp.confirm, false);
+  const d2 = await preview({ perms: A }); d2.api.schedWinImportSetMode("replace"); await d2.api.schedWinImportApply();
+  assert.ok(!html_(d2).includes("Baseline locked"), "no baseline, no line");
+});
+test("apply: the reason is cut to 500 characters, escaped in the field, and typing clears the error", async () => {
+  const t = await preview({ perms: A });
+  t.api.schedWinImportSetMode("replace"); await t.api.schedWinImportApply(); await t.api.schedWinImportApply();
+  assert.equal(t.api.schedWin.imp.reasonErr, "Enter a reason.");
+  t.api.schedWinImportReason('x'.repeat(600));
+  assert.equal(t.api.schedWin.imp.reason.length, t.api.SCHED_WIN_REASON_MAX); assert.equal(t.api.schedWin.imp.reasonErr, "", "typing clears the error");
+  t.api.schedWinImportReason('"><img src=x onerror=alert(1)>');
+  t.api.schedWinImportCancelConfirm(); await t.api.schedWinImportApply();
+  const h = html_(t);
+  assert.ok(!h.includes("<img") && h.includes("&lt;img"), "the reason is escaped in the input value");
+  await t.api.schedWinImportApply();
+  assert.equal(t.rpcCalls[0][1].p_reason.length <= 500, true);
+  t.api.schedWinImportReason(null); assert.equal(t.api.schedWin.imp?.reason ?? "", t.api.schedWin.imp?.reason ?? "");
+});
+test("apply: Replace is refused for a writer who is not an approver, in the function as well as in the list", async () => {
+  const t = await preview({ perms: W });
+  t.api.schedWinImportSetMode("replace"); await t.api.schedWinImportApply();
+  assert.equal(t.rpcCalls.length, 0); assert.ok(html_(t).includes("Needs the approver permission."));
+  assert.equal(t.api.schedWin.imp.confirm, false);
+});
+test("apply: a second press while the first is running is ignored and the buttons say so", async () => {
+  const d = deferred();
+  const t = await preview({ perms: W, rpc: () => d.p });
+  t.api.schedWinImportSetMode("append");
+  const first = t.api.schedWinImportApply();
+  await t.api.schedWinImportApply();
+  assert.equal(t.rpcCalls.length, 1, "one request, not two");
+  assert.ok(html_(t).includes("Applying…") && /<button[^>]*disabled[^>]*>Applying…/.test(html_(t)));
+  assert.ok(/value="append"[^>]* disabled/.test(html_(t)), "the mode cannot change while applying");
+  t.api.schedWinImportSetMode("replace"); assert.equal(t.api.schedWin.imp.mode, "append");
+  d.resolve({ created: 1 }); await first;
+  assert.ok(html_(t).includes("1 created"));
+});
+test("apply: a stale schedule is explained and the preview stays; the same press can be repeated after a reload", async () => {
+  const t = await preview({ perms: W, rpc: new Error("schedule changed since preview") });
+  t.api.schedWinImportSetMode("append"); const before = t.calls.length;
+  await t.api.schedWinImportApply();
+  const h = html_(t);
+  assert.ok(h.includes("The schedule changed after this window loaded") && h.includes("Import preview") && h.includes("Apply import"));
+  assert.equal(t.api.schedWin.imp.busy, false); assert.equal(t.calls.length, before, "no reload on failure");
+  assert.ok(!t.toasts.some((x) => x[0] === "Import applied."));
+});
+test("apply: a server without the import function says the upgrade is missing and changes nothing", async () => {
+  const t = await preview({ perms: W, rpc: new Error("Could not find the function public.import_job_schedule(p_job_id, p_mode, p_payload, p_reason) in the schema cache") });
+  t.api.schedWinImportSetMode("append"); await t.api.schedWinImportApply();
+  assert.ok(html_(t).includes("Applying imports is not available on this server yet"));
+  assert.equal(t.api.schedWin.imp.result, null); assert.equal(t.api.schedWin.tasks.length, tasks.length, "the loaded schedule is untouched");
+});
+test("apply: a refused file, a permission error and an unknown error each show their own text, escaped", async () => {
+  for (const [msg, expect] of [["invalid payload: <b>bad</b>", "The server refused the file: invalid payload: &lt;b&gt;bad&lt;/b&gt;"], ["permission denied: ops:work-orders:write required", "You do not have permission to import this way."], ["boom <i>", "The import failed: boom &lt;i&gt;"]]) {
+    const t = await preview({ perms: W, rpc: new Error(msg) });
+    t.api.schedWinImportSetMode("append"); await t.api.schedWinImportApply();
+    assert.ok(html_(t).includes(expect), msg);
+  }
+});
+test("apply: a missing-reason answer from the server lands on the reason field", async () => {
+  const t = await preview({ perms: A, rpc: new Error("replace requires a reason") });
+  t.api.schedWinImportSetMode("replace"); await t.api.schedWinImportApply();
+  t.api.schedWinImportReason("because"); await t.api.schedWinImportApply();
+  assert.equal(t.api.schedWin.imp.reasonErr, "Enter a reason."); assert.ok(html_(t).includes("Replace schedule"), "the confirmation stays open");
+});
+test("apply: closing the preview while the import runs ignores its answer", async () => {
+  const d = deferred();
+  const t = await preview({ perms: W, rpc: () => d.p });
+  t.api.schedWinImportSetMode("append"); const run = t.api.schedWinImportApply();
+  t.api.schedWinImportClose();
+  d.resolve({ created: 9 }); await run;
+  assert.equal(t.api.schedWin.imp, null); assert.ok(!t.toasts.some((x) => x[0] === "Import applied."));
+});
+test("apply: the result panel escapes the mode, the file name and the server's warning text", async () => {
+  const t = await preview({ perms: W, name: "<script>x</script>.xml", rpc: { created: 1, warnings: [{ message: "<img src=x onerror=alert(1)>", count: 1 }, { message: "two", count: 3 }, null] } });
+  t.api.schedWinImportSetMode("append"); await t.api.schedWinImportApply();
+  const h = html_(t);
+  assert.ok(!h.includes("<img") && !h.includes("<script>") && h.includes("&lt;img") && h.includes("two (3)"));
+});
+test("apply: a preview of a rejected file has no Apply area", async () => {
+  const t = load({ perms: A, data: stamped() }); t.api.setJob(JOB); await t.api.loadScheduleWindow();
+  await t.api.schedWinImportFile({ name: "bad.xml", size: 5, text: async () => "<nope" });
+  assert.ok(!html_(t).includes("Apply import") && !html_(t).includes("sw-mode"));
+  await t.api.schedWinImportApply(); assert.equal(t.rpcCalls.length, 0);
+});
+test("apply: an unknown mode is ignored, and a schedule with phases but no tasks is not 'empty'", async () => {
+  const t = await preview({ perms: W });
+  t.api.schedWinImportSetMode("bogus"); assert.equal(t.api.schedWin.imp.mode, null);
+  t.api.schedWinImportSetMode("append"); t.api.schedWinImportSetMode("bogus"); assert.equal(t.api.schedWin.imp.mode, null, "the old choice does not stay");
+  const t2 = await preview({ perms: W, data: { ...okData(), job_tasks: [], job_task_links: [] } });
+  assert.equal(t2.api.schedWin.imp.mode, null, "phases alone still count as a schedule that has rows");
+});
+test("apply: the Replace confirmation says 1 phase / 1 task / 1 link in the singular and 0 or many in the plural", async () => {
+  const one = await preview({ perms: A, data: { ...okData(), job_tasks: [tasks[0]], job_phases: [phases[0]], job_task_links: [links[0]] } });
+  one.api.schedWinImportSetMode("replace"); await one.api.schedWinImportApply();
+  const h = html_(one);
+  assert.ok(h.includes("1 phase<br>1 task<br>1 link"), "singular for exactly one");
+  assert.ok(h.includes("1 phase<br>13 tasks<br>12 links"), "the file side is plural");
+  const none = await preview({ perms: A, data: { ...okData(), job_tasks: [], job_phases: [], job_task_links: [] } });
+  none.api.schedWinImportSetMode("replace"); await none.api.schedWinImportApply();
+  assert.ok(html_(none).includes("0 phases<br>0 tasks<br>0 links"), "zero is plural");
+});
+test("apply: the result panel is titled as a result and does not say the file is still being read", async () => {
+  const t = await preview({ perms: W, rpc: { created: 2 } });
+  t.api.schedWinImportSetMode("append"); await t.api.schedWinImportApply();
+  const h = html_(t);
+  assert.ok(h.includes("<b>Import result</b>") && !h.includes("Import preview") && !h.includes("Reading the file"));
+  assert.ok(h.includes("Close"), "it can be closed");
+  t.api.schedWinImportClose(); assert.equal(t.els["sw-import-panel"].style.display, "none");
 });
