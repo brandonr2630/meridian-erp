@@ -17,6 +17,10 @@
 --     walking tasks in sort order, the edge that would close the loop is dropped. A link whose successor is a summary constrains
 --     every leaf of it for start-bound types (FS, SS); a finish-bound type (FF, SF) into a summary is ignored (summary-link-approx).
 --     Backward the same with predecessor-summary: FS and FF apply to every leaf, SS and SF are ignored.
+--   * M2 (second attack review, performance): the links are visited in dependency order (predecessor first forward, successor first backward,
+--     from a topological sort of the link and hierarchy graph) so a long chain settles in a few passes whatever order its links are stored in:
+--     6,000 chained tasks went from about 31 s to about 1.2 s with the same result. A graph with a cycle keeps the stored order, like JS. A chain of
+--     many summaries linked summary to summary still needs one pass per summary (a summary is derived once per pass); that is not worse than before.
 --   * a pass that does not settle (n+1 passes) STOPS and carries on with the values so far, as JS does ('cycle' warning), instead
 --     of raising: a leaf linked to its own summary is reachable through the hierarchy (the link trigger only sees link cycles),
 --     and a status function that raises would break the dashboard and the nightly snapshot for the whole job.
@@ -35,6 +39,8 @@ DECLARE
   lt int[] := '{}'; lp int[] := '{}'; llag int[] := '{}'; lty text[] := '{}';
   pids uuid[] := '{}'; par int[] := '{}'; is_sum boolean[] := '{}'; depth int[] := '{}';
   sd int[]; sumids uuid[] := '{}'; seen int[];
+  ord_f int[]; ord_b int[]; e_src int[]; e_dst int[]; eo int[]; indeg int[]; outdeg int[]; pos int[]; q int[]; rk int[];
+  v_n2 int; v_ne int; v_head int; v_cnt int; v_x int; v_y int;
   c int; c_lo int; c_hi int; k int; nx int; s int; ty text; e0 date; f0 date; b0 date; v_all boolean; v_any boolean; v_ok boolean;
   r record; v_changed boolean; cand date; v_deadline date; v_fe date; v_minslack int;
   v_overall numeric; v_planned numeric; v_has_bl boolean; v_base_end date; v_slip int; v_gap numeric;
@@ -118,6 +124,47 @@ BEGIN
     done[s] := v_all; sched[s] := v_any;
   END LOOP;
 
+  -- M2 (review 2): the order the links are visited in inside a pass. The relaxation settles a dependency chain in ONE pass only when the links
+  -- are visited predecessor first (forward) / successor first (backward); in any other stored order it needs one pass per task (a 6,000-task chain
+  -- took 31 s, over the 8 s statement timeout). Every task x is two nodes: OUT(x) = x (its dates) and IN(x) = n + x (the constraints arriving at it).
+  -- Edges: a link p -> t is OUT(p) -> IN(t); a leaf passes IN to OUT; a summary's OUT derives from its kids' OUT (kid OUT -> summary OUT) and its IN is
+  -- passed down (summary IN -> kid IN). When that graph has no cycle the links are sorted by the topological rank of OUT(p) (forward) and of IN(t),
+  -- descending (backward): the same fixpoint, reached in a few passes. A cycle (a leaf linked to its own summary) keeps the stored order, exactly
+  -- like the JS engine, because the values left when the pass cap stops a cycle depend on the order.
+  ord_f := ARRAY(SELECT g.ix FROM generate_series(1, m) AS g(ix));
+  ord_b := ord_f;
+  IF m > 1 THEN
+    v_n2 := 2 * n;
+    e_src := '{}'; e_dst := '{}';
+    FOR j IN 1..m LOOP e_src := e_src || lp[j]; e_dst := e_dst || (n + lt[j]); END LOOP;
+    FOR i IN 1..n LOOP
+      IF par[i] <> 0 THEN
+        e_src := e_src || i;            e_dst := e_dst || par[i];        -- OUT(kid) -> OUT(summary)
+        e_src := e_src || (n + par[i]); e_dst := e_dst || (n + i);       -- IN(summary) -> IN(kid)
+      END IF;
+      IF NOT is_sum[i] THEN e_src := e_src || (n + i); e_dst := e_dst || i; END IF;   -- IN(leaf) -> OUT(leaf)
+    END LOOP;
+    v_ne := cardinality(e_src);
+    indeg := array_fill(0, ARRAY[v_n2]); outdeg := array_fill(0, ARRAY[v_n2]); pos := array_fill(0, ARRAY[v_n2]); rk := array_fill(0, ARRAY[v_n2]);
+    FOR k IN 1..v_ne LOOP indeg[e_dst[k]] := indeg[e_dst[k]] + 1; outdeg[e_src[k]] := outdeg[e_src[k]] + 1; END LOOP;
+    eo := ARRAY(SELECT g.ix FROM generate_series(1, v_ne) AS g(ix) ORDER BY e_src[g.ix], g.ix);   -- edge indexes grouped by source node
+    v_cnt := 1;
+    FOR i IN 1..v_n2 LOOP pos[i] := v_cnt; v_cnt := v_cnt + outdeg[i]; END LOOP;
+    q := ARRAY(SELECT g.ix FROM generate_series(1, v_n2) AS g(ix) WHERE indeg[g.ix] = 0 ORDER BY g.ix);
+    v_head := 1; v_cnt := 0;
+    WHILE v_head <= cardinality(q) LOOP                -- Kahn: rk = topological rank
+      v_x := q[v_head]; v_head := v_head + 1; v_cnt := v_cnt + 1; rk[v_x] := v_cnt;
+      FOR k IN pos[v_x]..(pos[v_x] + outdeg[v_x] - 1) LOOP
+        v_y := e_dst[eo[k]]; indeg[v_y] := indeg[v_y] - 1;
+        IF indeg[v_y] = 0 THEN q := q || v_y; END IF;
+      END LOOP;
+    END LOOP;
+    IF v_cnt = v_n2 THEN                               -- no cycle: every node was ranked
+      ord_f := ARRAY(SELECT g.ix FROM generate_series(1, m) AS g(ix) ORDER BY rk[lp[g.ix]], g.ix);
+      ord_b := ARRAY(SELECT g.ix FROM generate_series(1, m) AS g(ix) ORDER BY rk[n + lt[g.ix]] DESC, g.ix DESC);
+    END IF;
+  END IF;
+
   -- forward pass (relaxation over links; a pass that does not settle stops, like JS). A summary predecessor uses its derived
   -- start/end; a link INTO a summary constrains every leaf of it for FS/SS and is ignored for FF/SF.
   pass := 0;
@@ -133,7 +180,7 @@ BEGIN
       END LOOP;
       IF e0 IS NOT NULL THEN es[s] := e0; ef[s] := f0; END IF;
     END LOOP;
-    FOR j IN 1..m LOOP
+    FOREACH j IN ARRAY ord_f LOOP
       t := lt[j]; p := lp[j]; ty := lty[j];
       IF NOT (sched[t] AND sched[p] AND ef[p] IS NOT NULL) THEN CONTINUE; END IF;
       IF is_sum[t] AND ty NOT IN ('FS', 'SS') THEN CONTINUE; END IF;
@@ -187,7 +234,7 @@ BEGIN
       END LOOP;
       IF b0 IS NOT NULL THEN ls[s] := b0; lf[s] := f0; END IF;
     END LOOP;
-    FOR j IN 1..m LOOP
+    FOREACH j IN ARRAY ord_b LOOP
       t := lt[j]; p := lp[j]; ty := lty[j];         -- t = successor, p = predecessor
       IF NOT (sched[t] AND sched[p] AND NOT done[t] AND NOT done[p]) THEN CONTINUE; END IF;
       IF ls[t] IS NULL OR lf[t] IS NULL THEN CONTINUE; END IF;

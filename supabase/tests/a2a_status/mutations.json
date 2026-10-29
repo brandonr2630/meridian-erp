@@ -139,5 +139,85 @@
   "name": "m1: the clamp has no upper bound (end)",
   "find": "LEAST(GREATEST(r.end_date,   DATE '2000-01-01'), DATE '2100-12-31')",
   "replace": "GREATEST(r.end_date, DATE '2000-01-01')"
+ },
+ {
+  "name": "m2: forward links visited in the stored order",
+  "find": "ord_f := ARRAY(SELECT g.ix FROM generate_series(1, m) AS g(ix) ORDER BY rk[lp[g.ix]], g.ix);",
+  "replace": "ord_f := ARRAY(SELECT g.ix FROM generate_series(1, m) AS g(ix) ORDER BY g.ix);"
+ },
+ {
+  "name": "m2: forward links visited successor-first (descending rank)",
+  "find": "ord_f := ARRAY(SELECT g.ix FROM generate_series(1, m) AS g(ix) ORDER BY rk[lp[g.ix]], g.ix);",
+  "replace": "ord_f := ARRAY(SELECT g.ix FROM generate_series(1, m) AS g(ix) ORDER BY rk[lp[g.ix]] DESC, g.ix);"
+ },
+ {
+  "name": "m2: backward links visited in the stored order",
+  "find": "ord_b := ARRAY(SELECT g.ix FROM generate_series(1, m) AS g(ix) ORDER BY rk[n + lt[g.ix]] DESC, g.ix DESC);",
+  "replace": "ord_b := ARRAY(SELECT g.ix FROM generate_series(1, m) AS g(ix) ORDER BY g.ix);"
+ },
+ {
+  "name": "m2: backward links visited predecessor-first (ascending rank)",
+  "find": "ord_b := ARRAY(SELECT g.ix FROM generate_series(1, m) AS g(ix) ORDER BY rk[n + lt[g.ix]] DESC, g.ix DESC);",
+  "replace": "ord_b := ARRAY(SELECT g.ix FROM generate_series(1, m) AS g(ix) ORDER BY rk[n + lt[g.ix]], g.ix);"
+ },
+ {
+  "name": "m2: a cycle is not detected (the order is used whatever the ranks)",
+  "find": "IF v_cnt = v_n2 THEN",
+  "replace": "IF true THEN"
+ },
+ {
+  "name": "m2: no ordering at all",
+  "find": "IF m > 1 THEN\n    v_n2 := 2 * n;",
+  "replace": "IF false THEN\n    v_n2 := 2 * n;"
+ },
+ {
+  "name": "m2: the forward pass ignores the ordered list",
+  "find": "FOREACH j IN ARRAY ord_f LOOP",
+  "replace": "FOR j IN 1..m LOOP"
+ },
+ {
+  "name": "m2: the backward pass ignores the ordered list",
+  "find": "FOREACH j IN ARRAY ord_b LOOP",
+  "replace": "FOR j IN 1..m LOOP"
+ },
+ {
+  "name": "m2: a link edge points at its own predecessor",
+  "find": "e_src := e_src || lp[j]; e_dst := e_dst || (n + lt[j]);",
+  "replace": "e_src := e_src || lp[j]; e_dst := e_dst || lp[j];"
+ },
+ {
+  "name": "m2: a leaf does not pass its constraints to its dates",
+  "find": "IF NOT is_sum[i] THEN e_src := e_src || (n + i); e_dst := e_dst || i; END IF;",
+  "replace": "NULL;"
+ },
+ {
+  "name": "m2: in-degrees are counted twice",
+  "find": "indeg[e_dst[k]] := indeg[e_dst[k]] + 1;",
+  "replace": "indeg[e_dst[k]] := indeg[e_dst[k]] + 2;"
+ },
+ {
+  "name": "m2: adjacency offsets start one late",
+  "find": "v_cnt := 1;\n    FOR i IN 1..v_n2 LOOP pos[i]",
+  "replace": "v_cnt := 2;\n    FOR i IN 1..v_n2 LOOP pos[i]"
+ },
+ {
+  "name": "m2: the queue starts from nodes with one incoming edge",
+  "find": "WHERE indeg[g.ix] = 0 ORDER BY g.ix);",
+  "replace": "WHERE indeg[g.ix] = 1 ORDER BY g.ix);"
+ },
+ {
+  "name": "m2: a successor is never released (in-degree not decremented)",
+  "find": "v_y := e_dst[eo[k]]; indeg[v_y] := indeg[v_y] - 1;",
+  "replace": "v_y := e_dst[eo[k]];"
+ },
+ {
+  "name": "m2: kids do not feed their summary (OUT edge)",
+  "find": "e_src := e_src || i;            e_dst := e_dst || par[i];        -- OUT(kid) -> OUT(summary)",
+  "replace": "NULL;"
+ },
+ {
+  "name": "m2: a summary does not pass constraints to its kids (IN edge)",
+  "find": "e_src := e_src || (n + par[i]); e_dst := e_dst || (n + i);       -- IN(summary) -> IN(kid)",
+  "replace": "NULL;"
  }
 ]

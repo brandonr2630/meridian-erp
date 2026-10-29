@@ -316,6 +316,59 @@ BEGIN
   PERFORM t_expect('m1: a lone task starting in year 100 forecasts inside the clamp range', r, 'true');
 END $$;
 
+-- ===== (6) M2 (review 2): a long dependency chain settles in a few passes whatever order the links are stored in =====
+-- 2503 tasks (prime, so (i * 37) % n is a permutation: the chain order is scrambled against the task order). Each task is 2 days, unstarted, so the
+-- forecast is today + 2 * n; the first task of the chain is in the past, so the job is Late only when the backward pass reached it (it is critical).
+-- Before the fix this took about 6 s (a pass per task); each call is timed and must finish in under 3 s (the fixed function needs about 0.4 s).
+-- (statement_timeout cannot do this inside a DO block: it only applies to the statement that is already running.)
+DO $$
+DECLARE
+  c1 constant uuid := 'c1000000-0000-0000-0000-000000000001';
+  n constant integer := 2503; k integer := 0; shape text; j uuid; ord text; step text; res text; t0 timestamptz; secs numeric;
+  s constant uuid := 'f9000000-0000-0000-0000-0000000000a0'; xx constant uuid := 'f9000000-0000-0000-0000-0000000000a1';
+BEGIN
+  FOREACH shape IN ARRAY ARRAY['asc', 'desc', 'random', 'skip'] LOOP
+    k := k + 1;
+    j := ('b9000000-0000-0000-0000-0000000000' || lpad(k::text, 2, '0'))::uuid;
+    ord := CASE shape WHEN 'asc' THEN 'a.cp' WHEN 'desc' THEN 'a.cp DESC' ELSE 'md5(a.id::text || b.id::text)' END;
+    step := CASE shape WHEN 'skip' THEN 'b.cp IN (a.cp + 1, a.cp + 2)' ELSE 'b.cp = a.cp + 1' END;
+    INSERT INTO jobs (id, company_id, job_no, status) VALUES (j, c1, 'WO-P' || k, 'In Progress');
+    SET LOCAL session_replication_role = replica;
+    INSERT INTO job_tasks (company_id, job_id, sort_order, task_name, start_date, end_date, progress)
+      SELECT c1, j, i, 'T' || i, CASE WHEN cp = 1 THEN DATE '2026-02-20' ELSE DATE '2026-03-02' END, CASE WHEN cp = 1 THEN DATE '2026-02-21' ELSE DATE '2026-03-03' END, 0
+        FROM (SELECT i, ((i * 37) % n) + 1 AS cp FROM generate_series(1, n) i) q;
+    EXECUTE format('INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days)
+      SELECT %L, %L, b.id, a.id, 0 FROM (SELECT id, ((sort_order * 37) %% %s) + 1 AS cp FROM job_tasks WHERE job_id = %L) a
+        JOIN (SELECT id, ((sort_order * 37) %% %s) + 1 AS cp FROM job_tasks WHERE job_id = %L) b ON %s ORDER BY %s', c1, j, n, j, n, j, step, ord);
+    SET LOCAL session_replication_role = origin;
+    t0 := clock_timestamp();
+    SELECT x.status || '|' || x.forecast_end::text INTO res FROM job_schedule_status(j, DATE '2026-03-02') x;
+    secs := extract(epoch FROM clock_timestamp() - t0);
+    PERFORM t_expect('m2: a ' || n || '-task chain with links stored ' || shape || ' gives the right answer (Late: the critical first task is past)',
+      res, 'Late|' || (DATE '2026-03-02' + 2 * n)::text);
+    PERFORM t_expect('m2: ... and settles in under 3 s with links stored ' || shape, (secs < 3)::text, 'true');
+  END LOOP;
+
+  -- a summary with 1200 scrambled chained leaves and a task X that follows the summary (the link leaves a summary)
+  j := 'b9000000-0000-0000-0000-0000000000f0';
+  INSERT INTO jobs (id, company_id, job_no, status) VALUES (j, c1, 'WO-PH', 'In Progress');
+  SET LOCAL session_replication_role = replica;
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, start_date, end_date, progress) VALUES (s, c1, j, 0, 'S', DATE '2026-03-02', DATE '2026-03-03', 0), (xx, c1, j, 5000, 'X', DATE '2026-03-02', DATE '2026-03-03', 0);
+  INSERT INTO job_tasks (company_id, job_id, sort_order, task_name, start_date, end_date, progress, parent_task_id)
+    SELECT c1, j, i, 'L' || i, CASE WHEN cp = 1 THEN DATE '2026-02-20' ELSE DATE '2026-03-02' END, CASE WHEN cp = 1 THEN DATE '2026-02-21' ELSE DATE '2026-03-03' END, 0, s
+      FROM (SELECT i, ((i * 37) % 1201) + 1 AS cp FROM generate_series(1, 1200) i) q;
+  INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days)
+    SELECT c1, j, b.id, a.id, 0 FROM (SELECT id, ((sort_order * 37) % 1201) + 1 AS cp FROM job_tasks WHERE job_id = j AND parent_task_id = s) a
+      JOIN (SELECT id, ((sort_order * 37) % 1201) + 1 AS cp FROM job_tasks WHERE job_id = j AND parent_task_id = s) b ON b.cp = a.cp + 1 ORDER BY md5(a.id::text);
+  INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days) VALUES (c1, j, xx, s, 0);
+  SET LOCAL session_replication_role = origin;
+  t0 := clock_timestamp();
+  SELECT x.status || '|' || x.forecast_end::text INTO res FROM job_schedule_status(j, DATE '2026-03-02') x;
+  secs := extract(epoch FROM clock_timestamp() - t0);
+  PERFORM t_expect('m2: a summary of 1200 chained leaves followed by a task: forecast is today + 2 * 1200 + 2 (the status is the same as the engine gave before the ordering change)', res, 'On track|' || (DATE '2026-03-02' + 2402)::text);
+  PERFORM t_expect('m2: ... and it settles in under 3 s', (secs < 3)::text, 'true');
+END $$;
+
 DO $$
 BEGIN
 -- @@UNCHECKED@@
