@@ -35,7 +35,7 @@ CREATE INDEX IF NOT EXISTS job_tasks_parent_idx ON job_tasks (parent_task_id) WH
 -- The Phase A policies on job_phases / job_tasks / job_task_links check only company_id (own company + write atom), not that job_id
 -- belongs to that company, so a writer of company C2 could INSERT rows carrying the job_id of a C1 job. Import and export trust rows by
 -- job_id, so such a row leaks C1 data into C2-readable rows, plants a huge msp_uid or a far-future updated_at and blocks the C1 job.
--- Root-cause fix: a BEFORE INSERT OR UPDATE OF job_id, company_id trigger on the three tables. SQLSTATE A2C01 (class A2, "company").
+-- Root-cause fix: a BEFORE INSERT OR UPDATE OF job_id, company_id trigger on the three tables (job_tasks also lists phase_id, depends_on: review r3 below). SQLSTATE A2C01 (class A2, "company").
 -- SECURITY DEFINER with a fixed search_path on purpose: it must see the job whatever the writer's RLS says, and a job that does not
 -- exist and a job of another company raise the SAME error, so it cannot be used to probe job ids. It reads only jobs.company_id,
 -- takes no input but the row, and trigger functions need no EXECUTE grant (revoked from every API role below).
@@ -49,6 +49,24 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM jobs j WHERE j.id = NEW.job_id AND j.company_id = NEW.company_id) THEN
     RAISE EXCEPTION '% row must belong to the company of its job', TG_TABLE_NAME USING ERRCODE = 'A2C01';
   END IF;
+  -- Review r3 (LOW): job_tasks.phase_id and depends_on must stay inside the task's own job. Without this a C2 writer could point its task at a
+  -- C1 phase (the task's client visibility then follows a C1 flag) or at a C1 task (a uuid-existence oracle). Primary-key lookups only, run as
+  -- definer so the writer's RLS cannot hide the row. Only a row that EXISTS in another job/company is refused (A2C01); a reference to a row that
+  -- does not exist is left to the foreign key (23503), and ON DELETE SET NULL (NEW.phase_id / depends_on is NULL) is unaffected.
+  -- parent_task_id is covered by job_tasks_parent_guard. An UPDATE that leaves the reference and the job/company as they were is skipped,
+  -- so a legacy row is never blocked by an unrelated write.
+  IF TG_TABLE_NAME = 'job_tasks' THEN
+    IF NEW.phase_id IS NOT NULL
+       AND (TG_OP = 'INSERT' OR NEW.phase_id IS DISTINCT FROM OLD.phase_id OR NEW.job_id <> OLD.job_id OR NEW.company_id <> OLD.company_id)
+       AND EXISTS (SELECT 1 FROM job_phases p WHERE p.id = NEW.phase_id AND (p.job_id <> NEW.job_id OR p.company_id <> NEW.company_id)) THEN
+      RAISE EXCEPTION 'job_tasks.phase_id must reference a phase of the same job' USING ERRCODE = 'A2C01';
+    END IF;
+    IF NEW.depends_on IS NOT NULL
+       AND (TG_OP = 'INSERT' OR NEW.depends_on IS DISTINCT FROM OLD.depends_on OR NEW.job_id <> OLD.job_id OR NEW.company_id <> OLD.company_id)
+       AND EXISTS (SELECT 1 FROM job_tasks d WHERE d.id = NEW.depends_on AND (d.job_id <> NEW.job_id OR d.company_id <> NEW.company_id)) THEN
+      RAISE EXCEPTION 'job_tasks.depends_on must reference a task of the same job' USING ERRCODE = 'A2C01';
+    END IF;
+  END IF;
   RETURN NEW;
 END $$;
 REVOKE ALL ON FUNCTION job_schedule_company_guard() FROM PUBLIC, anon, authenticated, service_role;
@@ -56,7 +74,7 @@ DROP TRIGGER IF EXISTS job_phases_company_guard ON job_phases;
 CREATE TRIGGER job_phases_company_guard BEFORE INSERT OR UPDATE OF job_id, company_id ON job_phases
   FOR EACH ROW EXECUTE FUNCTION job_schedule_company_guard();
 DROP TRIGGER IF EXISTS job_tasks_company_guard ON job_tasks;
-CREATE TRIGGER job_tasks_company_guard BEFORE INSERT OR UPDATE OF job_id, company_id ON job_tasks
+CREATE TRIGGER job_tasks_company_guard BEFORE INSERT OR UPDATE OF job_id, company_id, phase_id, depends_on ON job_tasks
   FOR EACH ROW EXECUTE FUNCTION job_schedule_company_guard();
 DROP TRIGGER IF EXISTS job_task_links_company_guard ON job_task_links;
 CREATE TRIGGER job_task_links_company_guard BEFORE INSERT OR UPDATE OF job_id, company_id ON job_task_links

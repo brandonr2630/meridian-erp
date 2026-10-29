@@ -139,5 +139,29 @@
   "name": "m1: the clamp has no upper bound (end)",
   "find": "LEAST(GREATEST(r.end_date,   DATE '2000-01-01'), DATE '2100-12-31')",
   "replace": "GREATEST(r.end_date, DATE '2000-01-01')"
+ },
+ {
+  "name": "r3: link reordering also runs when a summary exists",
+  "find": "IF m > 1 AND NOT EXISTS (SELECT 1 FROM unnest(is_sum) AS u(x) WHERE x) THEN",
+  "replace": "IF m > 1 THEN"
+ },
+ {
+  "name": "r3: link reordering also runs on a cyclic link graph",
+  "find": "IF qt = n THEN ",
+  "replace": "IF TRUE THEN "
+ },
+ {
+  "name": "r3: forward pass walks the links in array order again",
+  "find": "j := fo[jj];",
+  "replace": "j := jj;",
+  "equivalent": true,
+  "reason": "performance only: with no summary and no link cycle the fixpoint is unique and independent of link order (the n+1 cut-off cannot fire), so output is identical; the 2000-task reversed-chain timing in bench-reversed-chain.sh is the check"
+ },
+ {
+  "name": "r3: backward pass walks the links in array order again",
+  "find": "j := bo[jj];",
+  "replace": "j := jj;",
+  "equivalent": true,
+  "reason": "performance only, same argument as the forward pass; covered by the bench-reversed-chain.sh timing, not by output"
  }
 ]

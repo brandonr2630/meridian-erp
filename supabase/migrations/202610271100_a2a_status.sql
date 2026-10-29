@@ -35,6 +35,7 @@ DECLARE
   lt int[] := '{}'; lp int[] := '{}'; llag int[] := '{}'; lty text[] := '{}';
   pids uuid[] := '{}'; par int[] := '{}'; is_sum boolean[] := '{}'; depth int[] := '{}';
   sd int[]; sumids uuid[] := '{}'; seen int[];
+  fo int[]; bo int[]; jj int; indeg int[]; outc int[]; ostart int[]; olnk int[]; q int[]; rk int[]; qh int; qt int;   -- r3 link-order helpers
   c int; c_lo int; c_hi int; k int; nx int; s int; ty text; e0 date; f0 date; b0 date; v_all boolean; v_any boolean; v_ok boolean;
   r record; v_changed boolean; cand date; v_deadline date; v_fe date; v_minslack int;
   v_overall numeric; v_planned numeric; v_has_bl boolean; v_base_end date; v_slip int; v_gap numeric;
@@ -118,6 +119,35 @@ BEGIN
     done[s] := v_all; sched[s] := v_any;
   END LOOP;
 
+  -- r3 perf: the passes below relax the links in array order, so a chain listed against its direction (each predecessor appears
+  -- later) advances one step per pass: O(n) passes x O(m) links. With NO summaries and NO link cycle the fixpoint is unique and
+  -- reached in <= n passes either way (the "n+1 passes" cut-off can never fire), so any link order gives identical results;
+  -- fo / bo are then the links in dependency order (forward: successors in topological order; backward: reverse), which settles in
+  -- one pass plus the confirming one. Otherwise (a summary exists, or the links are cyclic) fo = bo = array order, exactly as before.
+  fo := ARRAY(SELECT g FROM generate_series(1, m) AS g); bo := fo;
+  IF m > 1 AND NOT EXISTS (SELECT 1 FROM unnest(is_sum) AS u(x) WHERE x) THEN
+    indeg := array_fill(0, ARRAY[n]); outc := array_fill(0, ARRAY[n + 1]); ostart := array_fill(0, ARRAY[n + 1]);
+    olnk := array_fill(0, ARRAY[m]); rk := array_fill(0, ARRAY[n]); q := array_fill(0, ARRAY[n]);
+    FOR j IN 1..m LOOP indeg[lt[j]] := indeg[lt[j]] + 1; outc[lp[j]] := outc[lp[j]] + 1; END LOOP;
+    ostart[1] := 1;
+    FOR i IN 1..n LOOP ostart[i + 1] := ostart[i] + outc[i]; outc[i] := 0; END LOOP;       -- CSR of links by predecessor
+    FOR j IN 1..m LOOP olnk[ostart[lp[j]] + outc[lp[j]]] := j; outc[lp[j]] := outc[lp[j]] + 1; END LOOP;
+    qt := 0;                                                                              -- Kahn's algorithm
+    FOR i IN 1..n LOOP IF indeg[i] = 0 THEN qt := qt + 1; q[qt] := i; END IF; END LOOP;
+    qh := 1;
+    WHILE qh <= qt LOOP
+      i := q[qh]; rk[i] := qh; qh := qh + 1;
+      FOR jj IN ostart[i]..ostart[i + 1] - 1 LOOP
+        j := olnk[jj]; indeg[lt[j]] := indeg[lt[j]] - 1;
+        IF indeg[lt[j]] = 0 THEN qt := qt + 1; q[qt] := lt[j]; END IF;
+      END LOOP;
+    END LOOP;
+    IF qt = n THEN                                                                        -- acyclic: reorder
+      fo := ARRAY(SELECT g FROM generate_series(1, m) AS g ORDER BY rk[lt[g]], g);
+      bo := ARRAY(SELECT g FROM generate_series(1, m) AS g ORDER BY rk[lt[g]] DESC, g);
+    END IF;
+  END IF;
+
   -- forward pass (relaxation over links; a pass that does not settle stops, like JS). A summary predecessor uses its derived
   -- start/end; a link INTO a summary constrains every leaf of it for FS/SS and is ignored for FF/SF.
   pass := 0;
@@ -133,7 +163,8 @@ BEGIN
       END LOOP;
       IF e0 IS NOT NULL THEN es[s] := e0; ef[s] := f0; END IF;
     END LOOP;
-    FOR j IN 1..m LOOP
+    FOR jj IN 1..m LOOP
+      j := fo[jj];
       t := lt[j]; p := lp[j]; ty := lty[j];
       IF NOT (sched[t] AND sched[p] AND ef[p] IS NOT NULL) THEN CONTINUE; END IF;
       IF is_sum[t] AND ty NOT IN ('FS', 'SS') THEN CONTINUE; END IF;
@@ -187,7 +218,8 @@ BEGIN
       END LOOP;
       IF b0 IS NOT NULL THEN ls[s] := b0; lf[s] := f0; END IF;
     END LOOP;
-    FOR j IN 1..m LOOP
+    FOR jj IN 1..m LOOP
+      j := bo[jj];
       t := lt[j]; p := lp[j]; ty := lty[j];         -- t = successor, p = predecessor
       IF NOT (sched[t] AND sched[p] AND NOT done[t] AND NOT done[p]) THEN CONTINUE; END IF;
       IF ls[t] IS NULL OR lf[t] IS NULL THEN CONTINUE; END IF;

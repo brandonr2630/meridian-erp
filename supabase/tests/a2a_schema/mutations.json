@@ -362,5 +362,95 @@
   "name": "counter: the counter may hold more than the cap",
   "find": "last_uid   integer NOT NULL CHECK (last_uid BETWEEN 0 AND 100000000),",
   "replace": "last_uid   integer NOT NULL,"
+ },
+ {
+  "name": "r3: phase_id check dropped",
+  "find": "AND EXISTS (SELECT 1 FROM job_phases p WHERE p.id = NEW.phase_id AND (p.job_id <> NEW.job_id OR p.company_id <> NEW.company_id)) THEN",
+  "replace": "AND false THEN"
+ },
+ {
+  "name": "r3: depends_on check dropped",
+  "find": "AND EXISTS (SELECT 1 FROM job_tasks d WHERE d.id = NEW.depends_on AND (d.job_id <> NEW.job_id OR d.company_id <> NEW.company_id)) THEN",
+  "replace": "AND false THEN"
+ },
+ {
+  "name": "r3: phase_id job half dropped",
+  "find": "AND EXISTS (SELECT 1 FROM job_phases p WHERE p.id = NEW.phase_id AND (p.job_id <> NEW.job_id OR p.company_id <> NEW.company_id)) THEN",
+  "replace": "AND EXISTS (SELECT 1 FROM job_phases p WHERE p.id = NEW.phase_id AND (p.company_id <> NEW.company_id)) THEN"
+ },
+ {
+  "name": "r3: phase_id company half dropped",
+  "find": "AND EXISTS (SELECT 1 FROM job_phases p WHERE p.id = NEW.phase_id AND (p.job_id <> NEW.job_id OR p.company_id <> NEW.company_id)) THEN",
+  "replace": "AND EXISTS (SELECT 1 FROM job_phases p WHERE p.id = NEW.phase_id AND (p.job_id <> NEW.job_id)) THEN"
+ },
+ {
+  "name": "r3: depends_on job half dropped",
+  "find": "AND EXISTS (SELECT 1 FROM job_tasks d WHERE d.id = NEW.depends_on AND (d.job_id <> NEW.job_id OR d.company_id <> NEW.company_id)) THEN",
+  "replace": "AND EXISTS (SELECT 1 FROM job_tasks d WHERE d.id = NEW.depends_on AND (d.company_id <> NEW.company_id)) THEN"
+ },
+ {
+  "name": "r3: depends_on company half dropped",
+  "find": "AND EXISTS (SELECT 1 FROM job_tasks d WHERE d.id = NEW.depends_on AND (d.job_id <> NEW.job_id OR d.company_id <> NEW.company_id)) THEN",
+  "replace": "AND EXISTS (SELECT 1 FROM job_tasks d WHERE d.id = NEW.depends_on AND (d.job_id <> NEW.job_id)) THEN"
+ },
+ {
+  "name": "r3: phase_id guard also fires on a nonexistent row (NOT EXISTS)",
+  "find": "AND EXISTS (SELECT 1 FROM job_phases p WHERE p.id = NEW.phase_id AND (p.job_id <> NEW.job_id OR p.company_id <> NEW.company_id)) THEN",
+  "replace": "AND NOT EXISTS (SELECT 1 FROM job_phases p WHERE p.id = NEW.phase_id AND NOT (p.job_id <> NEW.job_id OR p.company_id <> NEW.company_id)) THEN"
+ },
+ {
+  "name": "r3: phase_id skip-unchanged: job change not re-checked",
+  "find": "OR NEW.phase_id IS DISTINCT FROM OLD.phase_id OR NEW.job_id <> OLD.job_id OR NEW.company_id <> OLD.company_id)",
+  "replace": "OR NEW.phase_id IS DISTINCT FROM OLD.phase_id)"
+ },
+ {
+  "name": "r3: depends_on skip-unchanged: job change not re-checked",
+  "find": "OR NEW.depends_on IS DISTINCT FROM OLD.depends_on OR NEW.job_id <> OLD.job_id OR NEW.company_id <> OLD.company_id)",
+  "replace": "OR NEW.depends_on IS DISTINCT FROM OLD.depends_on)"
+ },
+ {
+  "name": "r3: phase_id skip-unchanged removed (legacy rows blocked)",
+  "find": "OR NEW.phase_id IS DISTINCT FROM OLD.phase_id OR NEW.job_id <> OLD.job_id OR NEW.company_id <> OLD.company_id)",
+  "replace": "OR true)"
+ },
+ {
+  "name": "r3: depends_on skip-unchanged removed (legacy rows blocked)",
+  "find": "OR NEW.depends_on IS DISTINCT FROM OLD.depends_on OR NEW.job_id <> OLD.job_id OR NEW.company_id <> OLD.company_id)",
+  "replace": "OR true)"
+ },
+ {
+  "name": "r3: phase_id changed-check ignores a change of phase_id",
+  "find": "TG_OP = 'INSERT' OR NEW.phase_id IS DISTINCT FROM OLD.phase_id OR",
+  "replace": "TG_OP = 'INSERT' OR"
+ },
+ {
+  "name": "r3: depends_on changed-check ignores a change of depends_on",
+  "find": "TG_OP = 'INSERT' OR NEW.depends_on IS DISTINCT FROM OLD.depends_on OR",
+  "replace": "TG_OP = 'INSERT' OR"
+ },
+ {
+  "name": "r3: job_tasks branch never runs",
+  "find": "IF TG_TABLE_NAME = 'job_tasks' THEN",
+  "replace": "IF TG_TABLE_NAME = 'job_tasks_x' THEN"
+ },
+ {
+  "name": "r3: trigger no longer fires on UPDATE OF phase_id",
+  "find": "UPDATE OF job_id, company_id, phase_id, depends_on ON job_tasks",
+  "replace": "UPDATE OF job_id, company_id, depends_on ON job_tasks"
+ },
+ {
+  "name": "r3: trigger no longer fires on UPDATE OF depends_on",
+  "find": "UPDATE OF job_id, company_id, phase_id, depends_on ON job_tasks",
+  "replace": "UPDATE OF job_id, company_id, phase_id ON job_tasks"
+ },
+ {
+  "name": "r3: phase_id error class changed",
+  "find": "'job_tasks.phase_id must reference a phase of the same job' USING ERRCODE = 'A2C01'",
+  "replace": "'job_tasks.phase_id must reference a phase of the same job' USING ERRCODE = 'A2C02'"
+ },
+ {
+  "name": "r3: depends_on error class changed",
+  "find": "'job_tasks.depends_on must reference a task of the same job' USING ERRCODE = 'A2C01'",
+  "replace": "'job_tasks.depends_on must reference a task of the same job' USING ERRCODE = 'A2C02'"
  }
 ]

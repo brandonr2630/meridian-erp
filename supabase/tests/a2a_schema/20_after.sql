@@ -345,6 +345,93 @@ BEGIN
   PERFORM t_expect('h1: exactly one company guard trigger per table', (SELECT count(*)::text FROM pg_trigger WHERE tgname LIKE '%company_guard' AND NOT tgisinternal), '3');
 END $$;
 
+-- ===== 11b. review r3 (LOW): job_tasks.phase_id / depends_on must stay inside the task's own job (A2C01), through the REAL policies =====
+DO $$
+DECLARE
+  c1 constant uuid := 'c1000000-0000-0000-0000-000000000001'; c2 constant uuid := 'c2000000-0000-0000-0000-000000000002';
+  j1 constant uuid := 'b1000000-0000-0000-0000-000000000001'; j2 constant uuid := 'b2000000-0000-0000-0000-000000000002';
+  w2 constant uuid := '77777777-7777-7777-7777-777777777777';
+  ph1 constant uuid := 'f4000000-0000-0000-0000-0000000000b1'; ph2 constant uuid := 'f4000000-0000-0000-0000-0000000000b2';
+  tk1 constant uuid := 'f4000000-0000-0000-0000-0000000000b3'; tk2 constant uuid := 'f4000000-0000-0000-0000-0000000000b4';
+  tk3 constant uuid := 'f4000000-0000-0000-0000-0000000000b5'; tk4 constant uuid := 'f4000000-0000-0000-0000-0000000000b6';
+  nox constant uuid := 'f4000000-0000-0000-0000-0000000000ff'; r text;
+BEGIN
+  INSERT INTO job_phases (id, company_id, job_id, name, client_visible) VALUES (ph1, c1, j1, 'r3 c1 phase', true), (ph2, c2, j2, 'r3 c2 phase', false);
+  INSERT INTO job_tasks (id, company_id, job_id, task_name) VALUES (tk1, c1, j1, 'r3 c1 task'), (tk2, c2, j2, 'r3 c2 a'), (tk3, c2, j2, 'r3 c2 b');
+  -- the attacks
+  PERFORM t_expect('r3: C2 writer cannot point its task at a C1 phase (update)',
+    t_dml_api('authenticated', w2, format('UPDATE job_tasks SET phase_id = %L WHERE id = %L', ph1, tk2)), 'err:A2C01');
+  PERFORM t_expect('r3: C2 writer cannot point its task at a C1 task via depends_on (update)',
+    t_dml_api('authenticated', w2, format('UPDATE job_tasks SET depends_on = %L WHERE id = %L', tk1, tk2)), 'err:A2C01');
+  PERFORM t_expect('r3: the combined attack (phase_id and depends_on in one UPDATE) is refused',
+    t_dml_api('authenticated', w2, format('UPDATE job_tasks SET phase_id = %L, depends_on = %L WHERE id = %L', ph1, tk1, tk2)), 'err:A2C01');
+  PERFORM t_expect('r3: C2 writer cannot insert a task with a C1 phase_id',
+    t_dml_api('authenticated', w2, format('INSERT INTO job_tasks (company_id, job_id, task_name, phase_id) VALUES (%L, %L, ''r3 x'', %L)', c2, j2, ph1)), 'err:A2C01');
+  PERFORM t_expect('r3: C2 writer cannot insert a task with a C1 depends_on',
+    t_dml_api('authenticated', w2, format('INSERT INTO job_tasks (company_id, job_id, task_name, depends_on) VALUES (%L, %L, ''r3 x'', %L)', c2, j2, tk1)), 'err:A2C01');
+  PERFORM t_expect('r3: the refusals changed nothing',
+    (SELECT coalesce(phase_id::text, 'null') || '/' || coalesce(depends_on::text, 'null') FROM job_tasks WHERE id = tk2)
+    || (SELECT count(*)::text FROM job_tasks WHERE task_name = 'r3 x'), 'null/null0');
+  PERFORM t_expect('r3: the message names the column and does not echo ids',
+    t_msg_api('authenticated', w2, format('UPDATE job_tasks SET phase_id = %L WHERE id = %L', ph1, tk2)), 'job_tasks.phase_id must reference a phase of the same job');
+  PERFORM t_expect('r3: the table owner is held to the same rule (phase and depends_on)',
+    pg_temp.try(format('UPDATE job_tasks SET phase_id = %L WHERE id = %L', ph1, tk2)) || pg_temp.try(format('UPDATE job_tasks SET depends_on = %L WHERE id = %L', tk1, tk2)), 'A2C01A2C01');
+  -- legit flows
+  PERFORM t_expect('r3: C2 writer sets a same-job phase and depends_on',
+    t_dml_api('authenticated', w2, format('UPDATE job_tasks SET phase_id = %L, depends_on = %L WHERE id = %L', ph2, tk3, tk2)), 'rows:1');
+  PERFORM t_expect('r3: C2 writer inserts a task with a same-job phase and depends_on',
+    t_dml_api('authenticated', w2, format('INSERT INTO job_tasks (id, company_id, job_id, task_name, phase_id, depends_on) VALUES (%L, %L, %L, ''r3 ok'', %L, %L)', tk4, c2, j2, ph2, tk3)), 'rows:1');
+  PERFORM t_expect('r3: a bulk insert whose depends_on points at a later row of the same statement works',
+    pg_temp.try(format('INSERT INTO job_tasks (id, company_id, job_id, task_name, depends_on) VALUES (%L, %L, %L, ''r3 s1'', %L), (%L, %L, %L, ''r3 s2'', NULL)',
+      'f4000000-0000-0000-0000-0000000000c1', c2, j2, 'f4000000-0000-0000-0000-0000000000c2', 'f4000000-0000-0000-0000-0000000000c2', c2, j2)), 'ok');
+  PERFORM t_expect('r3: a reference to a row that does not exist is still refused by the foreign key (23503), not by the guard',
+    t_dml_api('authenticated', w2, format('UPDATE job_tasks SET phase_id = %L WHERE id = %L', nox, tk2)), 'err:23503');
+  PERFORM t_expect('r3: unphasing and clearing depends_on work',
+    t_dml_api('authenticated', w2, format('UPDATE job_tasks SET phase_id = NULL, depends_on = NULL WHERE id = %L', tk2)), 'rows:1');
+  r := pg_temp.try(format('DELETE FROM job_phases WHERE id = %L', ph2));
+  PERFORM t_expect('r3: deleting a phase unphases its tasks (the FK SET NULL update passes the guard)',
+    r || coalesce((SELECT phase_id::text FROM job_tasks WHERE id = tk4), 'null'), 'oknull');
+  r := pg_temp.try(format('DELETE FROM job_tasks WHERE id = %L', tk3));
+  PERFORM t_expect('r3: deleting a depended-on task clears depends_on on its dependents',
+    r || coalesce((SELECT depends_on::text FROM job_tasks WHERE id = tk4), 'null'), 'oknull');
+  PERFORM t_expect('r3: an UPDATE of an unrelated column is fine',
+    t_dml_api('authenticated', w2, format('UPDATE job_tasks SET progress = 7 WHERE id = %L', tk4)), 'rows:1');
+  PERFORM t_expect('r3: the owner can set a same-job phase on a C1 task',
+    pg_temp.try(format('UPDATE job_tasks SET phase_id = %L WHERE id = %L', ph1, tk1)), 'ok');
+  -- same job, other company (only reachable with the phase / task row planted past its own guard): the company half of the check
+  ALTER TABLE job_phases DISABLE TRIGGER job_phases_company_guard; ALTER TABLE job_tasks DISABLE TRIGGER job_tasks_company_guard;
+  INSERT INTO job_phases (id, company_id, job_id, name) VALUES ('f4000000-0000-0000-0000-0000000000d1', c1, j2, 'r3 odd phase');
+  INSERT INTO job_tasks (id, company_id, job_id, task_name) VALUES ('f4000000-0000-0000-0000-0000000000d2', c1, j2, 'r3 odd task'), ('f4000000-0000-0000-0000-0000000000d3', c2, j2, 'r3 legacy');
+  ALTER TABLE job_phases ENABLE TRIGGER job_phases_company_guard; ALTER TABLE job_tasks ENABLE TRIGGER job_tasks_company_guard;
+  PERFORM t_expect('r3: a phase of the same job but another company is refused too',
+    pg_temp.try(format('UPDATE job_tasks SET phase_id = %L WHERE id = %L', 'f4000000-0000-0000-0000-0000000000d1', tk4)), 'A2C01');
+  PERFORM t_expect('r3: a task of the same job but another company is refused too',
+    pg_temp.try(format('UPDATE job_tasks SET depends_on = %L WHERE id = %L', 'f4000000-0000-0000-0000-0000000000d2', tk4)), 'A2C01');
+  -- a task that moves job must not drag a reference to the old job along
+  PERFORM t_expect('r3: the owner sets a same-job phase and depends_on on a C1 task',
+    pg_temp.try(format('UPDATE job_tasks SET phase_id = %L WHERE id = %L', ph1, tk1)), 'ok');
+  PERFORM t_expect('r3: moving a task to another job while it keeps its phase -> A2C01',
+    pg_temp.try(format('UPDATE job_tasks SET job_id = %L WHERE id = %L', 'b3000000-0000-0000-0000-00000000000a', tk1)), 'A2C01');
+  PERFORM t_expect('r3: moving a task to another job while it keeps its depends_on -> A2C01',
+    pg_temp.try(format('UPDATE job_tasks SET phase_id = NULL WHERE id = %L', tk1))
+    || pg_temp.try(format('INSERT INTO job_tasks (id, company_id, job_id, task_name) VALUES (%L, %L, %L, ''r3 dep'')', 'f4000000-0000-0000-0000-0000000000e1', c1, j1))
+    || pg_temp.try(format('UPDATE job_tasks SET depends_on = %L WHERE id = %L', tk1, 'f4000000-0000-0000-0000-0000000000e1'))
+    || pg_temp.try(format('UPDATE job_tasks SET job_id = %L WHERE id = %L', 'b3000000-0000-0000-0000-00000000000a', 'f4000000-0000-0000-0000-0000000000e1')), 'okokokA2C01');
+  PERFORM t_expect('r3: ... clearing the reference first, the move works',
+    pg_temp.try(format('UPDATE job_tasks SET depends_on = NULL, job_id = %L WHERE id = %L', 'b3000000-0000-0000-0000-00000000000a', 'f4000000-0000-0000-0000-0000000000e1')), 'ok');
+  -- a legacy row that already points across jobs is not blocked by a write that leaves the reference alone
+  ALTER TABLE job_tasks DISABLE TRIGGER job_tasks_company_guard;
+  UPDATE job_tasks SET phase_id = ph1, depends_on = tk1 WHERE id = 'f4000000-0000-0000-0000-0000000000d3';
+  ALTER TABLE job_tasks ENABLE TRIGGER job_tasks_company_guard;
+  PERFORM t_expect('r3: a legacy cross-job row can still be updated when the reference is left alone',
+    pg_temp.try(format('UPDATE job_tasks SET phase_id = phase_id, depends_on = depends_on, progress = 3 WHERE id = %L', 'f4000000-0000-0000-0000-0000000000d3')), 'ok');
+  PERFORM t_expect('r3: ... but re-pointing it at another cross-job row is refused',
+    pg_temp.try(format('UPDATE job_tasks SET depends_on = %L WHERE id = %L', 'f4000000-0000-0000-0000-0000000000d2', 'f4000000-0000-0000-0000-0000000000d3')), 'A2C01');
+  PERFORM t_expect('r3: struct: the job_tasks guard fires on UPDATE OF job_id, company_id, phase_id, depends_on',
+    (SELECT (pg_get_triggerdef(oid) LIKE '%BEFORE INSERT OR UPDATE OF job_id, company_id, phase_id, depends_on ON%')::text
+       FROM pg_trigger WHERE tgname = 'job_tasks_company_guard'), 'true');
+END $$;
+
 -- ===== 12. M3: msp_uid is 1..100000000 =====
 DO $$
 BEGIN

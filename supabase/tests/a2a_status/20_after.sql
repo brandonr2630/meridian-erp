@@ -4,8 +4,8 @@
 -- Parts: (1) everything Phase A's 20_after.sql asserts about job_schedule_status, copied verbatim so the legacy behaviour is
 -- proven on the new body; (2) signature / shape / volatility / security / grants unchanged; (3) A2 cases; (4) link types the
 -- CHECK refuses (constraint dropped inside the transaction) behave as FS.
--- MUTATION HARNESS: supabase/tests/a2a_status/mutations.json (23 mutants of the migration body, 3 marked equivalent with a reason).
---   node supabase/tests/d0c_common/mutate.mjs a2a_status     -> "mutation check passed: 20/20 mutants caught"
+-- MUTATION HARNESS: supabase/tests/a2a_status/mutations.json (31 mutants of the migration body, 5 marked equivalent with a reason).
+--   node supabase/tests/d0c_common/mutate.mjs a2a_status     -> "mutation check passed: 26/26 mutants caught"
 --   one mutant by hand: bash supabase/tests/d0c_common/run.sh a2a_status <mutated-migration.sql>   (exit 0 = caught, 1 = survived)
 --   Each mutant is applied in place of the migration and only THIS file is run; a failing assertion (or a migration that no longer applies) = caught.
 -- Identities as in phase_a_sql: ops = operations_tech C1, viewr, fin (no ops atoms), clnt (client-shaped, no erp_users row), anon.
@@ -395,6 +395,59 @@ BEGIN
   DELETE FROM job_tasks WHERE job_id = j AND task_name = 'far end';
   SELECT (min(forecast_end) >= DATE '2000-01-01')::text INTO r FROM job_schedule_status(j, '2026-03-02');
   PERFORM t_expect('m1: a lone task starting in year 100 forecasts inside the clamp range', r, 'true');
+END $$;
+
+-- r3 perf: the passes relax links in dependency order when there is no summary and no link cycle (any order gives the same fixpoint).
+-- Oracle: a 60-task DAG with mixed link types, links listed against the direction, in direction, and with a dummy summary that
+-- forces the legacy array order (the dummy is a done task under a summary, so it changes no status, forecast or slip).
+DO $$
+DECLARE tk jsonb; lk_rev jsonb; lk_fwd jsonb; r_rev text; r_fwd text; r_leg text; r_dag text;
+BEGIN
+  SELECT jsonb_agg(jsonb_build_object('key', 'T' || k, 'sort_order', k, 'start_date', (DATE '2026-03-02' + (k % 5))::text,
+                                      'end_date', (DATE '2026-03-02' + (k % 5) + 3)::text) ORDER BY k) INTO tk FROM generate_series(1, 60) k;
+  SELECT jsonb_agg(jsonb_build_object('task', 'T' || k, 'pred', 'T' || (1 + (k * 7) % (k - 1)), 'lag', (k % 3) - 1,
+                                      'type', (ARRAY['FS', 'SS', 'FF', 'SF'])[1 + k % 4]) ORDER BY k DESC) INTO lk_rev FROM generate_series(2, 60) k;
+  SELECT jsonb_agg(l ORDER BY o DESC) INTO lk_fwd FROM jsonb_array_elements(lk_rev) WITH ORDINALITY AS x(l, o);
+  r_rev := pg_temp.a2run(jsonb_build_object('today', '2026-03-02', 'job', jsonb_build_object('status', 'In Progress'), 'baselineLocked', false,
+                                            'tasks', tk, 'links', lk_rev));
+  r_fwd := pg_temp.a2run(jsonb_build_object('today', '2026-03-02', 'job', jsonb_build_object('status', 'In Progress'), 'baselineLocked', false,
+                                            'tasks', tk, 'links', lk_fwd));
+  r_leg := pg_temp.a2run(jsonb_build_object('today', '2026-03-02', 'job', jsonb_build_object('status', 'In Progress'), 'baselineLocked', false,
+                                            'tasks', tk || jsonb_build_array(
+                                               jsonb_build_object('key', 'S', 'sort_order', 100),
+                                               jsonb_build_object('key', 'Sc', 'sort_order', 101, 'parent', 'S', 'progress', 100,
+                                                                  'start_date', '2026-01-01', 'end_date', '2026-01-02')),
+                                            'links', lk_rev));
+  PERFORM t_expect('r3: the reversed DAG gives a forecast (not an empty result)', (r_rev ~ '^1:[A-Za-z ]+\|20')::text, 'true');
+  PERFORM t_expect('r3: link order does not matter (reversed vs forward listing)', r_rev, r_fwd);
+  PERFORM t_expect('r3: dependency order equals the legacy array order (a summary forces the latter)', r_rev, r_leg);
+END $$;
+
+-- r3 perf, the cases where the link order must NOT change: a pass that never settles stops after n+1 passes with the values so far,
+-- and those values depend on the order the links are relaxed in. Expected values are the ones the pre-r3 body (array order) gave.
+-- (a) a cyclic link graph (inserted with triggers off: the link trigger refuses cycles) + a reversed chain with lag 300 feeding it.
+-- (b) a leaf linked to its own summary (never settles; the link graph itself is acyclic) + the same reversed chain.
+DO $$
+DECLARE co constant uuid := 'c1000000-0000-0000-0000-000000000001';
+BEGIN
+  INSERT INTO jobs (id, company_id, job_no, status) VALUES ('b1000000-0000-0000-0000-0000000b0002', co, 'CYC-1', 'Open'), ('b1000000-0000-0000-0000-0000000b0003', co, 'CYC-2', 'Open');
+  PERFORM set_config('session_replication_role', 'replica', true);
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, start_date, end_date)
+  SELECT ('e1000000-0000-0000-0000-' || lpad(g::text, 12, '0'))::uuid, co, 'b1000000-0000-0000-0000-0000000b0002', g, 'T' || g, DATE '2026-03-02', DATE '2026-03-04'
+    FROM generate_series(1, 6) g;                    -- 1..4 = chain R1..R4, 5 and 6 = the cycle C1, C2
+  INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days, link_type)
+  SELECT co, 'b1000000-0000-0000-0000-0000000b0002', ('e1000000-0000-0000-0000-' || lpad(a::text, 12, '0'))::uuid, ('e1000000-0000-0000-0000-' || lpad(b::text, 12, '0'))::uuid, lag, 'FS'
+    FROM (VALUES (1,2,0,1),(2,3,0,2),(3,4,300,3),(5,6,0,4),(6,5,0,5),(5,1,0,6)) v(a,b,lag,o) ORDER BY o;
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, start_date, end_date, parent_task_id)
+  SELECT ('e2000000-0000-0000-0000-' || lpad(g::text, 12, '0'))::uuid, co, 'b1000000-0000-0000-0000-0000000b0003', g, 'T' || g, DATE '2026-03-02', DATE '2026-03-04',
+         CASE WHEN g IN (6, 7) THEN 'e2000000-0000-0000-0000-000000000005'::uuid END
+    FROM generate_series(1, 7) g;                    -- 1..4 = chain, 5 = summary S, 6 and 7 = its kids
+  INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days, link_type)
+  SELECT co, 'b1000000-0000-0000-0000-0000000b0003', ('e2000000-0000-0000-0000-' || lpad(a::text, 12, '0'))::uuid, ('e2000000-0000-0000-0000-' || lpad(b::text, 12, '0'))::uuid, lag, 'FS'
+    FROM (VALUES (1,2,0,1),(2,3,0,2),(3,4,300,3),(6,5,0,4),(6,1,0,5)) v(a,b,lag,o) ORDER BY o;
+  PERFORM set_config('session_replication_role', 'origin', true);
+  PERFORM t_expect('r3: cyclic links keep the array order (non-settling values unchanged)', pg_temp.st('b1000000-0000-0000-0000-0000000b0002', '2026-03-02'), '1:On track|2027-02-07|null');
+  PERFORM t_expect('r3: a summary keeps the array order (non-settling values unchanged)', pg_temp.st('b1000000-0000-0000-0000-0000000b0003', '2026-03-02'), '1:On track|2027-01-29|null');
 END $$;
 
 DO $$
