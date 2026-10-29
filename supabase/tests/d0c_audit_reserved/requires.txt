@@ -1,0 +1,3 @@
+# applied after D0a, before the family stub: the live audit table shape, then the D0c migration (the real starting state of this change)
+supabase/tests/d0c_audit/10_stub_extra.sql
+supabase/migrations/202610210100_d0c_audit.sql
