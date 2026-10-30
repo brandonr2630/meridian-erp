@@ -385,6 +385,19 @@ BEGIN
   PERFORM t_expect('r3: net: after the outlier is cleared the next export still works (uid 2, 1 not reused)', res || '|' || (SELECT msp_uid::text FROM job_tasks WHERE id = 'f7000000-0000-0000-0000-0000000001b2'), 'ok:1|2');
 END $$;
 
+
+-- ===== 6c. r4 M2: the numbering UPDATEs re-check the row after a lock wait (rule X26) =====
+-- A writer moving a uid-less row to another job while this export waits for the row's lock must not get this job's uid stamped on the row that
+-- is now in the OTHER job. The behaviour needs two sessions (bash supabase/tests/a2a_export/concurrency_move.sh); here the predicates are pinned in the body
+-- so a single-session run notices when one of them goes (the UPDATE is re-evaluated against the NEW row version after the wait).
+DO $$
+DECLARE d text := regexp_replace(pg_get_functiondef('schedule_export_core(uuid,text)'::regprocedure), '\s+', ' ', 'g');
+BEGIN
+  PERFORM t_expect('r4: struct: the task numbering UPDATE matches id AND job AND company AND "no uid yet"',
+    (d LIKE '%UPDATE job_tasks t SET msp_uid = v_free[v_pnull + n.rn] FROM n WHERE t.id = n.id AND t.job_id = p_job_id AND t.company_id = v_company AND t.msp_uid IS NULL;%')::text, 'true');
+  PERFORM t_expect('r4: struct: the phase numbering UPDATE matches id AND job AND company AND "no uid yet"',
+    (d LIKE '%UPDATE job_phases p SET msp_uid = v_free[n.rn] FROM n WHERE p.id = n.id AND p.job_id = p_job_id AND p.company_id = v_company AND p.msp_uid IS NULL;%')::text, 'true');
+END $$;
 ROLLBACK;
 
 -- ===== 7. committed marker (idempotent) so 30_rollback can prove audit rows and uids survive the rollback =====

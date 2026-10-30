@@ -78,13 +78,15 @@ BEGIN
 
     WITH n AS (SELECT id, row_number() OVER (ORDER BY sort_order, id) AS rn
                  FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid IS NULL)
-    UPDATE job_phases p SET msp_uid = v_free[n.rn] FROM n WHERE p.id = n.id;
+    UPDATE job_phases p SET msp_uid = v_free[n.rn] FROM n
+     WHERE p.id = n.id AND p.job_id = p_job_id AND p.company_id = v_company AND p.msp_uid IS NULL;
     GET DIAGNOSTICS v_n = ROW_COUNT;
     v_assigned := v_n;
 
     WITH n AS (SELECT id, row_number() OVER (ORDER BY sort_order, id) AS rn
                  FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid IS NULL)
-    UPDATE job_tasks t SET msp_uid = v_free[v_pnull + n.rn] FROM n WHERE t.id = n.id;
+    UPDATE job_tasks t SET msp_uid = v_free[v_pnull + n.rn] FROM n
+     WHERE t.id = n.id AND t.job_id = p_job_id AND t.company_id = v_company AND t.msp_uid IS NULL;
     GET DIAGNOSTICS v_n = ROW_COUNT;
     v_assigned := v_assigned + v_n;
   END IF;

@@ -1147,15 +1147,17 @@ BEGIN
   p := t_pl(ph, jsonb_build_array(t_tk(2, 'S', 1), t_tk(3, 'K', 1, 2), t_tk(4, 'G', 1, 3, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(3, 'SS')))), ja);
   PERFORM t_expect('m2: append: a grandchild linked to its own parent (SS) is refused', t_imp('authenticated', t_u('ops'), ja, 'append', p), msg);
   PERFORM t_expect('m2: ... still nothing written', t_state(ja), '0/0/0');
+-- r4: X after S (FF) together with G (a child of S) after X would close S -> X -> G -> S (A2L03 class, see the r4 section below); the cousin / summary links  -- below use an unrelated task Z for the link out of S
   -- allowed shapes
   p := t_pl(ph, jsonb_build_array(t_tk(2, 'S', 1), t_tk(3, 'K', 1, 2), t_tk(4, 'G', 1, 3, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(5))),
-                                  t_tk(5, 'X', 1, NULL, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(2, 'FF'))), t_tk(6, 'K2', 1, 2, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(3)))), ja);
+                                  t_tk(5, 'X', 1), t_tk(6, 'K2', 1, 2, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(3))),
+                                  t_tk(7, 'Z', 1, NULL, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(2, 'FF')))), ja);
   res := t_imp('authenticated', t_u('ops'), ja, 'append', p);
-  PERFORM t_expect('m2: append: links into / out of a summary and between cousins / siblings are fine', left(res, 3) || '|' || t_state(ja), 'ok:|1/5/3');
+  PERFORM t_expect('m2: append: links into / out of a summary and between cousins / siblings are fine', left(res, 3) || '|' || t_state(ja), 'ok:|1/6/3');
 
   -- replace: refused before the stored schedule is touched
   p := t_pl(ph, jsonb_build_array(t_tk(2, 'S', 1), t_tk(3, 'K', 1, 2, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(2)))), ja);
-  PERFORM t_expect('m2: replace: the same file is refused and the stored schedule stays', t_imp('authenticated', t_u('ops'), ja, 'replace', p, 'redo') || '|' || t_state(ja), msg || '|1/5/3');
+  PERFORM t_expect('m2: replace: the same file is refused and the stored schedule stays', t_imp('authenticated', t_u('ops'), ja, 'replace', p, 'redo') || '|' || t_state(ja), msg || '|1/6/3');
 
   -- merge: a payload edge across the (final) hierarchy; the parent change comes from the same file
   PERFORM t_expect('m2 merge setup', left(t_imp('authenticated', t_u('ops'), jb, 'append', t_pl('[]', jsonb_build_array(t_tk(1, 'A'), t_tk(2, 'B', NULL, NULL, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(1)))), jb)), 3), 'ok:');
@@ -1176,10 +1178,10 @@ BEGIN
 
   -- planted (legacy) ancestor link: stays valid; unrelated merges work; a file that re-asserts it is refused
   PERFORM t_expect('m2 planted setup', left(t_imp('authenticated', t_u('ops'), jc, 'append', t_pl('[]', jsonb_build_array(t_tk(1, 'S'), t_tk(2, 'K', NULL, 1), t_tk(3, 'Z')), jc)), 3), 'ok:');
-  ALTER TABLE job_task_links DISABLE TRIGGER job_task_links_hierarchy_guard;
+  ALTER TABLE job_task_links DISABLE TRIGGER job_task_links_z_hierarchy_guard;
   INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id)
     SELECT c1, jc, k.id, s.id FROM job_tasks k, job_tasks s WHERE k.job_id = jc AND s.job_id = jc AND k.task_name = 'K' AND s.task_name = 'S';
-  ALTER TABLE job_task_links ENABLE TRIGGER job_task_links_hierarchy_guard;
+  ALTER TABLE job_task_links ENABLE TRIGGER job_task_links_z_hierarchy_guard;
   p := jsonb_build_object('project_uid', jc::text, 'based_on', t_based(jc), 'phases', '[]'::jsonb,
     'tasks', jsonb_build_array(t_tk(1, 'S'), t_tk(3, 'Z renamed', NULL, NULL, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(1)))));
   PERFORM t_expect('m2: merge: a file that does not touch the planted S-K link imports fine (hierarchy unchanged)', left(t_imp('authenticated', t_u('ops'), jc, 'merge', p), 3) || '|' || t_state(jc), 'ok:|0/3/2');
@@ -1189,4 +1191,52 @@ BEGIN
   PERFORM t_expect('m2: ... and the planted link is still stored', (SELECT count(*)::text FROM job_task_links WHERE job_id = jc), '2');
 END $$;
 
+
+-- ===== r4 M1: a file whose links and hierarchy close a loop THROUGH the hierarchy =====
+-- S(2) > X(3); Y(4) outside. "Y after S" and "X after Y" make S -> Y -> X -> S: job_schedule_status never settles on it. The import refuses the
+-- whole file before any write (23514, like cycles and ancestor links); a stored loop of that kind cannot exist (the link guards refuse it).
+DO $$
+DECLARE
+  jh uuid := t_job(310); ji uuid := t_job(311); jj uuid := t_job(312);
+  ph jsonb := jsonb_build_array(t_ph(1, 'Ph')); p jsonb; res text; msg constant text := 'dependency cycle through the task hierarchy in the imported schedule';
+BEGIN
+  p := t_pl(ph, jsonb_build_array(t_tk(2, 'S', 1), t_tk(3, 'X', 1, 2, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(4))), t_tk(4, 'Y', 1, NULL, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(2)))), jh);
+  PERFORM t_expect('r4: append: Y after S and the child X of S after Y is refused before any write', t_imp('authenticated', t_u('ops'), jh, 'append', p), msg);
+  PERFORM t_expect('r4: ... with SQLSTATE 23514', t_dml_api('authenticated', t_u('ops'), format('SELECT import_job_schedule(%L, %L, %L::jsonb, NULL)', jh, 'append', p::text)), 'err:23514');
+  PERFORM t_expect('r4: ... nothing written, no audit row, no uid taken',
+    t_state(jh) || '|' || (SELECT count(*)::text FROM job_audit_log WHERE job_id = jh) || '|' || (SELECT count(*)::text FROM job_schedule_uid_counter WHERE job_id = jh), '0/0/0|0|0');
+  p := t_pl(ph, jsonb_build_array(t_tk(2, 'S', 1, NULL, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(4, 'FF'))), t_tk(3, 'X', 1, 2), t_tk(4, 'Y', 1, NULL, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(3, 'SS')))), jh);
+  PERFORM t_expect('r4: append: the other way round (Y after the child X, the summary S after Y, other link types) is refused too', t_imp('authenticated', t_u('ops'), jh, 'append', p), msg);
+  -- nested: S > K > G, Y after S, G after Y
+  p := t_pl(ph, jsonb_build_array(t_tk(2, 'S', 1), t_tk(3, 'K', 1, 2), t_tk(5, 'G', 1, 3, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(4))), t_tk(4, 'Y', 1, NULL, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(2)))), jh);
+  PERFORM t_expect('r4: append: the loop through two summary levels is refused', t_imp('authenticated', t_u('ops'), jh, 'append', p), msg);
+  -- inherit edges reach grandchildren: S > K > G, Y after G, then S after Y closes N(S) -> N(K) -> G -> Y -> N(S)
+  p := t_pl(ph, jsonb_build_array(t_tk(2, 'S', 1, NULL, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(4))), t_tk(3, 'K', 1, 2), t_tk(5, 'G', 1, 3), t_tk(4, 'Y', 1, NULL, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(5)))), jh);
+  PERFORM t_expect('r4: append: Y after the grandchild G and the grandparent S after Y is refused', t_imp('authenticated', t_u('ops'), jh, 'append', p), msg);
+  PERFORM t_expect('r4: ... still nothing written', t_state(jh), '0/0/0');
+  -- the same file without the closing link is fine, and so are links that do not close anything
+  p := t_pl(ph, jsonb_build_array(t_tk(2, 'S', 1), t_tk(3, 'X', 1, 2), t_tk(4, 'Y', 1, NULL, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(2))),
+                                  t_tk(6, 'Z', 1, NULL, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(4), t_lk(3))), t_tk(7, 'K2', 1, 2, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(3)))), jh);
+  res := t_imp('authenticated', t_u('ops'), jh, 'append', p);
+  PERFORM t_expect('r4: append: Y after S, Z after Y and X, K2 after X (siblings) is fine', left(res, 3) || '|' || t_state(jh), 'ok:|1/5/4');
+  -- replace: refused before the stored schedule is touched
+  p := t_pl(ph, jsonb_build_array(t_tk(2, 'S', 1), t_tk(3, 'X', 1, 2, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(4))), t_tk(4, 'Y', 1, NULL, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(2)))), jh);
+  PERFORM t_expect('r4: replace: the loop file is refused and the stored schedule stays', t_imp('authenticated', t_u('ops'), jh, 'replace', p, 'redo') || '|' || t_state(jh), msg || '|1/5/4');
+
+  -- merge: the loop is made of a STORED link (Y after S) and a link in the file (X after Y) with X moved under S by the same file
+  PERFORM t_expect('r4 merge setup', left(t_imp('authenticated', t_u('ops'), ji, 'append', t_pl('[]', jsonb_build_array(t_tk(1, 'S'), t_tk(2, 'X'), t_tk(3, 'Y', NULL, NULL, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(1)))), ji)), 3), 'ok:');
+  p := jsonb_build_object('project_uid', ji::text, 'based_on', t_based(ji), 'phases', '[]'::jsonb,
+    'tasks', jsonb_build_array(t_tk(1, 'S'), t_tk(2, 'X', NULL, 1, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(3))), t_tk(3, 'Y', NULL, NULL, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(1)))));
+  PERFORM t_expect('r4: merge: a file that puts X under S and X after Y (stored: Y after S) is refused before any write', t_imp('authenticated', t_u('ops'), ji, 'merge', p), msg);
+  PERFORM t_expect('r4: ... the stored schedule is untouched', t_state(ji) || '|' || (SELECT count(*)::text FROM job_tasks WHERE job_id = ji AND parent_task_id IS NOT NULL), '0/3/1|0');
+  -- the file carries no link of its own; its re-parenting closes the loop over STORED links (X after Y stored too): the re-parent guard refuses (A2L03), the RPC rolls back
+  PERFORM t_expect('r4 merge setup 2', left(t_imp('authenticated', t_u('ops'), jj, 'append', t_pl('[]', jsonb_build_array(t_tk(1, 'S'), t_tk(2, 'X', NULL, NULL, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(3))), t_tk(3, 'Y', NULL, NULL, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(1)))), jj)), 3), 'ok:');
+  p := jsonb_build_object('project_uid', jj::text, 'based_on', t_based(jj), 'phases', '[]'::jsonb, 'tasks', jsonb_build_array(t_tk(1, 'S'), t_tk(2, 'X', NULL, 1), t_tk(3, 'Y')));
+  res := t_imp('authenticated', t_u('ops'), jj, 'merge', p);
+  PERFORM t_expect('r4: merge: a file that only re-parents X under S over stored links is refused by the re-parent guard (A2L03), with a clear error', (res LIKE 'cannot move task % it would close a dependency cycle through the task hierarchy')::text, 'true');
+  PERFORM t_expect('r4: ... and the whole RPC rolled back', (SELECT count(*)::text FROM job_tasks WHERE job_id = jj AND parent_task_id IS NOT NULL) || '|' || t_state(jj) || '|' || (SELECT count(*)::text FROM job_audit_log WHERE job_id = jj), '0|0/3/2|1');
+  PERFORM t_expect('r4: merge: re-importing the same flat schedule changes nothing and is accepted',
+    left(t_imp('authenticated', t_u('ops'), jj, 'merge', jsonb_build_object('project_uid', jj::text, 'based_on', t_based(jj), 'phases', '[]'::jsonb,
+      'tasks', jsonb_build_array(t_tk(1, 'S'), t_tk(2, 'X', NULL, NULL, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(3))), t_tk(3, 'Y', NULL, NULL, '2026-05-01', '2026-05-02', jsonb_build_array(t_lk(1)))))), 3), 'ok:');
+END $$;
 ROLLBACK;

@@ -701,5 +701,237 @@
   "replace": "SELECT t.parent_task_id INTO v FROM job_tasks t WHERE t.id = v;\n    n := n + 1;\n    EXIT WHEN v IS NULL OR n > 50;\n    IF v = NEW.predecessor_id THEN",
   "equivalent": true,
   "reason": "a task's parent is always in its own job (A2H01 / A2H05), so the extra predicate prunes nothing; kept so a legacy cross-job parent cannot leak"
+ },
+ {
+  "name": "r4 link guard: the value-flow check is gone",
+  "find": "IF sched_flow_reach(NEW.job_id, ARRAY[NEW.task_id, NEW.task_id], ARRAY[false, true], ARRAY[NEW.predecessor_id], ARRAY[false], NULL, NULL, NEW.id) THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "r4 link guard: start from the task node only (not N(task))",
+  "find": "IF sched_flow_reach(NEW.job_id, ARRAY[NEW.task_id, NEW.task_id], ARRAY[false, true], ARRAY[NEW.predecessor_id], ARRAY[false], NULL, NULL, NEW.id) THEN",
+  "replace": "IF sched_flow_reach(NEW.job_id, ARRAY[NEW.task_id], ARRAY[false], ARRAY[NEW.predecessor_id], ARRAY[false], NULL, NULL, NEW.id) THEN"
+ },
+ {
+  "name": "r4 link guard: start from N(task) only",
+  "find": "IF sched_flow_reach(NEW.job_id, ARRAY[NEW.task_id, NEW.task_id], ARRAY[false, true], ARRAY[NEW.predecessor_id], ARRAY[false], NULL, NULL, NEW.id) THEN",
+  "replace": "IF sched_flow_reach(NEW.job_id, ARRAY[NEW.task_id], ARRAY[true], ARRAY[NEW.predecessor_id], ARRAY[false], NULL, NULL, NEW.id) THEN"
+ },
+ {
+  "name": "r4 link guard: goal is N(predecessor) instead of the predecessor task",
+  "find": "IF sched_flow_reach(NEW.job_id, ARRAY[NEW.task_id, NEW.task_id], ARRAY[false, true], ARRAY[NEW.predecessor_id], ARRAY[false], NULL, NULL, NEW.id) THEN",
+  "replace": "IF sched_flow_reach(NEW.job_id, ARRAY[NEW.task_id, NEW.task_id], ARRAY[false, true], ARRAY[NEW.predecessor_id], ARRAY[true], NULL, NULL, NEW.id) THEN"
+ },
+ {
+  "name": "r4 link guard: the link being rewritten is still counted",
+  "find": "IF sched_flow_reach(NEW.job_id, ARRAY[NEW.task_id, NEW.task_id], ARRAY[false, true], ARRAY[NEW.predecessor_id], ARRAY[false], NULL, NULL, NEW.id) THEN",
+  "replace": "IF sched_flow_reach(NEW.job_id, ARRAY[NEW.task_id, NEW.task_id], ARRAY[false, true], ARRAY[NEW.predecessor_id], ARRAY[false], NULL, NULL, NULL) THEN"
+ },
+ {
+  "name": "r4 link guard: the walk starts in the wrong job",
+  "find": "IF sched_flow_reach(NEW.job_id, ARRAY[NEW.task_id, NEW.task_id], ARRAY[false, true], ARRAY[NEW.predecessor_id], ARRAY[false], NULL, NULL, NEW.id) THEN",
+  "replace": "IF sched_flow_reach(NEW.company_id, ARRAY[NEW.task_id, NEW.task_id], ARRAY[false, true], ARRAY[NEW.predecessor_id], ARRAY[false], NULL, NULL, NEW.id) THEN"
+ },
+ {
+  "name": "r4 link guard: wrong SQLSTATE (A2L01) for the loop",
+  "find": "NEW.task_id, NEW.predecessor_id USING ERRCODE = 'A2L03';",
+  "replace": "NEW.task_id, NEW.predecessor_id USING ERRCODE = 'A2L01';"
+ },
+ {
+  "name": "r4 link guard: trigger renamed back so it fires BEFORE job_task_links_no_cycle (cross-company oracle)",
+  "find": "CREATE TRIGGER job_task_links_z_hierarchy_guard BEFORE",
+  "replace": "CREATE TRIGGER job_task_links_hierarchy_guard BEFORE"
+ },
+ {
+  "name": "r4 re-parent guard: the whole value-flow check is gone",
+  "find": "RAISE EXCEPTION 'cannot move task % under %: it would close a dependency cycle through the task hierarchy', NEW.id, NEW.parent_task_id USING ERRCODE = 'A2L03';",
+  "replace": "NULL;"
+ },
+ {
+  "name": "r4 re-parent guard: the inherit side (X or N(X) => N(P)) is dropped",
+  "find": "OR sched_flow_reach(NEW.job_id, ARRAY[NEW.id, NEW.id], ARRAY[false, true], ARRAY[NEW.parent_task_id], ARRAY[true], NEW.id, NEW.parent_task_id))",
+  "replace": "OR false)"
+ },
+ {
+  "name": "r4 re-parent guard: the derive side (P => X) is dropped",
+  "find": "IF (sched_flow_reach(NEW.job_id, ARRAY[NEW.parent_task_id], ARRAY[false], ARRAY[NEW.id], ARRAY[false], NEW.id, NEW.parent_task_id)",
+  "replace": "IF (false\n      "
+ },
+ {
+  "name": "r4 re-parent guard: X's old parent edges are still counted (no override)",
+  "find": "IF (sched_flow_reach(NEW.job_id, ARRAY[NEW.parent_task_id], ARRAY[false], ARRAY[NEW.id], ARRAY[false], NEW.id, NEW.parent_task_id)",
+  "replace": "IF (sched_flow_reach(NEW.job_id, ARRAY[NEW.parent_task_id], ARRAY[false], ARRAY[NEW.id], ARRAY[false])"
+ },
+ {
+  "name": "r4 re-parent guard: exemption (X or P already on a cycle) removed",
+  "find": "AND NOT (sched_flow_on_cycle(NEW.job_id, NEW.parent_task_id) OR sched_flow_on_cycle(NEW.job_id, NEW.id)) THEN",
+  "replace": "THEN"
+ },
+ {
+  "name": "r4 re-parent guard: exemption only for the moved task",
+  "find": "AND NOT (sched_flow_on_cycle(NEW.job_id, NEW.parent_task_id) OR sched_flow_on_cycle(NEW.job_id, NEW.id)) THEN",
+  "replace": "AND NOT sched_flow_on_cycle(NEW.job_id, NEW.id) THEN"
+ },
+ {
+  "name": "r4 re-parent guard: exemption only for the new parent",
+  "find": "AND NOT (sched_flow_on_cycle(NEW.job_id, NEW.parent_task_id) OR sched_flow_on_cycle(NEW.job_id, NEW.id)) THEN",
+  "replace": "AND NOT sched_flow_on_cycle(NEW.job_id, NEW.parent_task_id) THEN"
+ },
+ {
+  "name": "r4 re-parent guard: wrong SQLSTATE (A2L02) for the loop",
+  "find": "it would close a dependency cycle through the task hierarchy', NEW.id, NEW.parent_task_id USING ERRCODE = 'A2L03';",
+  "replace": "it would close a dependency cycle through the task hierarchy', NEW.id, NEW.parent_task_id USING ERRCODE = 'A2L02';"
+ },
+ {
+  "name": "r4 walk: derive edge (kid -> parent) dropped",
+  "find": "FROM job_tasks t WHERE NOT f.n AND t.id = f.id AND t.job_id = p_job",
+  "replace": "FROM job_tasks t WHERE false AND t.id = f.id AND t.job_id = p_job"
+ },
+ {
+  "name": "r4 walk: a moved task keeps its OLD parent in the derive edge",
+  "find": "SELECT CASE WHEN f.id = p_mv THEN p_mvp ELSE t.parent_task_id END AS id, false AS n",
+  "replace": "SELECT t.parent_task_id AS id, false AS n"
+ },
+ {
+  "name": "r4 walk: link edges dropped",
+  "find": "WHERE NOT f.n AND l.predecessor_id = f.id AND l.job_id = p_job AND l.id IS DISTINCT FROM p_skip",
+  "replace": "WHERE false AND l.predecessor_id = f.id AND l.job_id = p_job AND l.id IS DISTINCT FROM p_skip"
+ },
+ {
+  "name": "r4 walk: a link reaches only the task node of its target (not N(target))",
+  "find": "SELECT l.task_id, x.n FROM job_task_links l CROSS JOIN (VALUES (false), (true)) x(n)",
+  "replace": "SELECT l.task_id, x.n FROM job_task_links l CROSS JOIN (VALUES (false)) x(n)"
+ },
+ {
+  "name": "r4 walk: a link reaches only N(target) (not the task node)",
+  "find": "SELECT l.task_id, x.n FROM job_task_links l CROSS JOIN (VALUES (false), (true)) x(n)",
+  "replace": "SELECT l.task_id, x.n FROM job_task_links l CROSS JOIN (VALUES (true)) x(n)"
+ },
+ {
+  "name": "r4 walk: the rewritten link is not skipped (forward)",
+  "find": "WHERE NOT f.n AND l.predecessor_id = f.id AND l.job_id = p_job AND l.id IS DISTINCT FROM p_skip",
+  "replace": "WHERE NOT f.n AND l.predecessor_id = f.id AND l.job_id = p_job"
+ },
+ {
+  "name": "r4 walk: inherit edges (N(s) -> kids) dropped",
+  "find": "WHERE f.n AND k.parent_task_id = f.id AND k.job_id = p_job AND k.id IS DISTINCT FROM p_mv",
+  "replace": "WHERE false AND k.parent_task_id = f.id AND k.job_id = p_job AND k.id IS DISTINCT FROM p_mv"
+ },
+ {
+  "name": "r4 walk: inherit reaches only the kid task (not N(kid))",
+  "find": "SELECT k.id, x.n FROM job_tasks k CROSS JOIN (VALUES (false), (true)) x(n)",
+  "replace": "SELECT k.id, x.n FROM job_tasks k CROSS JOIN (VALUES (false)) x(n)"
+ },
+ {
+  "name": "r4 walk: a moved task is still a kid of its old parent",
+  "find": "WHERE f.n AND k.parent_task_id = f.id AND k.job_id = p_job AND k.id IS DISTINCT FROM p_mv",
+  "replace": "WHERE f.n AND k.parent_task_id = f.id AND k.job_id = p_job"
+ },
+ {
+  "name": "r4 walk: a moved task is not added as a kid of its new parent",
+  "find": "SELECT p_mv, x.n FROM (VALUES (false), (true)) x(n) WHERE f.n AND p_mv IS NOT NULL AND f.id = p_mvp",
+  "replace": "SELECT p_mv, x.n FROM (VALUES (false), (true)) x(n) WHERE false AND p_mv IS NOT NULL AND f.id = p_mvp",
+  "equivalent": true,
+  "reason": "the added edge N(P) -> X is only usable by a path P => N(P); every link into P also reaches P itself, so such a path means P already lies on a cycle and the re-parent exemption (sched_flow_on_cycle) applies anyway"
+ },
+ {
+  "name": "r4 walk: backward: the kids of a task (reversed derive) dropped",
+  "find": "WHERE NOT b.n AND k.parent_task_id = b.id AND k.job_id = p_job AND k.id IS DISTINCT FROM p_mv",
+  "replace": "WHERE false AND k.parent_task_id = b.id AND k.job_id = p_job AND k.id IS DISTINCT FROM p_mv"
+ },
+ {
+  "name": "r4 walk: backward: the sources of links into a task (reversed links) dropped",
+  "find": "WHERE l.task_id = b.id AND l.job_id = p_job AND l.id IS DISTINCT FROM p_skip",
+  "replace": "WHERE false AND l.task_id = b.id AND l.job_id = p_job AND l.id IS DISTINCT FROM p_skip"
+ },
+ {
+  "name": "r4 walk: backward: N(parent) (reversed inherit) dropped",
+  "find": "FROM job_tasks t WHERE t.id = b.id AND t.job_id = p_job",
+  "replace": "FROM job_tasks t WHERE false AND t.id = b.id AND t.job_id = p_job"
+ },
+ {
+  "name": "r4 walk: backward: the moved task keeps its old parent",
+  "find": "SELECT CASE WHEN b.id = p_mv THEN p_mvp ELSE t.parent_task_id END, true",
+  "replace": "SELECT t.parent_task_id, true",
+  "equivalent": true,
+  "reason": "the backward walk only needs the parent of X when it reaches X itself, which already is a start node (a hit); its parent edge cannot lead to a hit that is not found first"
+ },
+ {
+  "name": "r4 walk: backward: the rewritten link is not skipped",
+  "find": "WHERE l.task_id = b.id AND l.job_id = p_job AND l.id IS DISTINCT FROM p_skip",
+  "replace": "WHERE l.task_id = b.id AND l.job_id = p_job"
+ },
+ {
+  "name": "r4 walk: a hit is not reported (forward)",
+  "find": "IF v_hit THEN RETURN true; END IF;\n    IF v_cnt <= v_lim THEN RETURN false; END IF;             -- the whole forward",
+  "replace": "IF false THEN RETURN true; END IF;\n    IF v_cnt <= v_lim THEN RETURN false; END IF;             -- the whole forward"
+ },
+ {
+  "name": "r4 walk: a hit is not reported (backward)",
+  "find": "IF v_hit THEN RETURN true; END IF;\n    IF v_cnt <= v_lim THEN RETURN false; END IF;             -- the whole backward",
+  "replace": "IF false THEN RETURN true; END IF;\n    IF v_cnt <= v_lim THEN RETURN false; END IF;             -- the whole backward"
+ },
+ {
+  "name": "r4 walk: bounded stage off by one (LIMIT v_lim: a 40-node cut looks complete)",
+  "find": "FROM f LIMIT v_lim + 1) s;",
+  "replace": "FROM f LIMIT v_lim) s;"
+ },
+ {
+  "name": "r4 walk: last stage missing (a region beyond 2000 nodes is accepted)",
+  "find": "ARRAY[40, 2000, 2147483646]",
+  "replace": "ARRAY[40, 2000]"
+ },
+ {
+  "name": "r4 walk: the goal test compares the node kind wrongly (forward)",
+  "find": "WHERE g.ga = f.id AND g.gb = f.n) AS hit FROM f",
+  "replace": "WHERE g.ga = f.id) AS hit FROM f"
+ },
+ {
+  "name": "r4 walk: the start test compares the node kind wrongly (backward)",
+  "find": "WHERE g.ga = b.id AND g.gb = b.n) AS hit FROM b",
+  "replace": "WHERE g.ga = b.id) AS hit FROM b"
+ },
+ {
+  "name": "r4 on_cycle: the link successors of the task are dropped",
+  "find": "WHERE l.predecessor_id = p_id AND l.job_id = p_job) z) s",
+  "replace": "WHERE false AND l.predecessor_id = p_id AND l.job_id = p_job) z) s"
+ },
+ {
+  "name": "r4 on_cycle: the derive successor of the task is dropped",
+  "find": "FROM job_tasks t WHERE t.id = p_id AND t.job_id = p_job AND t.parent_task_id IS NOT NULL",
+  "replace": "FROM job_tasks t WHERE false AND t.id = p_id AND t.job_id = p_job AND t.parent_task_id IS NOT NULL"
+ },
+ {
+  "name": "r4 on_cycle: the goal is wrong (any task)",
+  "find": "ARRAY[p_id], ARRAY[false]), false)",
+  "replace": "ARRAY[p_id], ARRAY[true]), false)"
+ },
+ {
+  "name": "r4 walk: the job predicate of the derive edge dropped",
+  "find": "FROM job_tasks t WHERE NOT f.n AND t.id = f.id AND t.job_id = p_job",
+  "replace": "FROM job_tasks t WHERE NOT f.n AND t.id = f.id",
+  "equivalent": true,
+  "reason": "a parent is always in its own job (A2H01 / A2H05); the predicate only keeps a legacy cross-job parent from being followed"
+ },
+ {
+  "name": "r4 walk: the job predicate of the link edge dropped",
+  "find": "WHERE NOT f.n AND l.predecessor_id = f.id AND l.job_id = p_job AND l.id IS DISTINCT FROM p_skip",
+  "replace": "WHERE NOT f.n AND l.predecessor_id = f.id AND l.id IS DISTINCT FROM p_skip",
+  "equivalent": true,
+  "reason": "a link joins two tasks of its own job (no_cycle 23514); the predicate only keeps a legacy cross-job link from being followed"
+ },
+ {
+  "name": "r4 walk: a complete forward region is not recognised (the search goes on to the next stage)",
+  "find": "IF v_cnt <= v_lim THEN RETURN false; END IF;             -- the whole forward",
+  "replace": "IF false THEN RETURN false; END IF;             -- the whole forward",
+  "equivalent": true,
+  "reason": "performance only: the later stages and the last (unbounded) stage reach the same answer, just after more probes"
+ },
+ {
+  "name": "r4 walk: a complete backward region is not recognised",
+  "find": "IF v_cnt <= v_lim THEN RETURN false; END IF;             -- the whole backward",
+  "replace": "IF false THEN RETURN false; END IF;             -- the whole backward",
+  "equivalent": true,
+  "reason": "performance only: the last stage's forward walk reaches the same answer"
  }
 ]

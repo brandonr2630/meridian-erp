@@ -722,12 +722,93 @@
  },
  {
   "name": "r3d m2: pre-check error carries another SQLSTATE",
-  "find": "in the imported schedule' USING ERRCODE = '23514';\n  END IF;\n\n  -- ---- 5.",
-  "replace": "in the imported schedule' USING ERRCODE = '22023';\n  END IF;\n\n  -- ---- 5."
+  "find": "ancestor or descendant in the imported schedule' USING ERRCODE = '23514';",
+  "replace": "ancestor or descendant in the imported schedule' USING ERRCODE = '22023';"
  },
  {
   "name": "r3d m2: pre-check runs on the stored hierarchy only (file's parents ignored)",
   "find": "SELECT x.id, x.parent, 1 FROM pg_temp.imp_n x WHERE x.parent IS NOT NULL\n      UNION ALL\n      SELECT up.id, y.parent, up.d + 1 FROM up JOIN pg_temp.imp_n y ON y.id = up.anc WHERE y.parent IS NOT NULL AND up.d < 9)\n    SELECT 1 FROM pg_temp.imp_e e",
   "replace": "SELECT x.id, x.parent, 1 FROM pg_temp.imp_n x WHERE x.parent IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pg_temp.imp_t i WHERE i.id = x.id)\n      UNION ALL\n      SELECT up.id, y.parent, up.d + 1 FROM up JOIN pg_temp.imp_n y ON y.id = up.anc WHERE y.parent IS NOT NULL AND up.d < 9)\n    SELECT 1 FROM pg_temp.imp_e e"
+ },
+ {
+  "name": "r4 m1: the hierarchy-cycle pre-check is gone",
+  "find": "IF EXISTS (SELECT 1 FROM pg_temp.imp_e) AND EXISTS (SELECT 1 FROM pg_temp.imp_n WHERE parent IS NOT NULL) THEN\n    CREATE TEMP TABLE imp_x",
+  "replace": "IF false THEN\n    CREATE TEMP TABLE imp_x"
+ },
+ {
+  "name": "r4 m1: the pre-check also runs without links (cost only: equivalent)",
+  "find": "IF EXISTS (SELECT 1 FROM pg_temp.imp_e) AND EXISTS (SELECT 1 FROM pg_temp.imp_n WHERE parent IS NOT NULL) THEN\n    CREATE TEMP TABLE imp_x",
+  "replace": "IF EXISTS (SELECT 1 FROM pg_temp.imp_n WHERE parent IS NOT NULL) THEN\n    CREATE TEMP TABLE imp_x",
+  "equivalent": true,
+  "reason": "without a link in the file nothing is seeded and the region is empty, so the peel is skipped: same result, a few more statements"
+ },
+ {
+  "name": "r4 m1: link edge to the task node dropped",
+  "find": "SELECT a.t, a.p FROM pg_temp.imp_a a\n      UNION ALL SELECT md5(a.t::text || 'N')::uuid, a.p FROM pg_temp.imp_a a",
+  "replace": "SELECT a.t, a.p FROM pg_temp.imp_a a WHERE false\n      UNION ALL SELECT md5(a.t::text || 'N')::uuid, a.p FROM pg_temp.imp_a a"
+ },
+ {
+  "name": "r4 m1: link edge to N(task) dropped",
+  "find": "SELECT a.t, a.p FROM pg_temp.imp_a a\n      UNION ALL SELECT md5(a.t::text || 'N')::uuid, a.p FROM pg_temp.imp_a a",
+  "replace": "SELECT a.t, a.p FROM pg_temp.imp_a a\n      UNION ALL SELECT md5(a.t::text || 'N')::uuid, a.p FROM pg_temp.imp_a a WHERE false"
+ },
+ {
+  "name": "r4 m1: derive edge (kid -> parent) dropped",
+  "find": "UNION ALL SELECT n.parent, n.id FROM pg_temp.imp_n n WHERE n.parent IS NOT NULL",
+  "replace": "UNION ALL SELECT n.parent, n.id FROM pg_temp.imp_n n WHERE false"
+ },
+ {
+  "name": "r4 m1: inherit edge N(parent) -> kid dropped",
+  "find": "UNION ALL SELECT n.id, md5(n.parent::text || 'N')::uuid FROM pg_temp.imp_n n WHERE n.parent IS NOT NULL",
+  "replace": "UNION ALL SELECT n.id, md5(n.parent::text || 'N')::uuid FROM pg_temp.imp_n n WHERE false"
+ },
+ {
+  "name": "r4 m1: inherit edge N(parent) -> N(kid) dropped",
+  "find": "UNION ALL SELECT md5(n.id::text || 'N')::uuid, md5(n.parent::text || 'N')::uuid FROM pg_temp.imp_n n WHERE n.parent IS NOT NULL;",
+  "replace": "UNION ALL SELECT md5(n.id::text || 'N')::uuid, md5(n.parent::text || 'N')::uuid FROM pg_temp.imp_n n WHERE false;"
+ },
+ {
+  "name": "r4 m1: the region is seeded with the task nodes only (not N(target))",
+  "find": "UNION SELECT md5(e.t::text || 'N')::uuid FROM pg_temp.imp_e e\n        UNION SELECT x.t FROM rx",
+  "replace": "UNION SELECT x.t FROM rx",
+  "equivalent": true,
+  "reason": "a cycle through a link into t that does not also pass another file link would have to be a path from a descendant of t back to t, which the A2L01 pre-check refuses first; any longer cycle is reached from the task node of another link target"
+ },
+ {
+  "name": "r4 m1: the region does not follow edges",
+  "find": "UNION SELECT x.t FROM rx JOIN pg_temp.imp_x x ON x.p = rx.id)",
+  "replace": "UNION SELECT x.t FROM rx JOIN pg_temp.imp_x x ON x.p = rx.id WHERE false)"
+ },
+ {
+  "name": "r4 m1: the peel is skipped when a link's predecessor lies in the region",
+  "find": "IF EXISTS (SELECT 1 FROM pg_temp.imp_e e JOIN pg_temp.imp_xr xr ON xr.id = e.p) THEN",
+  "replace": "IF false THEN"
+ },
+ {
+  "name": "r4 m1: the peel always runs (cost only: equivalent)",
+  "find": "IF EXISTS (SELECT 1 FROM pg_temp.imp_e e JOIN pg_temp.imp_xr xr ON xr.id = e.p) THEN",
+  "replace": "IF true THEN",
+  "equivalent": true,
+  "reason": "the necessary-condition test only saves the peel; without a cycle through a file link the peel finds nothing (or only a stored planted loop, which the refusal then reports like the link-cycle check)"
+ },
+ {
+  "name": "r4 m1: the peel counts edges from outside the region",
+  "find": "WHERE x.t IN (SELECT id FROM pg_temp.imp_xr) AND x.p IN (SELECT id FROM pg_temp.imp_xr);",
+  "replace": "WHERE x.t IN (SELECT id FROM pg_temp.imp_xr);"
+ },
+ {
+  "name": "r4 m1: a cycle is not reported",
+  "find": "IF v_done < v_nodes THEN RAISE EXCEPTION 'dependency cycle through the task hierarchy in the imported schedule' USING ERRCODE = '23514'; END IF;",
+  "replace": "NULL;"
+ },
+ {
+  "name": "r4 m1: the refusal carries another SQLSTATE",
+  "find": "dependency cycle through the task hierarchy in the imported schedule' USING ERRCODE = '23514';",
+  "replace": "dependency cycle through the task hierarchy in the imported schedule' USING ERRCODE = '22023';"
+ },
+ {
+  "name": "r4 m1: the scratch tables are not dropped before a second import in one transaction",
+  "find": "  DROP TABLE IF EXISTS pg_temp.imp_x;  DROP TABLE IF EXISTS pg_temp.imp_xr;  DROP TABLE IF EXISTS pg_temp.imp_xg;  DROP TABLE IF EXISTS pg_temp.imp_xd;\n",
+  "replace": ""
  }
 ]

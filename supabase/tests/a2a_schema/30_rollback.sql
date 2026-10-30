@@ -23,7 +23,7 @@ BEGIN
   PERFORM t_expect('down: the uid counter (table and function) and the jobs company guard are gone', (SELECT count(*)::text FROM pg_proc WHERE proname IN ('sched_next_uids', 'sched_free_uids', 'jobs_company_change_guard', 'job_schedule_msp_uid_guard')) || '/' || (SELECT count(*)::text FROM pg_trigger WHERE tgname IN ('jobs_company_change_guard', 'job_phases_msp_uid_guard', 'job_tasks_msp_uid_guard')) || '/' || (SELECT count(*)::text FROM pg_class WHERE relname = 'job_schedule_uid_counter'), '0/0/0');
   PERFORM t_expect('down: the r3d link / re-parent hierarchy guards (functions and triggers) are gone',
     (SELECT count(*)::text FROM pg_proc WHERE proname IN ('job_task_links_hierarchy_guard', 'job_tasks_parent_link_guard'))
-    || '/' || (SELECT count(*)::text FROM pg_trigger WHERE tgname IN ('job_task_links_hierarchy_guard', 'job_tasks_parent_link_guard')), '0/0');
+    || '/' || (SELECT count(*)::text FROM pg_trigger WHERE tgname IN ('job_task_links_hierarchy_guard', 'job_task_links_z_hierarchy_guard', 'job_tasks_parent_link_guard')), '0/0');
   PERFORM t_expect('down: job_task_links_no_cycle still guards (Phase A intact)',
     (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'job_task_links_no_cycle'), '1');
   PERFORM t_expect('down: legacy links and tasks survive (3 links, 7 tasks)',

@@ -669,7 +669,7 @@ BEGIN
   PERFORM pg_temp.ins(7001, jm); PERFORM pg_temp.ins(7002, jm, 7001); PERFORM pg_temp.ins(7003, jm, 7002);
   PERFORM pg_temp.ins(7004, jm); PERFORM pg_temp.ins(7005, jm); PERFORM pg_temp.ins(7006, jm, 7001); PERFORM pg_temp.ins(7020, jo);
   PERFORM t_expect('m2: struct: link trigger BEFORE INSERT OR UPDATE OF task_id, predecessor_id, job_id; parent trigger BEFORE UPDATE OF parent_task_id',
-    (SELECT count(*)::text FROM pg_trigger WHERE (tgname = 'job_task_links_hierarchy_guard' AND tgrelid = 'public.job_task_links'::regclass
+    (SELECT count(*)::text FROM pg_trigger WHERE (tgname = 'job_task_links_z_hierarchy_guard' AND tgrelid = 'public.job_task_links'::regclass
         AND pg_get_triggerdef(oid) LIKE '%BEFORE INSERT OR UPDATE OF task_id, predecessor_id, job_id ON%')
        OR (tgname = 'job_tasks_parent_link_guard' AND tgrelid = 'public.job_tasks'::regclass AND pg_get_triggerdef(oid) LIKE '%BEFORE UPDATE OF parent_task_id ON%')), '2');
   PERFORM t_expect('m2: struct: both functions pinned search_path, not callable by API roles',
@@ -692,7 +692,9 @@ BEGIN
   PERFORM t_expect('m2: link from a summary to an outside task stays allowed', pg_temp.lnk(7005, 7001), 'ok');
   PERFORM t_expect('m2: link from a leaf under a summary to an outside task stays allowed', pg_temp.lnk(7003, 7004), 'ok');
   PERFORM t_expect('m2: link between siblings stays allowed', pg_temp.lnk(7006, 7002), 'ok');
-  PERFORM t_expect('m2: link between cousins (K2 and G) stays allowed', pg_temp.lnk(7003, 7006, 'SF'), 'ok');
+  -- r4: K2 is already after K (the siblings link above) and G is K's child, so "G after K2" would close the loop G -> K -> K2 -> G through the
+  -- hierarchy (A2L03, see section 16); the other direction, "K2 after G", is only a second constraint on K2 and stays allowed.
+  PERFORM t_expect('m2: link between cousins (K2 after G) stays allowed', pg_temp.lnk(7006, 7003, 'SF'), 'ok');
   PERFORM t_expect('m2: link between two roots stays allowed', pg_temp.lnk(7005, 7004), 'ok');
   -- a link across jobs is still refused by the older checks, not masked by this guard
   PERFORM t_expect('m2: link to a task of another job is still refused (23514)', pg_temp.lnk(7001, 7020), '23514');
@@ -703,13 +705,15 @@ BEGIN
   PERFORM pg_temp.lnk(7005, 7002);
   PERFORM t_expect('m2: update: moving a link to a task that is the predecessor''s child -> A2L01',
     pg_temp.try('UPDATE job_task_links SET task_id = pg_temp.tid(7003) WHERE task_id = pg_temp.tid(7005) AND predecessor_id = pg_temp.tid(7002)'), 'A2L01');
+  -- r4: Y(7005) is after S(7001), so K2 (a child of S) after Y would close S -> Y -> K2 -> S: that retarget is A2L03 (section 16). A really unrelated root is fine.
+  PERFORM pg_temp.ins(7009, jm);
   PERFORM t_expect('m2: update: retargeting to an unrelated task is allowed',
-    pg_temp.try('UPDATE job_task_links SET predecessor_id = pg_temp.tid(7005) WHERE task_id = pg_temp.tid(7006) AND predecessor_id = pg_temp.tid(7004)'), 'ok');
+    pg_temp.try('UPDATE job_task_links SET predecessor_id = pg_temp.tid(7009) WHERE task_id = pg_temp.tid(7006) AND predecessor_id = pg_temp.tid(7004)'), 'ok');
   PERFORM t_expect('m2: update: lag / type edits are allowed', pg_temp.try('UPDATE job_task_links SET lag_days = 3, link_type = ''FF'' WHERE task_id = pg_temp.tid(7006)'), 'ok');
   -- a link planted by a DBA (trigger off) stays valid and editable; only moving it onto another related pair is refused
-  ALTER TABLE job_task_links DISABLE TRIGGER job_task_links_hierarchy_guard;
+  ALTER TABLE job_task_links DISABLE TRIGGER job_task_links_z_hierarchy_guard;
   PERFORM pg_temp.lnk(7003, 7001);
-  ALTER TABLE job_task_links ENABLE TRIGGER job_task_links_hierarchy_guard;
+  ALTER TABLE job_task_links ENABLE TRIGGER job_task_links_z_hierarchy_guard;
   PERFORM t_expect('m2: planted G-after-S link exists', (SELECT count(*)::text FROM job_task_links WHERE task_id = pg_temp.tid(7003) AND predecessor_id = pg_temp.tid(7001)), '1');
   PERFORM t_expect('m2: a planted link can still have its lag and type edited',
     pg_temp.try('UPDATE job_task_links SET lag_days = 2, link_type = ''SS'' WHERE task_id = pg_temp.tid(7003) AND predecessor_id = pg_temp.tid(7001)'), 'ok');
@@ -739,6 +743,247 @@ BEGIN
   PERFORM t_expect('m2: reparent: G back under K adds only K (not linked to G) -> allowed', pg_temp.mv(7003, 7002), 'ok');
   PERFORM t_expect('m2: deleting a parent promotes its children and is never refused',
     pg_temp.try('DELETE FROM job_tasks WHERE id = pg_temp.tid(7002)') || pg_temp.par(7003), 'oknull');
+END $$;
+
+-- ===== 16. r4 M1: no link / re-parenting may close a cycle THROUGH the hierarchy (A2L03) =====
+-- job_schedule_status carries values along links, kid -> summary (derive) and summary -> kids (inherit). S > X with Y after S and X after Y gives
+-- S -> Y -> X -> S: the status function can never settle (slow cyclic path, runaway dates, "date out of range"). Both link and re-parent guards
+-- therefore refuse any write that closes such a loop, whatever the link types. SQLSTATE A2L03 (class A2, "link"). Removing a kid or a link, or editing
+-- lag / type, can never create a cycle (the guard works on a superset graph, see sched_flow_reach), so those stay unguarded.
+CREATE FUNCTION pg_temp.api_err(p_role text, p_sub uuid, p_sql text) RETURNS text LANGUAGE plpgsql AS $f$
+BEGIN
+  PERFORM set_config('request.jwt.claim.sub', coalesce(p_sub::text, ''), true);
+  EXECUTE 'SET LOCAL SESSION AUTHORIZATION authenticator';
+  EXECUTE 'SET LOCAL ROLE ' || quote_ident(p_role);
+  BEGIN
+    EXECUTE p_sql;
+    RESET ROLE; RESET SESSION AUTHORIZATION;
+    RETURN 'ok';
+  EXCEPTION WHEN OTHERS THEN
+    RESET ROLE; RESET SESSION AUTHORIZATION;
+    RETURN SQLSTATE || ' ' || SQLERRM;
+  END;
+END $f$;
+DO $$
+DECLARE
+  c1 constant uuid := 'c1000000-0000-0000-0000-000000000001'; w1 constant uuid := '11111111-1111-1111-1111-111111111111';
+  ja constant uuid := 'b3000000-0000-0000-0000-000000000030'; jb constant uuid := 'b3000000-0000-0000-0000-000000000031';
+  jc constant uuid := 'b3000000-0000-0000-0000-000000000032'; jd constant uuid := 'b3000000-0000-0000-0000-000000000033';
+  je constant uuid := 'b3000000-0000-0000-0000-000000000034'; ty text; i int;
+BEGIN
+  INSERT INTO jobs (id, company_id, job_no, status) VALUES (ja, c1, 'WO-R4A', 'Open'), (jb, c1, 'WO-R4B', 'Open'), (jc, c1, 'WO-R4C', 'Open'),
+                                                           (jd, c1, 'WO-R4D', 'Open'), (je, c1, 'WO-R4E', 'Open');
+  -- ---- the reviewer's repro: tasks S, X (child of S), Y; "Y after S" is fine, then "X after Y" closes S -> Y -> X -> S
+  PERFORM pg_temp.ins(8001, ja); PERFORM pg_temp.ins(8002, ja, 8001); PERFORM pg_temp.ins(8003, ja);
+  PERFORM t_expect('r4: struct: the guard function is SECURITY DEFINER, pinned search_path, not callable by API roles',
+    (SELECT string_agg(prosecdef::text || (array_to_string(proconfig, ',') LIKE '%search_path=public, pg_temp%')::text
+        || has_function_privilege('authenticated', oid, 'EXECUTE')::text || has_function_privilege('anon', oid, 'EXECUTE')::text
+        || has_function_privilege('service_role', oid, 'EXECUTE')::text, ',' ORDER BY proname)
+       FROM pg_proc WHERE proname IN ('sched_flow_reach', 'sched_flow_on_cycle')), 'truetruefalsefalsefalse,truetruefalsefalsefalse');
+  PERFORM t_expect('r4: repro: Y after S is accepted', pg_temp.lnk(8003, 8001), 'ok');
+  PERFORM t_expect('r4: repro: then X (a child of S) after Y is refused: A2L03', pg_temp.lnk(8002, 8003), 'A2L03');
+  PERFORM t_expect('r4: repro: the writer role is refused the same way', t_dml_api('authenticated', w1,
+    format('INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id) VALUES (%L, %L, %L, %L)', c1, ja, pg_temp.tid(8002), pg_temp.tid(8003))), 'err:A2L03');
+  PERFORM t_expect('r4: repro: the error says what is wrong',
+    (pg_temp.msg('INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id) VALUES (''' || c1 || ''', ''' || ja || ''', pg_temp.tid(8002), pg_temp.tid(8003))') LIKE '%dependency cycle through the task hierarchy%')::text, 'true');
+  PERFORM t_expect('r4: repro: the refused link left no row', (SELECT count(*)::text FROM job_task_links WHERE job_id = ja), '1');
+  -- every link type, both ends (the guard works on a superset of the forward and backward graphs of job_schedule_status)
+  FOREACH ty IN ARRAY ARRAY['FS', 'SS', 'FF', 'SF'] LOOP
+    PERFORM t_expect('r4: repro, type ' || ty || ': X after Y refused', pg_temp.lnk(8002, 8003, ty), 'A2L03');
+  END LOOP;
+  -- the same loop from the other side: Y after X, then S after Y
+  PERFORM pg_temp.ins(8011, jb); PERFORM pg_temp.ins(8012, jb, 8011); PERFORM pg_temp.ins(8013, jb);
+  PERFORM t_expect('r4: variant: Y after the child X is accepted', pg_temp.lnk(8013, 8012), 'ok');
+  PERFORM t_expect('r4: variant: then the summary S after Y is refused: A2L03', pg_temp.lnk(8011, 8013), 'A2L03');
+  PERFORM t_expect('r4: variant: ... for every link type', pg_temp.lnk(8011, 8013, 'SS') || pg_temp.lnk(8011, 8013, 'FF') || pg_temp.lnk(8011, 8013, 'SF'), 'A2L03A2L03A2L03');
+  -- the inherit edges reach grandchildren: S' > K' > G', Y after G', then S' after Y closes N(S') -> N(K') -> G' -> Y -> N(S')
+  PERFORM pg_temp.ins(8016, jb); PERFORM pg_temp.ins(8017, jb, 8016); PERFORM pg_temp.ins(8018, jb, 8017); PERFORM pg_temp.ins(8019, jb);
+  PERFORM t_expect('r4: variant: Y after a grandchild is accepted, then the grandparent after Y is refused (A2L03)',
+    pg_temp.lnk(8019, 8018) || pg_temp.lnk(8016, 8019), 'okA2L03');
+  -- nested summaries: S > K > X, Y outside
+  PERFORM pg_temp.ins(8021, jc); PERFORM pg_temp.ins(8022, jc, 8021); PERFORM pg_temp.ins(8023, jc, 8022); PERFORM pg_temp.ins(8024, jc);
+  PERFORM t_expect('r4: nested: Y after the grandparent S is accepted', pg_temp.lnk(8024, 8021), 'ok');
+  PERFORM t_expect('r4: nested: the grandchild X after Y is refused', pg_temp.lnk(8023, 8024), 'A2L03');
+  PERFORM t_expect('r4: nested: so is the middle summary K after Y', pg_temp.lnk(8022, 8024), 'A2L03');
+  PERFORM t_expect('r4: nested: Y after the grandchild X as well is fine (a second predecessor of Y)', pg_temp.lnk(8024, 8023), 'ok');
+  PERFORM t_expect('r4: nested: ... but now S after Y closes S -> Y -> S through its own kid: refused', pg_temp.lnk(8021, 8024), '23514');   -- a plain link cycle: Phase A no_cycle answers first (S -> Y exists)
+  -- links that stay allowed: plain chains, kid -> outside, outside -> kid, siblings, two summaries
+  PERFORM pg_temp.ins(8031, jd); PERFORM pg_temp.ins(8032, jd, 8031); PERFORM pg_temp.ins(8033, jd, 8031); PERFORM pg_temp.ins(8034, jd);
+  PERFORM pg_temp.ins(8035, jd); PERFORM pg_temp.ins(8036, jd, 8035); PERFORM pg_temp.ins(8037, jd);
+  PERFORM t_expect('r4: allowed: a kid after an outside task', pg_temp.lnk(8032, 8034), 'ok');
+  PERFORM t_expect('r4: allowed: an outside task after a kid', pg_temp.lnk(8037, 8033), 'ok');
+  PERFORM t_expect('r4: allowed: a sibling after a sibling', pg_temp.lnk(8033, 8032), 'ok');
+  PERFORM t_expect('r4: allowed: one summary after another summary (S2 after S1)', pg_temp.lnk(8035, 8031), 'ok');
+  PERFORM t_expect('r4: allowed: a kid of S2 after a kid of S1', pg_temp.lnk(8036, 8032, 'SS'), 'ok');
+  PERFORM t_expect('r4: allowed: an outside task after S2 and after S1', pg_temp.lnk(8037, 8035) || pg_temp.lnk(8037, 8031), 'okok');
+  -- re-parenting
+  PERFORM pg_temp.ins(8041, je); PERFORM pg_temp.ins(8042, je); PERFORM pg_temp.ins(8043, je); PERFORM pg_temp.ins(8044, je);
+  PERFORM pg_temp.lnk(8043, 8041);                                                -- Y after S
+  PERFORM pg_temp.lnk(8042, 8043);                                                -- X after Y
+  PERFORM t_expect('r4: reparent: X under S would close S -> Y -> X -> S: refused A2L03', pg_temp.mv(8042, 8041), 'A2L03');
+  -- a moved task's OLD parent edges do not count: P1 > X, P2 -> L -> P1 (L after P2, P1 after L): P2 reaches N(P1) -> X only through the old position of X
+  PERFORM pg_temp.ins(8071, je); PERFORM pg_temp.ins(8072, je, 8071); PERFORM pg_temp.ins(8073, je); PERFORM pg_temp.ins(8074, je);
+  PERFORM pg_temp.lnk(8074, 8073); PERFORM pg_temp.lnk(8071, 8074);
+  PERFORM t_expect('r4: reparent: moving X from P1 to P2 is judged without X''s old position under P1: allowed', pg_temp.mv(8072, 8073), 'ok');
+  -- node kinds matter: P > K, X after K, P has a long chain after it (forward side > 40 nodes, so the backward side decides): X under P is fine although
+  -- the backward walk from X meets N(P) (the kid K inherits P's constraints) and P itself is a different node
+  PERFORM pg_temp.ins(8081, je); PERFORM pg_temp.ins(8082, je, 8081); PERFORM pg_temp.ins(8083, je);
+  PERFORM pg_temp.ins(8301, je); PERFORM pg_temp.lnk(8301, 8081);
+  FOR i IN 2..25 LOOP PERFORM pg_temp.ins(8300 + i, je); PERFORM pg_temp.lnk(8300 + i, 8300 + i - 1); END LOOP;
+  PERFORM pg_temp.lnk(8083, 8082);
+  PERFORM t_expect('r4: reparent: X (after P''s kid K) under P is allowed although the backward walk passes N(P)', pg_temp.mv(8083, 8081), 'ok');
+  PERFORM t_expect('r4: reparent: the writer role is refused the same way', t_dml_api('authenticated', w1,
+    format('UPDATE job_tasks SET parent_task_id = %L WHERE id = %L', pg_temp.tid(8041), pg_temp.tid(8042))), 'err:A2L03');
+  PERFORM t_expect('r4: reparent: the refusal changed nothing', pg_temp.par(8042), 'null');
+  PERFORM t_expect('r4: reparent: S under X would close it too (through Y): refused A2L03', pg_temp.mv(8041, 8042), 'A2L03');
+  PERFORM t_expect('r4: reparent: Y under S is A2L02 (a link joins them), not masked', pg_temp.mv(8043, 8041), 'A2L02');
+  PERFORM t_expect('r4: reparent: under an unrelated task is fine; so is detaching', pg_temp.mv(8042, 8044) || pg_temp.mv(8042, NULL), 'okok');
+  PERFORM pg_temp.ins(8045, je, 8041);                                            -- Z, a second child of S: only "Z after Y" would close the loop
+  PERFORM t_expect('r4: reparent: a task that is only linked to Y (Y after Z) can move under S?  Y -> S is not an edge: allowed',
+    pg_temp.ins(8046, je) || pg_temp.lnk(8043, 8046) || pg_temp.mv(8046, 8041), 'okokok');
+  -- retargeting a stored link
+  PERFORM pg_temp.ins(8047, je); PERFORM pg_temp.lnk(8047, 8044);
+  PERFORM t_expect('r4: update: retargeting "X after unrelated" to "X after Y" (X a child of S, Y after S) is refused A2L03',
+    pg_temp.ins(8048, je, 8041) || pg_temp.lnk(8048, 8044) || pg_temp.try('UPDATE job_task_links SET predecessor_id = pg_temp.tid(8043) WHERE task_id = pg_temp.tid(8048)'), 'okokA2L03');
+  -- the link being rewritten does not count as an edge of the graph: B > D (D a kid of B), A after B, E after A; rewriting "A after B" into "D after E" leaves
+  -- D -> B (derive), A -> E and E -> D: acyclic. With the old row still counted B -> A would make D -> B -> A -> E -> D a loop.
+  PERFORM pg_temp.ins(8061, je); PERFORM pg_temp.ins(8062, je, 8061); PERFORM pg_temp.ins(8063, je); PERFORM pg_temp.ins(8064, je);
+  PERFORM pg_temp.lnk(8063, 8061); PERFORM pg_temp.lnk(8064, 8063);
+  PERFORM t_expect('r4: update: a rewrite is judged without the row it replaces',
+    pg_temp.try('UPDATE job_task_links SET task_id = pg_temp.tid(8062), predecessor_id = pg_temp.tid(8064) WHERE task_id = pg_temp.tid(8063) AND predecessor_id = pg_temp.tid(8061)'), 'ok');
+  PERFORM t_expect('r4: update: lag / type edits stay allowed', pg_temp.try('UPDATE job_task_links SET lag_days = 4, link_type = ''SF'' WHERE task_id = pg_temp.tid(8048)'), 'ok');
+  PERFORM t_expect('r4: removing a kid / a link never needs the guard: delete the kid, then the link',
+    pg_temp.try('DELETE FROM job_tasks WHERE id = pg_temp.tid(8045)') || pg_temp.try('DELETE FROM job_task_links WHERE task_id = pg_temp.tid(8043)'), 'okok');
+END $$;
+
+-- ---- one write that is a cycle only because of a PLANTED (DBA / legacy) loop stays allowed: the job is cyclic already
+DO $$
+DECLARE c1 constant uuid := 'c1000000-0000-0000-0000-000000000001'; jp constant uuid := 'b3000000-0000-0000-0000-000000000035';
+BEGIN
+  INSERT INTO jobs (id, company_id, job_no, status) VALUES (jp, c1, 'WO-R4P', 'Open');
+  PERFORM pg_temp.ins(8051, jp); PERFORM pg_temp.ins(8052, jp, 8051); PERFORM pg_temp.ins(8053, jp);
+  ALTER TABLE job_task_links DISABLE TRIGGER job_task_links_z_hierarchy_guard;
+  PERFORM pg_temp.lnk(8053, 8051); PERFORM pg_temp.lnk(8052, 8053);               -- the planted loop S -> Y -> X -> S
+  ALTER TABLE job_task_links ENABLE TRIGGER job_task_links_z_hierarchy_guard;
+  PERFORM t_expect('r4: planted loop: it exists and the guard is on again',
+    (SELECT count(*)::text FROM job_task_links WHERE job_id = jp) || (SELECT tgenabled::text FROM pg_trigger WHERE tgname = 'job_task_links_z_hierarchy_guard'), '2O');
+  PERFORM t_expect('r4: planted loop: lag / type edits of its links pass', pg_temp.try('UPDATE job_task_links SET lag_days = 1, link_type = ''SS'' WHERE job_id = ''' || jp || ''''), 'ok');
+  PERFORM t_expect('r4: planted loop: an unrelated task can be added and linked (new links that close nothing)',
+    pg_temp.ins(8054, jp) || pg_temp.lnk(8054, 8053), 'okok');
+  PERFORM t_expect('r4: planted loop: a task can be added under X, which lies on the loop through the derive edge (exempt)', pg_temp.ins(8059, jp) || pg_temp.mv(8059, 8052), 'okok');
+  -- a planted PURE link loop (A after B, B after A: the Phase A trigger is off too); a task moved under A is not what makes the job cyclic
+  PERFORM pg_temp.ins(8056, jp); PERFORM pg_temp.ins(8057, jp); PERFORM pg_temp.ins(8058, jp);
+  ALTER TABLE job_task_links DISABLE TRIGGER job_task_links_no_cycle;
+  PERFORM pg_temp.lnk(8056, 8057); PERFORM pg_temp.lnk(8057, 8056);
+  ALTER TABLE job_task_links ENABLE TRIGGER job_task_links_no_cycle;
+  PERFORM t_expect('r4: planted loop: a task can be added under A, which lies on a planted link loop (exempt, through the link successors)', pg_temp.mv(8058, 8056), 'ok');
+  PERFORM t_expect('r4: planted loop: a NEW link that closes another loop is still refused (Q, a kid of S, after Z)', pg_temp.ins(8055, jp, 8051) || pg_temp.lnk(8055, 8054), 'okA2L03');
+  PERFORM t_expect('r4: planted loop: detaching X breaks the loop; putting it back would close it again, and the guard is exact once more: A2L03',
+    pg_temp.mv(8052, NULL) || pg_temp.mv(8052, 8051), 'okA2L03');
+END $$;
+
+-- ---- the reviewer's 2001-task scale: S with 1000 kids chained against their direction, 1000 outsiders before S; then the two links of the repro
+-- (fixture rows go in with the triggers off: they are valid, acyclic data, and on a fresh database the Phase A link-cycle trigger alone needs ~25 s
+-- for these 2000 links, which says nothing about the guards; then the guards are on again for the probes)
+SET LOCAL session_replication_role = replica;
+INSERT INTO jobs (id, company_id, job_no, status) VALUES ('b3000000-0000-0000-0000-000000000036', 'c1000000-0000-0000-0000-000000000001', 'WO-R4S', 'Open');
+INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name)
+  VALUES (pg_temp.tid(100001), 'c1000000-0000-0000-0000-000000000001', 'b3000000-0000-0000-0000-000000000036', 1, 'S');
+INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, parent_task_id)
+  SELECT pg_temp.tid(100000 + g), 'c1000000-0000-0000-0000-000000000001', 'b3000000-0000-0000-0000-000000000036', g, 'K' || g, pg_temp.tid(100001) FROM generate_series(2, 1001) g;
+INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name)
+  SELECT pg_temp.tid(200000 + g), 'c1000000-0000-0000-0000-000000000001', 'b3000000-0000-0000-0000-000000000036', 2000 + g, 'O' || g FROM generate_series(1, 1000) g;
+INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name)
+  VALUES (pg_temp.tid(300001), 'c1000000-0000-0000-0000-000000000001', 'b3000000-0000-0000-0000-000000000036', 5000, 'Y');
+-- a second long chain Q1 -> ... -> Q1100 that ends in S (S after Q1100): "Q1 after a kid of S" is a loop whose forward AND backward regions both exceed
+-- the bounded searches (2000 nodes), so only the final unbounded walk can see it
+INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name)
+  SELECT pg_temp.tid(400000 + g), 'c1000000-0000-0000-0000-000000000001', 'b3000000-0000-0000-0000-000000000036', 6000 + g, 'Q' || g FROM generate_series(1, 1100) g;
+ANALYZE job_tasks;
+CREATE TEMP TABLE r4_t0 AS SELECT clock_timestamp() AS t0;
+INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id)
+  SELECT 'c1000000-0000-0000-0000-000000000001', 'b3000000-0000-0000-0000-000000000036', pg_temp.tid(100000 + g), pg_temp.tid(100000 + g + 1) FROM generate_series(2, 1000) g;
+ANALYZE job_task_links;
+INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id)
+  SELECT 'c1000000-0000-0000-0000-000000000001', 'b3000000-0000-0000-0000-000000000036', pg_temp.tid(100001), pg_temp.tid(200000 + g) FROM generate_series(1, 1000) g;
+INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id)
+  SELECT 'c1000000-0000-0000-0000-000000000001', 'b3000000-0000-0000-0000-000000000036', pg_temp.tid(400000 + g + 1), pg_temp.tid(400000 + g) FROM generate_series(1, 1099) g;
+INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id)
+  VALUES ('c1000000-0000-0000-0000-000000000001', 'b3000000-0000-0000-0000-000000000036', pg_temp.tid(100001), pg_temp.tid(401100));
+-- a summary X with 60 kids, Z after kid 2 of X, S2 after Z: moving X under S2 closes S2 -> ... the loop is only visible from the (small) backward side
+INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name)
+  VALUES (pg_temp.tid(500001), 'c1000000-0000-0000-0000-000000000001', 'b3000000-0000-0000-0000-000000000036', 7000, 'X'),
+         (pg_temp.tid(500100), 'c1000000-0000-0000-0000-000000000001', 'b3000000-0000-0000-0000-000000000036', 7100, 'Z'),
+         (pg_temp.tid(500101), 'c1000000-0000-0000-0000-000000000001', 'b3000000-0000-0000-0000-000000000036', 7101, 'S2');
+INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, parent_task_id)
+  SELECT pg_temp.tid(500000 + g), 'c1000000-0000-0000-0000-000000000001', 'b3000000-0000-0000-0000-000000000036', 7000 + g, 'XK' || g, pg_temp.tid(500001) FROM generate_series(2, 61) g;
+INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id) VALUES
+  ('c1000000-0000-0000-0000-000000000001', 'b3000000-0000-0000-0000-000000000036', pg_temp.tid(500100), pg_temp.tid(500002)),
+  ('c1000000-0000-0000-0000-000000000001', 'b3000000-0000-0000-0000-000000000036', pg_temp.tid(500101), pg_temp.tid(500100));
+SET LOCAL session_replication_role = origin;
+DO $$
+DECLARE v_ms numeric;
+BEGIN
+  PERFORM t_expect('r4: scale 2001 tasks: the fixture job holds 3165 tasks and 3101 links',
+    (SELECT count(*)::text FROM job_tasks WHERE job_id = 'b3000000-0000-0000-0000-000000000036') || '/' || (SELECT count(*)::text FROM job_task_links WHERE job_id = 'b3000000-0000-0000-0000-000000000036'), '3165/3101');
+  PERFORM t_expect('r4: scale 2001 tasks: Y after S accepted', pg_temp.lnk(300001, 100001), 'ok');
+  PERFORM t_expect('r4: scale 2001 tasks: the last kid after Y refused A2L03', pg_temp.lnk(101001, 300001), 'A2L03');
+  PERFORM t_expect('r4: scale 2001 tasks: so is the first kid', pg_temp.lnk(100002, 300001), 'A2L03');
+  PERFORM t_expect('r4: scale 2001 tasks: an outside task after Y is fine',
+    pg_temp.ins(300002, 'b3000000-0000-0000-0000-000000000036') || pg_temp.lnk(300002, 300001), 'okok');
+  PERFORM t_expect('r4: scale: a fresh task before S (S after F) is accepted (the forward side is large, the backward side is one node)',
+    pg_temp.ins(300003, 'b3000000-0000-0000-0000-000000000036') || pg_temp.lnk(100001, 300003), 'okok');
+  PERFORM t_expect('r4: scale: Q1 after a kid of S closes Q1 -> ... -> Q1100 -> S -> kid -> Q1 (both searches exceed their bound; the unbounded walk decides): A2L03',
+    pg_temp.lnk(400001, 100500), 'A2L03');
+  PERFORM t_expect('r4: scale: S after Y2 where Y2 is after a kid of S: the forward side is huge, the backward side decides (hit): A2L03',
+    pg_temp.ins(300004, 'b3000000-0000-0000-0000-000000000036') || pg_temp.lnk(300004, 100500) || pg_temp.lnk(100001, 300004), 'okokA2L03');
+  PERFORM t_expect('r4: scale: S after a summary P whose kid Q is after a kid of S (backward walk through derive and inherit): A2L03',
+    pg_temp.ins(300005, 'b3000000-0000-0000-0000-000000000036') || pg_temp.ins(300006, 'b3000000-0000-0000-0000-000000000036', 300005)
+      || pg_temp.lnk(300006, 100500) || pg_temp.lnk(100001, 300005), 'okokokA2L03');
+  PERFORM t_expect('r4: scale: moving X (60 kids) under S2 closes a loop that only the backward search sees (the forward side exceeds its bound): A2L03', pg_temp.mv(500001, 500101), 'A2L03');
+  PERFORM t_expect('r4: scale: a link rewritten from "P after a kid of S" to "S after P" is judged without the row it replaces (backward side decides)',
+    pg_temp.ins(300007, 'b3000000-0000-0000-0000-000000000036') || pg_temp.lnk(300007, 100500)
+      || pg_temp.try('UPDATE job_task_links SET task_id = pg_temp.tid(100001), predecessor_id = pg_temp.tid(300007) WHERE task_id = pg_temp.tid(300007) AND predecessor_id = pg_temp.tid(100500)'), 'okokok');
+  v_ms := extract(epoch FROM clock_timestamp() - (SELECT t0 FROM r4_t0)) * 1000;
+  PERFORM t_expect('r4: scale 2001 tasks: 1999 links and the 4 probes with the guards on took under 60 s (' || round(v_ms) || ' ms)', (v_ms < 60000)::text, 'true');
+END $$;
+
+-- ===== 17. r4 LOW: a writer of another company learns nothing about the hierarchy of a company it does not belong to =====
+-- The link triggers run in name order: company_guard, job_task_links_no_cycle (invoker, RLS), then job_task_links_z_hierarchy_guard (definer). A C2
+-- writer that sends a link row with company_id / job_id of C1 must get the SAME error for a related and an unrelated pair of C1 tasks.
+DO $$
+DECLARE
+  c1 constant uuid := 'c1000000-0000-0000-0000-000000000001'; c2 constant uuid := 'c2000000-0000-0000-0000-000000000002';
+  w1 constant uuid := '11111111-1111-1111-1111-111111111111'; w2 constant uuid := '77777777-7777-7777-7777-777777777777';
+  jx constant uuid := 'b3000000-0000-0000-0000-000000000037'; rel text; unrel text; rel2 text; unrel2 text; rel3 text; unrel3 text;
+BEGIN
+  INSERT INTO jobs (id, company_id, job_no, status) VALUES (jx, c1, 'WO-R4X', 'Open');
+  PERFORM pg_temp.ins(8101, jx); PERFORM pg_temp.ins(8102, jx, 8101); PERFORM pg_temp.ins(8103, jx);     -- S, its kid K, unrelated U
+  PERFORM pg_temp.lnk(8103, 8101);                                                                        -- U after S, so "K after U" would be A2L03 for a C1 writer
+  PERFORM t_expect('r4 low: trigger order: no_cycle fires before the definer hierarchy guard',
+    (SELECT string_agg(tgname, ',' ORDER BY tgname) FROM pg_trigger WHERE tgrelid = 'public.job_task_links'::regclass AND NOT tgisinternal
+        AND tgname IN ('job_task_links_no_cycle', 'job_task_links_z_hierarchy_guard', 'job_task_links_company_guard')),
+    'job_task_links_company_guard,job_task_links_no_cycle,job_task_links_z_hierarchy_guard');
+  -- controls: a member of C1 gets the specific errors
+  PERFORM t_expect('r4 low: control: a C1 writer gets A2L01 for a related pair', left(pg_temp.api_err('authenticated', w1,
+    format('INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id) VALUES (%L, %L, %L, %L)', c1, jx, pg_temp.tid(8101), pg_temp.tid(8102))), 5), 'A2L01');
+  PERFORM t_expect('r4 low: control: a C1 writer gets A2L03 for the hierarchy loop', left(pg_temp.api_err('authenticated', w1,
+    format('INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id) VALUES (%L, %L, %L, %L)', c1, jx, pg_temp.tid(8102), pg_temp.tid(8103))), 5), 'A2L03');
+  -- the attack: C2 writer, rows carrying C1's company and job
+  rel := pg_temp.api_err('authenticated', w2, format('INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id) VALUES (%L, %L, %L, %L)', c1, jx, pg_temp.tid(8101), pg_temp.tid(8102)));
+  unrel := pg_temp.api_err('authenticated', w2, format('INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id) VALUES (%L, %L, %L, %L)', c1, jx, pg_temp.tid(8102), pg_temp.tid(8103) ));
+  rel2 := pg_temp.api_err('authenticated', w2, format('INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id) VALUES (%L, %L, %L, %L)', c1, jx, pg_temp.tid(8102), pg_temp.tid(8101)));
+  unrel2 := pg_temp.api_err('authenticated', w2, format('INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id) VALUES (%L, %L, %L, %L)', c1, jx, pg_temp.tid(8103), pg_temp.tid(8102)));
+  PERFORM t_expect('r4 low: a C2 writer sending C1 rows gets 23514 for a related pair (S after its kid)', left(rel, 5), '23514');
+  PERFORM t_expect('r4 low: ... and the identical error for the hierarchy-loop pair', unrel, rel);
+  PERFORM t_expect('r4 low: ... and for the kid-after-S pair (A2L01 for a member)', rel2, rel);
+  PERFORM t_expect('r4 low: ... and for an unrelated pair', unrel2, rel);
+  -- own company id on C1 tasks: the company guard answers (the same for every pair)
+  rel3 := pg_temp.api_err('authenticated', w2, format('INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id) VALUES (%L, %L, %L, %L)', c2, jx, pg_temp.tid(8101), pg_temp.tid(8102)));
+  unrel3 := pg_temp.api_err('authenticated', w2, format('INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id) VALUES (%L, %L, %L, %L)', c2, jx, pg_temp.tid(8102), pg_temp.tid(8103)));
+  PERFORM t_expect('r4 low: a C2 writer sending its own company id on C1 tasks: A2C01, identical for related and unrelated pairs', left(rel3, 5) || (rel3 = unrel3)::text, 'A2C01true');
+  PERFORM t_expect('r4 low: the same through an UPDATE of a link the writer cannot see changes nothing',
+    t_dml_api('authenticated', w2, format('UPDATE job_task_links SET predecessor_id = %L WHERE task_id = %L', pg_temp.tid(8102), pg_temp.tid(8103))), 'rows:0');
 END $$;
 
 ROLLBACK;

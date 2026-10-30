@@ -27,6 +27,20 @@
 --     is cyclic (only possible through the hierarchy, e.g. a leaf linked to its own summary) the original pass loop runs unchanged, with exact
 --     ascending-leaf-order semantics kept and an exact prune (a bound already applied to every leaf of a summary is not re-applied).
 --     Tests: tests/a2a_status/{bench-summary-links.sh,diff-vs-old.sh,pin-old.sh}, pinned r3 cases in 20_after.sql.
+-- r4 M1(b) safety net: day arithmetic that cannot raise. A graph that never settles (a leaf linked to its own summary through the hierarchy: the
+-- link guards refuse new ones, DBA-planted / legacy data can still hold them) makes the cyclic fallback below add rem + lag to a date on every
+-- pass; with a few thousand tasks the dates ran past the end of the date range and the function raised 22008 "date out of range" for the whole job
+-- (dashboard, nightly snapshot). job_sched_dadd(d, n) is d + n, SATURATING at the ends of the date range: 5874897-12-31 and 4714-11-24 BC.
+-- It equals d + n whenever that is in range, so every graph that evaluated without error before gives exactly the same answer; only a graph that
+-- used to raise now returns dates that sit on that bound (a forward runaway can end at forecast_end 5874897-12-31, a backward one at 4714-11-24 BC).
+CREATE OR REPLACE FUNCTION job_sched_dadd(p_d date, p_n bigint) RETURNS date
+LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
+  SELECT CASE WHEN p_n >= 0
+              THEN CASE WHEN p_n > DATE '5874897-12-31' - p_d THEN DATE '5874897-12-31' ELSE p_d + p_n::integer END
+              ELSE CASE WHEN -p_n > p_d - DATE '4714-11-24 BC' THEN DATE '4714-11-24 BC' ELSE p_d + p_n::integer END END $$;
+REVOKE ALL ON FUNCTION job_sched_dadd(date, bigint) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION job_sched_dadd(date, bigint) TO authenticated, service_role;
+
 CREATE OR REPLACE FUNCTION job_schedule_status(
   p_job_id uuid,
   p_today  date DEFAULT (timezone('America/Port_of_Spain', now()))::date)
@@ -92,7 +106,7 @@ BEGIN
   END LOOP;
 
   FOR i IN 1..n LOOP
-    IF sched[i] AND ef[i] IS NULL THEN ef[i] := es[i] + rem[i]; END IF;
+    IF sched[i] AND ef[i] IS NULL THEN ef[i] := job_sched_dadd(es[i], rem[i]); END IF;
   END LOOP;
 
   -- hierarchy: parent index per task (0 = none; unknown / other-job / self parent ignored)
@@ -234,20 +248,20 @@ BEGIN
         END LOOP;
         IF e0 IS NOT NULL THEN es[v] := e0; ef[v] := f0; END IF;
       ELSIF par[v] <> 0 AND sched[v] AND NOT done[v] THEN
-        IF effo[par[v]] > es[v] THEN es[v] := effo[par[v]]; ef[v] := es[v] + rem[v]; END IF;
+        IF effo[par[v]] > es[v] THEN es[v] := effo[par[v]]; ef[v] := job_sched_dadd(es[v], rem[v]); END IF;
       END IF;
       FOR jj IN fps[v]..fps[v + 1] - 1 LOOP           -- the links that have v as predecessor
         j := fpl[jj]; t := lt[j]; ty := lty[j];
         IF NOT (sched[t] AND sched[v] AND ef[v] IS NOT NULL) THEN CONTINUE; END IF;
         IF is_sum[t] AND ty NOT IN ('FS', 'SS') THEN CONTINUE; END IF;
-        cand := CASE ty WHEN 'FS' THEN ef[v] + llag[j]
-                        WHEN 'SS' THEN es[v] + llag[j]
-                        WHEN 'FF' THEN ef[v] + llag[j] - rem[t]
-                        ELSE           es[v] + llag[j] - rem[t] END;
+        cand := CASE ty WHEN 'FS' THEN job_sched_dadd(ef[v], llag[j])
+                        WHEN 'SS' THEN job_sched_dadd(es[v], llag[j])
+                        WHEN 'FF' THEN job_sched_dadd(ef[v], llag[j]::bigint - rem[t])
+                        ELSE           job_sched_dadd(es[v], llag[j]::bigint - rem[t]) END;
         IF is_sum[t] THEN
           IF ownf[t] IS NULL OR cand > ownf[t] THEN ownf[t] := cand; END IF;
         ELSIF NOT done[t] AND cand > es[t] THEN
-          es[t] := cand; ef[t] := cand + rem[t];
+          es[t] := cand; ef[t] := job_sched_dadd(cand, rem[t]);
         END IF;
       END LOOP;
     END LOOP;
@@ -273,21 +287,21 @@ BEGIN
         IF is_sum[t] AND ty NOT IN ('FS', 'SS') THEN CONTINUE; END IF;
         c_lo := CASE WHEN is_sum[t] THEN lo[t] ELSE 1 END; c_hi := CASE WHEN is_sum[t] THEN hi[t] ELSE 1 END;
         c := CASE WHEN is_sum[t] THEN lv[c_lo] ELSE t END;
-        cand := CASE ty WHEN 'FS' THEN ef[p] + llag[j]
-                        WHEN 'SS' THEN es[p] + llag[j]
-                        WHEN 'FF' THEN ef[p] + llag[j] - rem[c]
-                        ELSE           es[p] + llag[j] - rem[c] END;   -- for a summary target (FS/SS only) the value does not depend on the leaf
+        cand := CASE ty WHEN 'FS' THEN job_sched_dadd(ef[p], llag[j])
+                        WHEN 'SS' THEN job_sched_dadd(es[p], llag[j])
+                        WHEN 'FF' THEN job_sched_dadd(ef[p], llag[j]::bigint - rem[c])
+                        ELSE           job_sched_dadd(es[p], llag[j]::bigint - rem[c]) END;   -- for a summary target (FS/SS only) the value does not depend on the leaf
         IF is_sum[t] AND fapp[t] IS NOT NULL AND cand <= fapp[t] THEN CONTINUE; END IF;
         cand1 := cand;                              -- the value the leaves AFTER p (higher index) see, when p is itself one of the leaves
         IF is_sum[t] AND NOT is_sum[p] AND lpos[p] BETWEEN c_lo AND c_hi AND NOT done[p] AND cand > es[p] THEN
-          e0 := es[p]; f0 := ef[p]; es[p] := cand; ef[p] := cand + rem[p]; v_changed := true;
-          cand1 := cand + CASE ty WHEN 'FS' THEN ef[p] - f0 ELSE es[p] - e0 END;
+          e0 := es[p]; f0 := ef[p]; es[p] := cand; ef[p] := job_sched_dadd(cand, rem[p]); v_changed := true;
+          cand1 := job_sched_dadd(cand, CASE ty WHEN 'FS' THEN ef[p] - f0 ELSE es[p] - e0 END);
         END IF;
         FOR qq IN c_lo..c_hi LOOP                   -- leaves in ascending index order matter only through p, handled above
           c := CASE WHEN is_sum[t] THEN lv[qq] ELSE t END;
           IF NOT sched[c] OR done[c] THEN CONTINUE; END IF;
           candc := CASE WHEN c > p THEN cand1 ELSE cand END;
-          IF candc > es[c] THEN es[c] := candc; ef[c] := candc + rem[c]; v_changed := true; END IF;
+          IF candc > es[c] THEN es[c] := candc; ef[c] := job_sched_dadd(candc, rem[c]); v_changed := true; END IF;
         END LOOP;
         IF is_sum[t] THEN fapp[t] := cand; END IF;
       END LOOP;
@@ -313,7 +327,7 @@ BEGIN
 
   -- backward pass (incomplete leaves only; a summary derives from its incomplete kids)
   FOR i IN 1..n LOOP
-    IF sched[i] AND NOT done[i] AND NOT is_sum[i] THEN lf[i] := v_deadline; ls[i] := v_deadline - rem[i]; END IF;
+    IF sched[i] AND NOT done[i] AND NOT is_sum[i] THEN lf[i] := v_deadline; ls[i] := job_sched_dadd(v_deadline, -rem[i]); END IF;
   END LOOP;
   IF acyc_b THEN
     -- one sweep in topological order of the backward graph (see the forward sweep): a task is final when reached.
@@ -340,21 +354,21 @@ BEGIN
         END LOOP;
         IF b0 IS NOT NULL THEN ls[v] := b0; lf[v] := f0; END IF;
       ELSIF par[v] <> 0 AND sched[v] AND NOT done[v] THEN
-        IF effb[par[v]] < lf[v] THEN lf[v] := effb[par[v]]; ls[v] := lf[v] - rem[v]; END IF;
+        IF effb[par[v]] < lf[v] THEN lf[v] := effb[par[v]]; ls[v] := job_sched_dadd(lf[v], -rem[v]); END IF;
       END IF;
       FOR jj IN bss[v]..bss[v + 1] - 1 LOOP         -- the links that have v as successor
         j := bsl[jj]; p := lp[j]; ty := lty[j];
         IF NOT (sched[v] AND sched[p] AND NOT done[v] AND NOT done[p]) THEN CONTINUE; END IF;
         IF ls[v] IS NULL OR lf[v] IS NULL THEN CONTINUE; END IF;
         IF is_sum[p] AND ty NOT IN ('FS', 'FF') THEN CONTINUE; END IF;
-        cand := CASE ty WHEN 'FS' THEN ls[v] - llag[j]
-                        WHEN 'FF' THEN lf[v] - llag[j]
-                        WHEN 'SS' THEN ls[v] - llag[j] + rem[p]
-                        ELSE           lf[v] - llag[j] + rem[p] END;
+        cand := CASE ty WHEN 'FS' THEN job_sched_dadd(ls[v], -llag[j]::bigint)
+                        WHEN 'FF' THEN job_sched_dadd(lf[v], -llag[j]::bigint)
+                        WHEN 'SS' THEN job_sched_dadd(ls[v], rem[p] - llag[j]::bigint)
+                        ELSE           job_sched_dadd(lf[v], rem[p] - llag[j]::bigint) END;
         IF is_sum[p] THEN
           IF ownb[p] IS NULL OR cand < ownb[p] THEN ownb[p] := cand; END IF;
         ELSIF cand < lf[p] THEN
-          lf[p] := cand; ls[p] := cand - rem[p];
+          lf[p] := cand; ls[p] := job_sched_dadd(cand, -rem[p]);
         END IF;
       END LOOP;
     END LOOP;
@@ -381,21 +395,21 @@ BEGIN
         IF is_sum[p] AND ty NOT IN ('FS', 'FF') THEN CONTINUE; END IF;
         c_lo := CASE WHEN is_sum[p] THEN lo[p] ELSE 1 END; c_hi := CASE WHEN is_sum[p] THEN hi[p] ELSE 1 END;
         c := CASE WHEN is_sum[p] THEN lv[c_lo] ELSE p END;
-        cand := CASE ty WHEN 'FS' THEN ls[t] - llag[j]
-                        WHEN 'FF' THEN lf[t] - llag[j]
-                        WHEN 'SS' THEN ls[t] - llag[j] + rem[c]
-                        ELSE           lf[t] - llag[j] + rem[c] END;   -- for a summary predecessor (FS/FF only) the value does not depend on the leaf
+        cand := CASE ty WHEN 'FS' THEN job_sched_dadd(ls[t], -llag[j]::bigint)
+                        WHEN 'FF' THEN job_sched_dadd(lf[t], -llag[j]::bigint)
+                        WHEN 'SS' THEN job_sched_dadd(ls[t], rem[c] - llag[j]::bigint)
+                        ELSE           job_sched_dadd(lf[t], rem[c] - llag[j]::bigint) END;   -- for a summary predecessor (FS/FF only) the value does not depend on the leaf
         IF is_sum[p] AND bapp[p] IS NOT NULL AND cand >= bapp[p] THEN CONTINUE; END IF;
         cand1 := cand;                              -- the value the leaves AFTER t (higher index) see, when t is itself one of the leaves
         IF is_sum[p] AND NOT is_sum[t] AND lpos[t] BETWEEN c_lo AND c_hi AND cand < lf[t] THEN
-          e0 := ls[t]; f0 := lf[t]; lf[t] := cand; ls[t] := cand - rem[t]; v_changed := true;
-          cand1 := cand + CASE ty WHEN 'FS' THEN ls[t] - e0 ELSE lf[t] - f0 END;
+          e0 := ls[t]; f0 := lf[t]; lf[t] := cand; ls[t] := job_sched_dadd(cand, -rem[t]); v_changed := true;
+          cand1 := job_sched_dadd(cand, CASE ty WHEN 'FS' THEN ls[t] - e0 ELSE lf[t] - f0 END);
         END IF;
         FOR qq IN c_lo..c_hi LOOP
           c := CASE WHEN is_sum[p] THEN lv[qq] ELSE p END;
           IF NOT sched[c] OR done[c] THEN CONTINUE; END IF;
           candc := CASE WHEN c > t THEN cand1 ELSE cand END;
-          IF candc < lf[c] THEN lf[c] := candc; ls[c] := candc - rem[c]; v_changed := true; END IF;
+          IF candc < lf[c] THEN lf[c] := candc; ls[c] := job_sched_dadd(candc, -rem[c]); v_changed := true; END IF;
         END LOOP;
         IF is_sum[p] THEN bapp[p] := cand; END IF;
       END LOOP;

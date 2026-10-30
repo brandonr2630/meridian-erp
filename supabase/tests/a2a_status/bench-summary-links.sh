@@ -52,11 +52,37 @@ INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_day
 SELECT '$CO', 'b7000000-0000-0000-0000-000000000003', $(uid 20001), $(uid "20000 + 1000 + g"), 0, 'FS' FROM generate_series(1, $K) g;
 INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days, link_type)
 VALUES ('$CO', 'b7000000-0000-0000-0000-000000000003', $(uid 20001), $(uid 20002), 0, 'FS');
+-- r4 M1: job 4 = the reviewer's INDIRECT loop at scale, planted (the link guards refuse it): job 1's shape with lag 365 and full-range dates, plus
+-- Y (an extra task) after S and the last kid after Y. The pre-change function ran ~3.5 s at K=1000 and then raised 22008 "date out of range".
+INSERT INTO jobs (id, company_id, job_no, status) VALUES ('b7000000-0000-0000-0000-000000000004', '$CO', 'BS-4', 'Open'), ('b7000000-0000-0000-0000-000000000005', '$CO', 'BS-5', 'Open');
+INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, start_date, end_date) VALUES
+ ($(uid "40000 + 9000"), '$CO', 'b7000000-0000-0000-0000-000000000004', 9000, 'Y', DATE '2000-01-01', DATE '2100-12-31'),
+ ($(uid "50000 + 9000"), '$CO', 'b7000000-0000-0000-0000-000000000005', 9000, 'Y', DATE '2000-01-01', DATE '2100-12-31');
+INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, start_date, end_date, parent_task_id)
+SELECT $(uid "40000 + g"), '$CO', 'b7000000-0000-0000-0000-000000000004', g, 'T' || g, DATE '2000-01-01', DATE '2100-12-31',
+       CASE WHEN g BETWEEN 2 AND $K + 1 THEN $(uid 40001) END
+  FROM (SELECT g FROM generate_series(1, $K + 1) g UNION ALL SELECT 5000 + g FROM generate_series(1, $K) g) s(g);
+INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days, link_type)
+SELECT '$CO', 'b7000000-0000-0000-0000-000000000004', $(uid "40000 + g"), $(uid "40000 + g + 1"), 365, 'FS' FROM generate_series(2, $K) g;
+INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days, link_type)
+SELECT '$CO', 'b7000000-0000-0000-0000-000000000004', $(uid 40001), $(uid "40000 + 5000 + g"), 365, 'FS' FROM generate_series(1, $K) g;
+INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days, link_type) VALUES
+ ('$CO', 'b7000000-0000-0000-0000-000000000004', $(uid "40000 + 9000"), $(uid 40001), 365, 'FS'),
+ ('$CO', 'b7000000-0000-0000-0000-000000000004', $(uid "40000 + $K + 1"), $(uid "40000 + 9000"), 365, 'FS');
+-- job 5 = the same job WITHOUT the two repro links: used to try them with the guards ON
+INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, start_date, end_date, parent_task_id)
+SELECT $(uid "50000 + g"), '$CO', 'b7000000-0000-0000-0000-000000000005', g, 'T' || g, DATE '2000-01-01', DATE '2100-12-31',
+       CASE WHEN g BETWEEN 2 AND $K + 1 THEN $(uid 50001) END
+  FROM (SELECT g FROM generate_series(1, $K + 1) g UNION ALL SELECT 5000 + g FROM generate_series(1, $K) g) s(g);
+INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days, link_type)
+SELECT '$CO', 'b7000000-0000-0000-0000-000000000005', $(uid "50000 + g"), $(uid "50000 + g + 1"), 365, 'FS' FROM generate_series(2, $K) g;
+INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days, link_type)
+SELECT '$CO', 'b7000000-0000-0000-0000-000000000005', $(uid 50001), $(uid "50000 + 5000 + g"), 365, 'FS' FROM generate_series(1, $K) g;
 ANALYZE;
 SQL
 echo "migration: $MIG  K=$K"
-for v in 1 2 3; do
-  label=$([ $v = 1 ] && echo "reviewer payload (tasks $((2*K+1)), links $((2*K-1)))" || { [ $v = 2 ] && echo "nest $((2*K)) deep" || echo "cyclic variant (kid -> own summary)"; })
+for v in 1 2 3 4; do
+  label=$([ $v = 1 ] && echo "reviewer payload (tasks $((2*K+1)), links $((2*K-1)))" || { [ $v = 2 ] && echo "nest $((2*K)) deep" || { [ $v = 3 ] && echo "cyclic variant (kid -> own summary)" || echo "r4 M1: planted indirect loop S > kids, Y after S, last kid after Y, lag 365, full-range dates (pre-change: 22008)"; }; })
   echo "-- $label"
   for k in 1 2 3; do
     run -At <<SQL | grep -E "Time:|\|" | tr '\n' ' '
@@ -74,5 +100,18 @@ DO \$\$ BEGIN
   VALUES ('$CO', 'b7000000-0000-0000-0000-000000000001', $(uid 1), $(uid 2), 0, 'FS');
   RAISE NOTICE 'REPRO NOT REFUSED';
 EXCEPTION WHEN SQLSTATE 'A2L01' THEN RAISE NOTICE 'REPRO REFUSED with A2L01';
+END \$\$;
+SQL
+# r4 M1: the indirect loop (Y after S, then a kid of S after Y) is refused at the INSERT with the guards ON (job 5 = job 4 without the two links)
+echo "-- r4 M1 repro with the guards on: INSERT Y after S (accepted), then the last kid after Y (refused with A2L03)"
+run -At <<SQL
+\timing on
+INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days, link_type)
+VALUES ('$CO', 'b7000000-0000-0000-0000-000000000005', $(uid "50000 + 9000"), $(uid 50001), 365, 'FS');
+DO \$\$ BEGIN
+  INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days, link_type)
+  VALUES ('$CO', 'b7000000-0000-0000-0000-000000000005', $(uid "50000 + $K + 1"), $(uid "50000 + 9000"), 365, 'FS');
+  RAISE NOTICE 'REPRO NOT REFUSED';
+EXCEPTION WHEN SQLSTATE 'A2L03' THEN RAISE NOTICE 'REPRO REFUSED with A2L03';
 END \$\$;
 SQL

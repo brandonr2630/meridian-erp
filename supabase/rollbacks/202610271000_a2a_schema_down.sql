@@ -1,7 +1,10 @@
 -- Rollback for 202610271000_a2a_schema.sql. Idempotent. Lossy: dropping link_type loses SS/FF/SF information and dropping
 -- parent_task_id flattens the hierarchy; copy job_task_links / job_tasks first if any non-FS link or parent exists.
+DROP TRIGGER IF EXISTS job_task_links_z_hierarchy_guard ON job_task_links;
 DROP TRIGGER IF EXISTS job_task_links_hierarchy_guard ON job_task_links;
 DROP FUNCTION IF EXISTS job_task_links_hierarchy_guard();
+DROP FUNCTION IF EXISTS sched_flow_on_cycle(uuid, uuid);
+DROP FUNCTION IF EXISTS sched_flow_reach(uuid, uuid[], boolean[], uuid[], boolean[], uuid, uuid, uuid);
 DROP TRIGGER IF EXISTS job_tasks_parent_link_guard ON job_tasks;
 DROP FUNCTION IF EXISTS job_tasks_parent_link_guard();
 DROP TRIGGER IF EXISTS jobs_company_change_guard ON jobs;

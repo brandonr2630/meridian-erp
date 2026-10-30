@@ -221,6 +221,7 @@ BEGIN
   DROP TABLE IF EXISTS pg_temp.imp_p;  DROP TABLE IF EXISTS pg_temp.imp_t;  DROP TABLE IF EXISTS pg_temp.imp_l;
   DROP TABLE IF EXISTS pg_temp.imp_e;  DROP TABLE IF EXISTS pg_temp.imp_n;
   DROP TABLE IF EXISTS pg_temp.imp_a;  DROP TABLE IF EXISTS pg_temp.imp_r;  DROP TABLE IF EXISTS pg_temp.imp_g;  DROP TABLE IF EXISTS pg_temp.imp_d;
+  DROP TABLE IF EXISTS pg_temp.imp_x;  DROP TABLE IF EXISTS pg_temp.imp_xr;  DROP TABLE IF EXISTS pg_temp.imp_xg;  DROP TABLE IF EXISTS pg_temp.imp_xd;
   CREATE TEMP TABLE imp_p (idx integer NOT NULL, uid integer NOT NULL, name text NOT NULL, sort_order integer,
     id uuid NOT NULL DEFAULT gen_random_uuid(), matched boolean NOT NULL DEFAULT false, changed boolean NOT NULL DEFAULT false, new_uid integer) ON COMMIT DROP;
   CREATE TEMP TABLE imp_t (idx integer NOT NULL, uid integer NOT NULL, name text NOT NULL, phase_uid integer, parent_uid integer,
@@ -444,7 +445,7 @@ BEGIN
     RAISE EXCEPTION 'task hierarchy is deeper than % levels', k_max_depth USING ERRCODE = '23514';
   END IF;
   -- r3d M2: a link between a task and its own ancestor / descendant (final hierarchy: stored rows that stay + the file's) is refused here, before any
-  -- write, like cycles and depth (job_task_links_hierarchy_guard would refuse it later at the INSERT, A2L01; job_schedule_status goes quadratic on such a link).
+  -- write, like cycles and depth (job_task_links_z_hierarchy_guard would refuse it later at the INSERT, A2L01; job_schedule_status goes quadratic on such a link).
   -- Only the file's own links are checked. A stored link that the file's re-parenting turns into one is refused during the write phase by
   -- job_tasks_parent_link_guard (A2L02) and the whole RPC rolls back; a stored (legacy / DBA-planted) link of that kind that nothing touches is left alone.
   IF EXISTS (SELECT 1 FROM pg_temp.imp_e) AND EXISTS (SELECT 1 FROM pg_temp.imp_n WHERE parent IS NOT NULL) AND EXISTS (
@@ -454,6 +455,52 @@ BEGIN
       SELECT up.id, y.parent, up.d + 1 FROM up JOIN pg_temp.imp_n y ON y.id = up.anc WHERE y.parent IS NOT NULL AND up.d < 9)
     SELECT 1 FROM pg_temp.imp_e e JOIN up ON (up.id = e.t AND up.anc = e.p) OR (up.id = e.p AND up.anc = e.t)) THEN
     RAISE EXCEPTION 'a link joins a task and its own ancestor or descendant in the imported schedule' USING ERRCODE = '23514';
+  END IF;
+
+  -- r4 M1: the same final graph must not close a cycle THROUGH the hierarchy either (the link guard refuses it later at the INSERT with A2L03, and
+  -- job_schedule_status never settles on it). The value-flow graph G* of sched_flow_reach (a2a_schema migration), with the file's final hierarchy:
+  -- node a = the task, node md5(a || 'N') = what a link into a imposes on everything below a; edges (stored as "t depends on p"): link y after q
+  -- gives q -> y and q -> N(y); kid k of s gives k -> s, N(s) -> k and N(s) -> N(k). Same method as the link-cycle check above: only the part
+  -- reachable from the file's links is looked at and it is peeled from its sources; a link whose predecessor is not in that part cannot close a
+  -- cycle, so then nothing is peeled. Needs a link and a parent: without either no hierarchy cycle exists. A stored cycle that this region reaches
+  -- (DBA-planted / legacy) refuses the file too, like the link-cycle check. Hierarchy changes of a file WITHOUT links of its own (stored links
+  -- only) are caught during the write phase by job_tasks_parent_link_guard (A2L03) and the RPC rolls back.
+  IF EXISTS (SELECT 1 FROM pg_temp.imp_e) AND EXISTS (SELECT 1 FROM pg_temp.imp_n WHERE parent IS NOT NULL) THEN
+    CREATE TEMP TABLE imp_x (t uuid NOT NULL, p uuid NOT NULL) ON COMMIT DROP;
+    INSERT INTO pg_temp.imp_x
+      SELECT a.t, a.p FROM pg_temp.imp_a a
+      UNION ALL SELECT md5(a.t::text || 'N')::uuid, a.p FROM pg_temp.imp_a a
+      UNION ALL SELECT n.parent, n.id FROM pg_temp.imp_n n WHERE n.parent IS NOT NULL
+      UNION ALL SELECT n.id, md5(n.parent::text || 'N')::uuid FROM pg_temp.imp_n n WHERE n.parent IS NOT NULL
+      UNION ALL SELECT md5(n.id::text || 'N')::uuid, md5(n.parent::text || 'N')::uuid FROM pg_temp.imp_n n WHERE n.parent IS NOT NULL;
+    CREATE INDEX ON pg_temp.imp_x (p);
+    CREATE TEMP TABLE imp_xr (id uuid PRIMARY KEY) ON COMMIT DROP;                  -- nodes reachable from the targets of the file's links
+    INSERT INTO pg_temp.imp_xr
+      WITH RECURSIVE rx(id) AS (
+        SELECT e.t FROM pg_temp.imp_e e
+        UNION SELECT md5(e.t::text || 'N')::uuid FROM pg_temp.imp_e e
+        UNION SELECT x.t FROM rx JOIN pg_temp.imp_x x ON x.p = rx.id)
+      SELECT id FROM rx;
+    IF EXISTS (SELECT 1 FROM pg_temp.imp_e e JOIN pg_temp.imp_xr xr ON xr.id = e.p) THEN
+      CREATE TEMP TABLE imp_xg (t uuid NOT NULL, p uuid NOT NULL) ON COMMIT DROP;   -- the edges of that part
+      INSERT INTO pg_temp.imp_xg SELECT x.t, x.p FROM pg_temp.imp_x x WHERE x.t IN (SELECT id FROM pg_temp.imp_xr) AND x.p IN (SELECT id FROM pg_temp.imp_xr);
+      CREATE INDEX ON pg_temp.imp_xg (p);
+      CREATE TEMP TABLE imp_xd (id uuid PRIMARY KEY, deg integer NOT NULL) ON COMMIT DROP;
+      INSERT INTO pg_temp.imp_xd SELECT xr.id, 0 FROM pg_temp.imp_xr xr;
+      UPDATE pg_temp.imp_xd d SET deg = c.n FROM (SELECT g.t, count(*)::integer AS n FROM pg_temp.imp_xg g GROUP BY g.t) c WHERE c.t = d.id;
+      SELECT count(*) INTO v_nodes FROM pg_temp.imp_xd;
+      v_front := ARRAY(SELECT d.id FROM pg_temp.imp_xd d WHERE d.deg = 0);
+      v_done := 0;
+      WHILE coalesce(array_length(v_front, 1), 0) > 0 LOOP
+        v_done := v_done + array_length(v_front, 1);
+        WITH dec AS (
+          UPDATE pg_temp.imp_xd d SET deg = d.deg - c.n
+            FROM (SELECT g.t, count(*)::integer AS n FROM pg_temp.imp_xg g WHERE g.p = ANY (v_front) GROUP BY g.t) c
+           WHERE d.id = c.t RETURNING d.id, d.deg)
+        SELECT coalesce(array_agg(dec.id) FILTER (WHERE dec.deg = 0), ARRAY[]::uuid[]) INTO v_front FROM dec;
+      END LOOP;
+      IF v_done < v_nodes THEN RAISE EXCEPTION 'dependency cycle through the task hierarchy in the imported schedule' USING ERRCODE = '23514'; END IF;
+    END IF;
   END IF;
 
   -- ---- 5. uid assignment from the per-job counter (phases and tasks of the job share one space; never 0; never handed out twice, X26)

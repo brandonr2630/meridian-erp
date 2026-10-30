@@ -29,7 +29,7 @@ BEGIN
   PERFORM set_config('session_replication_role', 'origin', true);
   -- r3d M2: links between a task and its own ancestor / descendant are now refused by job_task_links_hierarchy_guard; the differential test must
   -- still compare graphs that already contain them (planted data), so only that trigger is off while the links are generated.
-  ALTER TABLE job_task_links DISABLE TRIGGER job_task_links_hierarchy_guard;
+  ALTER TABLE job_task_links DISABLE TRIGGER job_task_links_z_hierarchy_guard;
   nl := floor(random() * (n * 1.6))::int;
   FOR i IN 1..nl LOOP
     a := 1 + floor(random() * n)::int; b := 1 + floor(random() * n)::int;
@@ -41,7 +41,7 @@ BEGIN
     EXCEPTION WHEN OTHERS THEN NULL;                                       -- cycle / duplicate refused by the guards
     END;
   END LOOP;
-  ALTER TABLE job_task_links ENABLE TRIGGER job_task_links_hierarchy_guard;
+  ALTER TABLE job_task_links ENABLE TRIGGER job_task_links_z_hierarchy_guard;
   RETURN jid;
 END $$;
 

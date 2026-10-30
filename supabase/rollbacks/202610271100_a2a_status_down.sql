@@ -130,3 +130,5 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION job_schedule_status(uuid, date) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION job_schedule_status(uuid, date) TO authenticated;
+-- r4 M1(b): the saturating day-add helper the new body used (nothing else calls it)
+DROP FUNCTION IF EXISTS job_sched_dadd(date, bigint);

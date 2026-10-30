@@ -1,43 +1,43 @@
 [
  {
   "name": "forward FS uses the predecessor start instead of its end",
-  "find": "WHEN 'FS' THEN ef[p] + llag[j]",
-  "replace": "WHEN 'FS' THEN es[p] + llag[j]"
+  "find": "WHEN 'FS' THEN job_sched_dadd(ef[p], llag[j])",
+  "replace": "WHEN 'FS' THEN job_sched_dadd(es[p], llag[j])"
  },
  {
   "name": "forward SS uses the predecessor end instead of its start",
-  "find": "WHEN 'SS' THEN es[p] + llag[j]",
-  "replace": "WHEN 'SS' THEN ef[p] + llag[j]"
+  "find": "WHEN 'SS' THEN job_sched_dadd(es[p], llag[j])",
+  "replace": "WHEN 'SS' THEN job_sched_dadd(ef[p], llag[j])"
  },
  {
   "name": "forward FF forgets to subtract the successor duration",
-  "find": "WHEN 'FF' THEN ef[p] + llag[j] - rem[c]",
-  "replace": "WHEN 'FF' THEN ef[p] + llag[j]"
+  "find": "WHEN 'FF' THEN job_sched_dadd(ef[p], llag[j]::bigint - rem[c])",
+  "replace": "WHEN 'FF' THEN job_sched_dadd(ef[p], llag[j])"
  },
  {
   "name": "forward SF forgets to subtract the successor duration",
-  "find": "ELSE           es[p] + llag[j] - rem[c] END;",
-  "replace": "ELSE           es[p] + llag[j] END;"
+  "find": "ELSE           job_sched_dadd(es[p], llag[j]::bigint - rem[c]) END;",
+  "replace": "ELSE           job_sched_dadd(es[p], llag[j]) END;"
  },
  {
   "name": "backward FS adds the lag instead of subtracting it",
-  "find": "WHEN 'FS' THEN ls[t] - llag[j]",
-  "replace": "WHEN 'FS' THEN ls[t] + llag[j]"
+  "find": "WHEN 'FS' THEN job_sched_dadd(ls[t], -llag[j]::bigint)",
+  "replace": "WHEN 'FS' THEN job_sched_dadd(ls[t], llag[j])"
  },
  {
   "name": "backward SS forgets the remaining duration of the predecessor",
-  "find": "WHEN 'SS' THEN ls[t] - llag[j] + rem[c]",
-  "replace": "WHEN 'SS' THEN ls[t] - llag[j]"
+  "find": "WHEN 'SS' THEN job_sched_dadd(ls[t], rem[c] - llag[j]::bigint)",
+  "replace": "WHEN 'SS' THEN job_sched_dadd(ls[t], -llag[j]::bigint)"
  },
  {
   "name": "backward FF bounds by the successor late start instead of its late finish",
-  "find": "WHEN 'FF' THEN lf[t] - llag[j]",
-  "replace": "WHEN 'FF' THEN ls[t] - llag[j]"
+  "find": "WHEN 'FF' THEN job_sched_dadd(lf[t], -llag[j]::bigint)",
+  "replace": "WHEN 'FF' THEN job_sched_dadd(ls[t], -llag[j]::bigint)"
  },
  {
   "name": "backward SF forgets the remaining duration of the predecessor",
-  "find": "ELSE           lf[t] - llag[j] + rem[c] END;",
-  "replace": "ELSE           lf[t] - llag[j] END;"
+  "find": "ELSE           job_sched_dadd(lf[t], rem[c] - llag[j]::bigint) END;",
+  "replace": "ELSE           job_sched_dadd(lf[t], -llag[j]::bigint) END;"
  },
  {
   "name": "an unknown link_type is not coerced to FS",
@@ -115,13 +115,13 @@
  },
  {
   "name": "SS into a summary is ignored like a finish-bound link (sweep)",
-  "find": "IF is_sum[t] AND ty NOT IN ('FS', 'SS') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN ef[v]",
-  "replace": "IF is_sum[t] AND ty NOT IN ('FS') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN ef[v]"
+  "find": "IF is_sum[t] AND ty NOT IN ('FS', 'SS') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN job_sched_dadd(ef[v]",
+  "replace": "IF is_sum[t] AND ty NOT IN ('FS') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN job_sched_dadd(ef[v]"
  },
  {
   "name": "FF into a summary is applied to its leaves (sweep)",
-  "find": "IF is_sum[t] AND ty NOT IN ('FS', 'SS') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN ef[v]",
-  "replace": "IF is_sum[t] AND ty NOT IN ('FS', 'SS', 'FF') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN ef[v]"
+  "find": "IF is_sum[t] AND ty NOT IN ('FS', 'SS') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN job_sched_dadd(ef[v]",
+  "replace": "IF is_sum[t] AND ty NOT IN ('FS', 'SS', 'FF') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN job_sched_dadd(ef[v]"
  },
  {
   "name": "SS into a summary is ignored like a finish-bound link (pass loop)",
@@ -135,13 +135,13 @@
  },
  {
   "name": "backward: FF from a summary predecessor ignored (sweep)",
-  "find": "IF is_sum[p] AND ty NOT IN ('FS', 'FF') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN ls[v]",
-  "replace": "IF is_sum[p] AND ty NOT IN ('FS') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN ls[v]"
+  "find": "IF is_sum[p] AND ty NOT IN ('FS', 'FF') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN job_sched_dadd(ls[v]",
+  "replace": "IF is_sum[p] AND ty NOT IN ('FS') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN job_sched_dadd(ls[v]"
  },
  {
   "name": "backward: SS from a summary predecessor applied (sweep)",
-  "find": "IF is_sum[p] AND ty NOT IN ('FS', 'FF') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN ls[v]",
-  "replace": "IF is_sum[p] AND ty NOT IN ('FS', 'FF', 'SS') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN ls[v]"
+  "find": "IF is_sum[p] AND ty NOT IN ('FS', 'FF') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN job_sched_dadd(ls[v]",
+  "replace": "IF is_sum[p] AND ty NOT IN ('FS', 'FF', 'SS') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN job_sched_dadd(ls[v]"
  },
  {
   "name": "backward: FF from a summary predecessor ignored (pass loop)",
@@ -259,12 +259,12 @@
  },
  {
   "name": "r3 pass loop: leaves after p keep the value from before p was raised (forward)",
-  "find": "cand1 := cand + CASE ty WHEN 'FS' THEN ef[p] - f0 ELSE es[p] - e0 END;",
+  "find": "cand1 := job_sched_dadd(cand, CASE ty WHEN 'FS' THEN ef[p] - f0 ELSE es[p] - e0 END);",
   "replace": "cand1 := cand;"
  },
  {
   "name": "r3 pass loop: leaves after t keep the value from before t was lowered (backward)",
-  "find": "cand1 := cand + CASE ty WHEN 'FS' THEN ls[t] - e0 ELSE lf[t] - f0 END;",
+  "find": "cand1 := job_sched_dadd(cand, CASE ty WHEN 'FS' THEN ls[t] - e0 ELSE lf[t] - f0 END);",
   "replace": "cand1 := cand;"
  },
  {
@@ -303,5 +303,191 @@
   "replace": "NULL;",
   "equivalent": true,
   "reason": "performance only: walking on from a chain already proven to reach a root finds no cycle (it cannot contain a node of the current walk), so the cut set is identical; covered by the deep-nesting timing in bench-summary-links.sh"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `IF sched[i] AND ef[i] IS NULL THEN ef[i] := es[i] + rem[i]; END IF;` (line 95)",
+  "find": "IF sched[i] AND ef[i] IS NULL THEN ef[i] := job_sched_dadd(es[i], rem[i]); END IF;",
+  "replace": "IF sched[i] AND ef[i] IS NULL THEN ef[i] := es[i] + rem[i]; END IF;"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `IF effo[par[v]] > es[v] THEN es[v] := effo[par[v]]; ef[v] := es[v] + r` (line 237)",
+  "find": "IF effo[par[v]] > es[v] THEN es[v] := effo[par[v]]; ef[v] := job_sched_dadd(es[v], rem[v]); END IF;",
+  "replace": "IF effo[par[v]] > es[v] THEN es[v] := effo[par[v]]; ef[v] := es[v] + rem[v]; END IF;"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `cand := CASE ty WHEN 'FS' THEN ef[v] + llag[j]` (line 243)",
+  "find": "cand := CASE ty WHEN 'FS' THEN job_sched_dadd(ef[v], llag[j])",
+  "replace": "cand := CASE ty WHEN 'FS' THEN ef[v] + llag[j]"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `WHEN 'SS' THEN es[v] + llag[j]` (line 244)",
+  "find": "WHEN 'SS' THEN job_sched_dadd(es[v], llag[j])",
+  "replace": "WHEN 'SS' THEN es[v] + llag[j]"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `WHEN 'FF' THEN ef[v] + llag[j] - rem[t]` (line 245)",
+  "find": "WHEN 'FF' THEN job_sched_dadd(ef[v], llag[j]::bigint - rem[t])",
+  "replace": "WHEN 'FF' THEN ef[v] + llag[j] - rem[t]"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `ELSE           es[v] + llag[j] - rem[t] END;` (line 246)",
+  "find": "ELSE           job_sched_dadd(es[v], llag[j]::bigint - rem[t]) END;",
+  "replace": "ELSE           es[v] + llag[j] - rem[t] END;"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `es[t] := cand; ef[t] := cand + rem[t];` (line 250)",
+  "find": "es[t] := cand; ef[t] := job_sched_dadd(cand, rem[t]);",
+  "replace": "es[t] := cand; ef[t] := cand + rem[t];"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `cand := CASE ty WHEN 'FS' THEN ef[p] + llag[j]` (line 276)",
+  "find": "cand := CASE ty WHEN 'FS' THEN job_sched_dadd(ef[p], llag[j])",
+  "replace": "cand := CASE ty WHEN 'FS' THEN ef[p] + llag[j]"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `WHEN 'SS' THEN es[p] + llag[j]` (line 277)",
+  "find": "WHEN 'SS' THEN job_sched_dadd(es[p], llag[j])",
+  "replace": "WHEN 'SS' THEN es[p] + llag[j]"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `WHEN 'FF' THEN ef[p] + llag[j] - rem[c]` (line 278)",
+  "find": "WHEN 'FF' THEN job_sched_dadd(ef[p], llag[j]::bigint - rem[c])",
+  "replace": "WHEN 'FF' THEN ef[p] + llag[j] - rem[c]"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `ELSE           es[p] + llag[j] - rem[c] END;   -- for a summary target` (line 279)",
+  "find": "ELSE           job_sched_dadd(es[p], llag[j]::bigint - rem[c]) END;   -- for a summary target (FS/SS only) the value does not depend on the leaf",
+  "replace": "ELSE           es[p] + llag[j] - rem[c] END;   -- for a summary target (FS/SS only) the value does not depend on the leaf"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `e0 := es[p]; f0 := ef[p]; es[p] := cand; ef[p] := cand + rem[p]; v_cha` (line 283)",
+  "find": "e0 := es[p]; f0 := ef[p]; es[p] := cand; ef[p] := job_sched_dadd(cand, rem[p]); v_changed := true;",
+  "replace": "e0 := es[p]; f0 := ef[p]; es[p] := cand; ef[p] := cand + rem[p]; v_changed := true;"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `cand1 := cand + CASE ty WHEN 'FS' THEN ef[p] - f0 ELSE es[p] - e0 END;` (line 284)",
+  "find": "cand1 := job_sched_dadd(cand, CASE ty WHEN 'FS' THEN ef[p] - f0 ELSE es[p] - e0 END);",
+  "replace": "cand1 := cand + CASE ty WHEN 'FS' THEN ef[p] - f0 ELSE es[p] - e0 END;"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `IF candc > es[c] THEN es[c] := candc; ef[c] := candc + rem[c]; v_chang` (line 290)",
+  "find": "IF candc > es[c] THEN es[c] := candc; ef[c] := job_sched_dadd(candc, rem[c]); v_changed := true; END IF;",
+  "replace": "IF candc > es[c] THEN es[c] := candc; ef[c] := candc + rem[c]; v_changed := true; END IF;"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `IF sched[i] AND NOT done[i] AND NOT is_sum[i] THEN lf[i] := v_deadline` (line 316)",
+  "find": "IF sched[i] AND NOT done[i] AND NOT is_sum[i] THEN lf[i] := v_deadline; ls[i] := job_sched_dadd(v_deadline, -rem[i]); END IF;",
+  "replace": "IF sched[i] AND NOT done[i] AND NOT is_sum[i] THEN lf[i] := v_deadline; ls[i] := v_deadline - rem[i]; END IF;"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `IF effb[par[v]] < lf[v] THEN lf[v] := effb[par[v]]; ls[v] := lf[v] - r` (line 343)",
+  "find": "IF effb[par[v]] < lf[v] THEN lf[v] := effb[par[v]]; ls[v] := job_sched_dadd(lf[v], -rem[v]); END IF;",
+  "replace": "IF effb[par[v]] < lf[v] THEN lf[v] := effb[par[v]]; ls[v] := lf[v] - rem[v]; END IF;"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `cand := CASE ty WHEN 'FS' THEN ls[v] - llag[j]` (line 350)",
+  "find": "cand := CASE ty WHEN 'FS' THEN job_sched_dadd(ls[v], -llag[j]::bigint)",
+  "replace": "cand := CASE ty WHEN 'FS' THEN ls[v] - llag[j]"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `WHEN 'FF' THEN lf[v] - llag[j]` (line 351)",
+  "find": "WHEN 'FF' THEN job_sched_dadd(lf[v], -llag[j]::bigint)",
+  "replace": "WHEN 'FF' THEN lf[v] - llag[j]"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `WHEN 'SS' THEN ls[v] - llag[j] + rem[p]` (line 352)",
+  "find": "WHEN 'SS' THEN job_sched_dadd(ls[v], rem[p] - llag[j]::bigint)",
+  "replace": "WHEN 'SS' THEN ls[v] - llag[j] + rem[p]"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `ELSE           lf[v] - llag[j] + rem[p] END;` (line 353)",
+  "find": "ELSE           job_sched_dadd(lf[v], rem[p] - llag[j]::bigint) END;",
+  "replace": "ELSE           lf[v] - llag[j] + rem[p] END;"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `lf[p] := cand; ls[p] := cand - rem[p];` (line 357)",
+  "find": "lf[p] := cand; ls[p] := job_sched_dadd(cand, -rem[p]);",
+  "replace": "lf[p] := cand; ls[p] := cand - rem[p];"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `cand := CASE ty WHEN 'FS' THEN ls[t] - llag[j]` (line 384)",
+  "find": "cand := CASE ty WHEN 'FS' THEN job_sched_dadd(ls[t], -llag[j]::bigint)",
+  "replace": "cand := CASE ty WHEN 'FS' THEN ls[t] - llag[j]"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `WHEN 'FF' THEN lf[t] - llag[j]` (line 385)",
+  "find": "WHEN 'FF' THEN job_sched_dadd(lf[t], -llag[j]::bigint)",
+  "replace": "WHEN 'FF' THEN lf[t] - llag[j]"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `WHEN 'SS' THEN ls[t] - llag[j] + rem[c]` (line 386)",
+  "find": "WHEN 'SS' THEN job_sched_dadd(ls[t], rem[c] - llag[j]::bigint)",
+  "replace": "WHEN 'SS' THEN ls[t] - llag[j] + rem[c]"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `ELSE           lf[t] - llag[j] + rem[c] END;   -- for a summary predec` (line 387)",
+  "find": "ELSE           job_sched_dadd(lf[t], rem[c] - llag[j]::bigint) END;   -- for a summary predecessor (FS/FF only) the value does not depend on the leaf",
+  "replace": "ELSE           lf[t] - llag[j] + rem[c] END;   -- for a summary predecessor (FS/FF only) the value does not depend on the leaf"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `e0 := ls[t]; f0 := lf[t]; lf[t] := cand; ls[t] := cand - rem[t]; v_cha` (line 391)",
+  "find": "e0 := ls[t]; f0 := lf[t]; lf[t] := cand; ls[t] := job_sched_dadd(cand, -rem[t]); v_changed := true;",
+  "replace": "e0 := ls[t]; f0 := lf[t]; lf[t] := cand; ls[t] := cand - rem[t]; v_changed := true;"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `cand1 := cand + CASE ty WHEN 'FS' THEN ls[t] - e0 ELSE lf[t] - f0 END;` (line 392)",
+  "find": "cand1 := job_sched_dadd(cand, CASE ty WHEN 'FS' THEN ls[t] - e0 ELSE lf[t] - f0 END);",
+  "replace": "cand1 := cand + CASE ty WHEN 'FS' THEN ls[t] - e0 ELSE lf[t] - f0 END;"
+ },
+ {
+  "name": "r4 dadd: plain date arithmetic restored on `IF candc < lf[c] THEN lf[c] := candc; ls[c] := candc - rem[c]; v_chang` (line 398)",
+  "find": "IF candc < lf[c] THEN lf[c] := candc; ls[c] := job_sched_dadd(candc, -rem[c]); v_changed := true; END IF;",
+  "replace": "IF candc < lf[c] THEN lf[c] := candc; ls[c] := candc - rem[c]; v_changed := true; END IF;"
+ },
+ {
+  "name": "r4 dadd: the upper saturation is gone (d + n past 5874897-12-31 raises)",
+  "find": "THEN CASE WHEN p_n > DATE '5874897-12-31' - p_d THEN DATE '5874897-12-31' ELSE p_d + p_n::integer END",
+  "replace": "THEN p_d + p_n::integer"
+ },
+ {
+  "name": "r4 dadd: the lower saturation is gone",
+  "find": "ELSE CASE WHEN -p_n > p_d - DATE '4714-11-24 BC' THEN DATE '4714-11-24 BC' ELSE p_d + p_n::integer END END",
+  "replace": "ELSE p_d + p_n::integer END"
+ },
+ {
+  "name": "r4 dadd: upper bound one day early (clamps 5874897-12-30)",
+  "find": "THEN CASE WHEN p_n > DATE '5874897-12-31' - p_d THEN",
+  "replace": "THEN CASE WHEN p_n >= DATE '5874897-12-31' - p_d THEN",
+  "equivalent": true,
+  "reason": "when d + n equals 5874897-12-31 exactly the clamp returns the same day"
+ },
+ {
+  "name": "r4 dadd: lower bound one day early",
+  "find": "ELSE CASE WHEN -p_n > p_d - DATE '4714-11-24 BC' THEN",
+  "replace": "ELSE CASE WHEN -p_n >= p_d - DATE '4714-11-24 BC' THEN",
+  "equivalent": true,
+  "reason": "when d + n equals 4714-11-24 BC exactly the clamp returns the same day"
+ },
+ {
+  "name": "r4 dadd: saturates to the wrong end (upper -> lower)",
+  "find": "THEN CASE WHEN p_n > DATE '5874897-12-31' - p_d THEN DATE '5874897-12-31' ELSE",
+  "replace": "THEN CASE WHEN p_n > DATE '5874897-12-31' - p_d THEN DATE '4714-11-24 BC' ELSE"
+ },
+ {
+  "name": "r4 dadd: n as integer (an n beyond 2^31 overflows)",
+  "find": "p_n bigint) RETURNS date",
+  "replace": "p_n integer) RETURNS date"
+ },
+ {
+  "name": "r4 dadd: not granted to authenticated",
+  "find": "GRANT EXECUTE ON FUNCTION job_sched_dadd(date, bigint) TO authenticated, service_role;",
+  "replace": "GRANT EXECUTE ON FUNCTION job_sched_dadd(date, bigint) TO service_role;",
+  "equivalent": true,
+  "reason": "the default privileges of the database (Supabase grants new functions to authenticated) already give it; the GRANT only states the intent"
+ },
+ {
+  "name": "r4 dadd: left executable by anon",
+  "find": "REVOKE ALL ON FUNCTION job_sched_dadd(date, bigint) FROM PUBLIC, anon;",
+  "replace": "REVOKE ALL ON FUNCTION job_sched_dadd(date, bigint) FROM PUBLIC;"
  }
 ]
