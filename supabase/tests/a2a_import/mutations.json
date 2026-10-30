@@ -699,5 +699,35 @@
   "name": "counter: new phases start one number late",
   "find": "SET new_uid = v_free[s.rn] FROM (SELECT uid, row_number() OVER (ORDER BY idx) AS rn FROM pg_temp.imp_p",
   "replace": "SET new_uid = v_free[s.rn + 1] FROM (SELECT uid, row_number() OVER (ORDER BY idx) AS rn FROM pg_temp.imp_p"
+ },
+ {
+  "name": "r3d m2: ancestor-link pre-check removed (condition false)",
+  "find": "IF EXISTS (SELECT 1 FROM pg_temp.imp_e) AND EXISTS (SELECT 1 FROM pg_temp.imp_n WHERE parent IS NOT NULL) AND EXISTS (",
+  "replace": "IF false AND EXISTS ("
+ },
+ {
+  "name": "r3d m2: pre-check misses a link from the child to its ancestor",
+  "find": "(up.id = e.t AND up.anc = e.p) OR (up.id = e.p AND up.anc = e.t)",
+  "replace": "(up.id = e.p AND up.anc = e.t)"
+ },
+ {
+  "name": "r3d m2: pre-check misses a link from the ancestor to its descendant",
+  "find": "(up.id = e.t AND up.anc = e.p) OR (up.id = e.p AND up.anc = e.t)",
+  "replace": "(up.id = e.t AND up.anc = e.p)"
+ },
+ {
+  "name": "r3d m2: pre-check looks at the direct parent only",
+  "find": "WHERE y.parent IS NOT NULL AND up.d < 9)\n    SELECT 1 FROM pg_temp.imp_e e JOIN up ON",
+  "replace": "WHERE false)\n    SELECT 1 FROM pg_temp.imp_e e JOIN up ON"
+ },
+ {
+  "name": "r3d m2: pre-check error carries another SQLSTATE",
+  "find": "in the imported schedule' USING ERRCODE = '23514';\n  END IF;\n\n  -- ---- 5.",
+  "replace": "in the imported schedule' USING ERRCODE = '22023';\n  END IF;\n\n  -- ---- 5."
+ },
+ {
+  "name": "r3d m2: pre-check runs on the stored hierarchy only (file's parents ignored)",
+  "find": "SELECT x.id, x.parent, 1 FROM pg_temp.imp_n x WHERE x.parent IS NOT NULL\n      UNION ALL\n      SELECT up.id, y.parent, up.d + 1 FROM up JOIN pg_temp.imp_n y ON y.id = up.anc WHERE y.parent IS NOT NULL AND up.d < 9)\n    SELECT 1 FROM pg_temp.imp_e e",
+  "replace": "SELECT x.id, x.parent, 1 FROM pg_temp.imp_n x WHERE x.parent IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pg_temp.imp_t i WHERE i.id = x.id)\n      UNION ALL\n      SELECT up.id, y.parent, up.d + 1 FROM up JOIN pg_temp.imp_n y ON y.id = up.anc WHERE y.parent IS NOT NULL AND up.d < 9)\n    SELECT 1 FROM pg_temp.imp_e e"
  }
 ]

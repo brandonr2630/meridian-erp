@@ -165,7 +165,7 @@
  },
  {
   "name": "h1: company guard on job_tasks is INSERT only",
-  "find": "CREATE TRIGGER job_tasks_company_guard BEFORE INSERT OR UPDATE OF job_id, company_id ON job_tasks",
+  "find": "CREATE TRIGGER job_tasks_company_guard BEFORE INSERT OR UPDATE OF job_id, company_id, phase_id, depends_on ON job_tasks",
   "replace": "CREATE TRIGGER job_tasks_company_guard BEFORE INSERT ON job_tasks"
  },
  {
@@ -270,47 +270,49 @@
  },
  {
   "name": "counter: first use ignores the phases",
-  "find": "SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap\n            UNION ALL",
+  "find": "SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id AND company_id = p_company\n            UNION ALL",
   "replace": "SELECT 0 AS u FROM job_phases WHERE false\n            UNION ALL"
  },
  {
   "name": "counter: first use ignores the tasks",
-  "find": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) s;",
+  "find": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = p_company) s;",
   "replace": "SELECT 0 FROM job_tasks WHERE false) s;"
  },
  {
   "name": "counter: first use counts the rows of every company (tasks)",
-  "find": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) s;",
-  "replace": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND msp_uid BETWEEN 1 AND k_cap) s;"
+  "find": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = p_company) s;",
+  "replace": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id) s;"
  },
  {
   "name": "counter: first use counts the rows of every job (tasks)",
-  "find": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) s;",
-  "replace": "SELECT msp_uid FROM job_tasks WHERE company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) s;"
+  "find": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = p_company) s;",
+  "replace": "SELECT msp_uid FROM job_tasks WHERE company_id = p_company) s;"
  },
  {
   "name": "counter: first use counts the rows of every company (phases)",
-  "find": "SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap\n            UNION ALL",
-  "replace": "SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id AND msp_uid BETWEEN 1 AND k_cap\n            UNION ALL"
+  "find": "SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id AND company_id = p_company\n            UNION ALL",
+  "replace": "SELECT msp_uid AS u FROM job_phases WHERE job_id = p_job_id\n            UNION ALL"
  },
  {
   "name": "counter: first use counts the uids above the cap",
-  "find": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = p_company AND msp_uid BETWEEN 1 AND k_cap) s;",
-  "replace": "SELECT msp_uid FROM job_tasks WHERE job_id = p_job_id AND company_id = p_company AND msp_uid >= 1) s;"
+  "find": "max(s.u) FILTER (WHERE s.u BETWEEN 1 AND k_cap)",
+  "replace": "max(s.u)"
  },
  {
   "name": "counter: first use always starts from the highest stored uid (a planted cap blocks the job)",
-  "find": "VALUES (p_job_id, CASE WHEN v_init::bigint + p_n > k_cap THEN 0 ELSE v_init END)",
-  "replace": "VALUES (p_job_id, v_init)"
+  "find": "CASE WHEN v_init::bigint + p_n > k_cap OR v_init > 4::bigint * v_rows + 1000 THEN 0 ELSE v_init END",
+  "replace": "v_init"
  },
  {
   "name": "counter: first use falls back to 0 even when the fit is exact",
-  "find": "CASE WHEN v_init::bigint + p_n > k_cap THEN 0 ELSE v_init END",
-  "replace": "CASE WHEN v_init::bigint + p_n >= k_cap THEN 0 ELSE v_init END"
+  "find": "v_init::bigint + p_n > k_cap OR",
+  "replace": "v_init::bigint + p_n >= k_cap OR",
+  "equivalent": true,
+  "reason": "unreachable: v_init + p_n >= k_cap with v_init <= 4*v_rows+1000 (the outlier rule) would need p_n near 1e8, but p_n is capped by the 10000-task import limit; the outlier rule already routes every near-cap seed to 0"
  },
  {
   "name": "counter: first use never continues after the highest stored uid",
-  "find": "CASE WHEN v_init::bigint + p_n > k_cap THEN 0 ELSE v_init END",
+  "find": "CASE WHEN v_init::bigint + p_n > k_cap OR v_init > 4::bigint * v_rows + 1000 THEN 0 ELSE v_init END",
   "replace": "0"
  },
  {
@@ -492,22 +494,22 @@
  },
  {
   "name": "r3 uid guard: error class changed",
-  "find": "'msp_uid is assigned by schedule export / import only' USING ERRCODE = 'A2U01'",
-  "replace": "'msp_uid is assigned by schedule export / import only' USING ERRCODE = 'A2U02'"
+  "find": "'msp_uid is assigned by schedule export / import only (a numbered row cannot change job)' USING ERRCODE = 'A2U01'",
+  "replace": "'msp_uid is assigned by schedule export / import only (a numbered row cannot change job)' USING ERRCODE = 'A2U02'"
  },
  {
   "name": "r3 uid guard: phases trigger missing",
-  "find": "CREATE TRIGGER job_phases_msp_uid_guard BEFORE INSERT OR UPDATE OF msp_uid ON job_phases",
+  "find": "CREATE TRIGGER job_phases_msp_uid_guard BEFORE INSERT OR UPDATE OF msp_uid, job_id ON job_phases",
   "replace": "CREATE TRIGGER job_phases_msp_uid_guard BEFORE DELETE ON job_phases"
  },
  {
   "name": "r3 uid guard: tasks trigger missing",
-  "find": "CREATE TRIGGER job_tasks_msp_uid_guard BEFORE INSERT OR UPDATE OF msp_uid ON job_tasks",
+  "find": "CREATE TRIGGER job_tasks_msp_uid_guard BEFORE INSERT OR UPDATE OF msp_uid, job_id ON job_tasks",
   "replace": "CREATE TRIGGER job_tasks_msp_uid_guard BEFORE DELETE ON job_tasks"
  },
  {
   "name": "r3 uid guard: trigger only on INSERT (phases)",
-  "find": "CREATE TRIGGER job_phases_msp_uid_guard BEFORE INSERT OR UPDATE OF msp_uid ON job_phases",
+  "find": "CREATE TRIGGER job_phases_msp_uid_guard BEFORE INSERT OR UPDATE OF msp_uid, job_id ON job_phases",
   "replace": "CREATE TRIGGER job_phases_msp_uid_guard BEFORE INSERT ON job_phases"
  },
  {
@@ -544,5 +546,160 @@
   "name": "r3 guard function granted to authenticated",
   "find": "REVOKE ALL ON FUNCTION job_schedule_msp_uid_guard() FROM PUBLIC, anon, authenticated, service_role;",
   "replace": "GRANT EXECUTE ON FUNCTION job_schedule_msp_uid_guard() TO authenticated;"
+ },
+ {
+  "name": "m1 guard: job_id change clause dropped",
+  "find": "OR (TG_OP = 'UPDATE' AND OLD.msp_uid IS NOT NULL AND NEW.job_id IS DISTINCT FROM OLD.job_id)) THEN",
+  "replace": "OR false) THEN"
+ },
+ {
+  "name": "m1 guard: unnumbered rows refused too (OLD.msp_uid test dropped)",
+  "find": "AND OLD.msp_uid IS NOT NULL AND NEW.job_id IS DISTINCT FROM OLD.job_id",
+  "replace": "AND NEW.job_id IS DISTINCT FROM OLD.job_id"
+ },
+ {
+  "name": "m1 guard: a no-op job_id write is refused",
+  "find": "AND OLD.msp_uid IS NOT NULL AND NEW.job_id IS DISTINCT FROM OLD.job_id",
+  "replace": "AND OLD.msp_uid IS NOT NULL"
+ },
+ {
+  "name": "m1 trigger: job_phases guard does not fire on job_id",
+  "find": "BEFORE INSERT OR UPDATE OF msp_uid, job_id ON job_phases",
+  "replace": "BEFORE INSERT OR UPDATE OF msp_uid ON job_phases"
+ },
+ {
+  "name": "m1 trigger: job_tasks guard does not fire on job_id",
+  "find": "BEFORE INSERT OR UPDATE OF msp_uid, job_id ON job_tasks",
+  "replace": "BEFORE INSERT OR UPDATE OF msp_uid ON job_tasks"
+ },
+ {
+  "name": "m2 link guard: task-below-predecessor direction dropped",
+  "find": "    IF v = NEW.predecessor_id THEN\n      RAISE",
+  "replace": "    IF false THEN\n      RAISE"
+ },
+ {
+  "name": "m2 link guard: predecessor-below-task direction dropped",
+  "find": "    IF v = NEW.task_id THEN\n      RAISE",
+  "replace": "    IF false THEN\n      RAISE"
+ },
+ {
+  "name": "m2 link guard: only the direct parent of the task is checked",
+  "find": "SELECT t.parent_task_id INTO v FROM job_tasks t WHERE t.id = v AND t.job_id = NEW.job_id;\n    n := n + 1;\n    EXIT WHEN v IS NULL OR n > 50;\n    IF v = NEW.predecessor_id THEN",
+  "replace": "SELECT t.parent_task_id INTO v FROM job_tasks t WHERE t.id = v AND t.job_id = NEW.job_id;\n    n := n + 1;\n    EXIT WHEN v IS NULL OR n > 1;\n    IF v = NEW.predecessor_id THEN"
+ },
+ {
+  "name": "m2 link guard: only the direct parent of the predecessor is checked",
+  "find": "SELECT t.parent_task_id INTO v FROM job_tasks t WHERE t.id = v AND t.job_id = NEW.job_id;\n    n := n + 1;\n    EXIT WHEN v IS NULL OR n > 50;\n    IF v = NEW.task_id THEN",
+  "replace": "SELECT t.parent_task_id INTO v FROM job_tasks t WHERE t.id = v AND t.job_id = NEW.job_id;\n    n := n + 1;\n    EXIT WHEN v IS NULL OR n > 1;\n    IF v = NEW.task_id THEN"
+ },
+ {
+  "name": "m2 link guard: wrong SQLSTATE",
+  "find": "NEW.predecessor_id USING ERRCODE = 'A2L01';\n    END IF;\n  END LOOP;\n  v := NEW.predecessor_id",
+  "replace": "NEW.predecessor_id USING ERRCODE = 'A2L02';\n    END IF;\n  END LOOP;\n  v := NEW.predecessor_id"
+ },
+ {
+  "name": "m2 link guard: unchanged-endpoints early return dropped (planted link no-op rewrite refused)",
+  "find": "     AND NEW.job_id IS NOT DISTINCT FROM OLD.job_id THEN\n    RETURN NEW;                                   -- the link's endpoints did not change",
+  "replace": "     AND false THEN\n    RETURN NEW;                                   -- the link's endpoints did not change"
+ },
+ {
+  "name": "m2 link guard: trigger does not fire on UPDATE",
+  "find": "BEFORE INSERT OR UPDATE OF task_id, predecessor_id, job_id ON job_task_links",
+  "replace": "BEFORE INSERT ON job_task_links"
+ },
+ {
+  "name": "m2 link guard: trigger does not fire on INSERT",
+  "find": "BEFORE INSERT OR UPDATE OF task_id, predecessor_id, job_id ON job_task_links",
+  "replace": "BEFORE UPDATE OF task_id, predecessor_id, job_id ON job_task_links"
+ },
+ {
+  "name": "m2 link guard: function callable by authenticated",
+  "find": "REVOKE ALL ON FUNCTION job_task_links_hierarchy_guard() FROM PUBLIC, anon, authenticated, service_role;",
+  "replace": "GRANT EXECUTE ON FUNCTION job_task_links_hierarchy_guard() TO authenticated;"
+ },
+ {
+  "name": "m2 link guard: not security definer",
+  "find": "CREATE OR REPLACE FUNCTION job_task_links_hierarchy_guard() RETURNS trigger\nLANGUAGE plpgsql SECURITY DEFINER",
+  "replace": "CREATE OR REPLACE FUNCTION job_task_links_hierarchy_guard() RETURNS trigger\nLANGUAGE plpgsql"
+ },
+ {
+  "name": "m2 reparent guard: moved subtree not walked (only the task itself)",
+  "find": "INTO v_front FROM job_tasks c WHERE c.parent_task_id = ANY (v_front);",
+  "replace": "INTO v_front FROM job_tasks c WHERE false;"
+ },
+ {
+  "name": "m2 reparent guard: only the new parent is checked, not its ancestors",
+  "find": "SELECT t.parent_task_id INTO v FROM job_tasks t WHERE t.id = v;\n  END LOOP;\n  v := OLD.parent_task_id;",
+  "replace": "v := NULL;\n  END LOOP;\n  v := OLD.parent_task_id;"
+ },
+ {
+  "name": "m2 reparent guard: relations that already existed are refused again (old ancestors not excluded)",
+  "find": "WHERE x <> ALL (v_old)",
+  "replace": "WHERE true"
+ },
+ {
+  "name": "m2 reparent guard: link where the moved task is the successor not checked",
+  "find": "IF EXISTS (SELECT 1 FROM unnest(v_desc) d(id) JOIN job_task_links l ON l.task_id = d.id WHERE l.predecessor_id = ANY (v_new))\n     OR EXISTS",
+  "replace": "IF false\n     OR EXISTS"
+ },
+ {
+  "name": "m2 reparent guard: link where the moved task is the predecessor not checked",
+  "find": "     OR EXISTS (SELECT 1 FROM unnest(v_desc) d(id) JOIN job_task_links l ON l.predecessor_id = d.id WHERE l.task_id = ANY (v_new)) THEN",
+  "replace": "     OR false THEN"
+ },
+ {
+  "name": "m2 reparent guard: wrong SQLSTATE",
+  "find": "      USING ERRCODE = 'A2L02';",
+  "replace": "      USING ERRCODE = 'A2L01';"
+ },
+ {
+  "name": "m2 reparent guard: trigger fires on the wrong column",
+  "find": "CREATE TRIGGER job_tasks_parent_link_guard BEFORE UPDATE OF parent_task_id ON job_tasks",
+  "replace": "CREATE TRIGGER job_tasks_parent_link_guard BEFORE UPDATE OF company_id ON job_tasks"
+ },
+ {
+  "name": "m2 reparent guard: function callable by anon",
+  "find": "REVOKE ALL ON FUNCTION job_tasks_parent_link_guard() FROM PUBLIC, anon, authenticated, service_role;",
+  "replace": "GRANT EXECUTE ON FUNCTION job_tasks_parent_link_guard() TO anon;"
+ },
+ {
+  "name": "m2 reparent guard: not security definer",
+  "find": "CREATE OR REPLACE FUNCTION job_tasks_parent_link_guard() RETURNS trigger\nLANGUAGE plpgsql SECURITY DEFINER",
+  "replace": "CREATE OR REPLACE FUNCTION job_tasks_parent_link_guard() RETURNS trigger\nLANGUAGE plpgsql"
+ },
+ {
+  "name": "m2 lock: link guard does not take the per-job advisory lock",
+  "find": "  PERFORM pg_advisory_xact_lock(hashtextextended('job_tasks_parent:' || NEW.job_id::text, 0));\n\n  -- Two primary-key walks",
+  "replace": "\n  -- Two primary-key walks",
+  "equivalent": true,
+  "reason": "a single-session assertion file cannot observe a missing lock; KILLED by supabase/tests/a2a_schema/concurrency.sh in mutant mode (both scenarios store the forbidden pair), run in the r3d gate"
+ },
+ {
+  "name": "m2 lock: re-parent guard does not take the per-job advisory lock",
+  "find": "  PERFORM pg_advisory_xact_lock(hashtextextended('job_tasks_parent:' || NEW.job_id::text, 0));\n\n  -- new ancestors:",
+  "replace": "\n  -- new ancestors:",
+  "equivalent": true,
+  "reason": "job_tasks_parent_guard (fires first on the same UPDATE, its name sorts earlier) already takes the same per-job lock, so this second acquisition is re-entrant and removing it changes nothing; kept as defence in depth. concurrency.sh in mutant mode SURVIVES it, as expected"
+ },
+ {
+  "name": "m2 reparent guard: NULL / unchanged parent early return dropped",
+  "find": "IF NEW.parent_task_id IS NULL OR NEW.parent_task_id IS NOT DISTINCT FROM OLD.parent_task_id THEN\n    RETURN NEW;",
+  "replace": "IF false THEN\n    RETURN NEW;",
+  "equivalent": true,
+  "reason": "detach: the walks start from NULL and v_new stays empty; unchanged parent: every new ancestor is also an old one so v_new ends empty. Pure fast path"
+ },
+ {
+  "name": "m2 reparent guard: empty new-ancestor early return dropped",
+  "find": "IF cardinality(v_new) = 0 THEN RETURN NEW; END IF;",
+  "replace": "",
+  "equivalent": true,
+  "reason": "with no new ancestor both EXISTS probes compare against an empty array and find nothing; pure fast path"
+ },
+ {
+  "name": "m2 link guard: the walk is not restricted to the link's job",
+  "find": "SELECT t.parent_task_id INTO v FROM job_tasks t WHERE t.id = v AND t.job_id = NEW.job_id;\n    n := n + 1;\n    EXIT WHEN v IS NULL OR n > 50;\n    IF v = NEW.predecessor_id THEN",
+  "replace": "SELECT t.parent_task_id INTO v FROM job_tasks t WHERE t.id = v;\n    n := n + 1;\n    EXIT WHEN v IS NULL OR n > 50;\n    IF v = NEW.predecessor_id THEN",
+  "equivalent": true,
+  "reason": "a task's parent is always in its own job (A2H01 / A2H05), so the extra predicate prunes nothing; kept so a legacy cross-job parent cannot leak"
  }
 ]

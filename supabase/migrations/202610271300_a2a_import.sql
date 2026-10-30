@@ -443,6 +443,18 @@ BEGIN
      WHERE m.depth + 1 > k_max_depth) THEN
     RAISE EXCEPTION 'task hierarchy is deeper than % levels', k_max_depth USING ERRCODE = '23514';
   END IF;
+  -- r3d M2: a link between a task and its own ancestor / descendant (final hierarchy: stored rows that stay + the file's) is refused here, before any
+  -- write, like cycles and depth (job_task_links_hierarchy_guard would refuse it later at the INSERT, A2L01; job_schedule_status goes quadratic on such a link).
+  -- Only the file's own links are checked. A stored link that the file's re-parenting turns into one is refused during the write phase by
+  -- job_tasks_parent_link_guard (A2L02) and the whole RPC rolls back; a stored (legacy / DBA-planted) link of that kind that nothing touches is left alone.
+  IF EXISTS (SELECT 1 FROM pg_temp.imp_e) AND EXISTS (SELECT 1 FROM pg_temp.imp_n WHERE parent IS NOT NULL) AND EXISTS (
+    WITH RECURSIVE up(id, anc, d) AS (
+      SELECT x.id, x.parent, 1 FROM pg_temp.imp_n x WHERE x.parent IS NOT NULL
+      UNION ALL
+      SELECT up.id, y.parent, up.d + 1 FROM up JOIN pg_temp.imp_n y ON y.id = up.anc WHERE y.parent IS NOT NULL AND up.d < 9)
+    SELECT 1 FROM pg_temp.imp_e e JOIN up ON (up.id = e.t AND up.anc = e.p) OR (up.id = e.p AND up.anc = e.t)) THEN
+    RAISE EXCEPTION 'a link joins a task and its own ancestor or descendant in the imported schedule' USING ERRCODE = '23514';
+  END IF;
 
   -- ---- 5. uid assignment from the per-job counter (phases and tasks of the job share one space; never 0; never handed out twice, X26)
   -- sched_next_uids returns the next free numbers above a counter that only moves forward (review L1: a planted uid cannot block the job;

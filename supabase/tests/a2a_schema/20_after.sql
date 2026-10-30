@@ -70,7 +70,7 @@ BEGIN
        AND conkey = ARRAY[(SELECT attnum FROM pg_attribute WHERE attrelid='public.job_tasks'::regclass AND attname='parent_task_id')]), 'n');
   PERFORM t_expect('struct: job_tasks triggers',
     (SELECT string_agg(tgname, ',' ORDER BY tgname) FROM pg_trigger WHERE tgrelid='public.job_tasks'::regclass AND NOT tgisinternal),
-    'job_tasks_baseline_guard,job_tasks_company_guard,job_tasks_msp_uid_guard,job_tasks_parent_guard,job_tasks_set_updated_at,job_tasks_visibility_guard');
+    'job_tasks_baseline_guard,job_tasks_company_guard,job_tasks_msp_uid_guard,job_tasks_parent_guard,job_tasks_parent_link_guard,job_tasks_set_updated_at,job_tasks_visibility_guard');
   PERFORM t_expect('struct: parent guard is BEFORE INSERT OR UPDATE OF parent_task_id, job_id, company_id',
     (SELECT (pg_get_triggerdef(oid) LIKE '%BEFORE INSERT OR UPDATE OF parent_task_id, job_id, company_id ON%')::text
        FROM pg_trigger WHERE tgname='job_tasks_parent_guard'), 'true');
@@ -609,6 +609,136 @@ BEGIN
   INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f5000000-0000-0000-0000-0000000f3005', c1, 'b5000000-0000-0000-0000-0000000f3005', 1, 'edge', 1005);
   INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES ('f5000000-0000-0000-0000-0000000f3006', c1, 'b5000000-0000-0000-0000-0000000f3005', 2, 'unnumbered');
   PERFORM t_expect('r3: net: unnumbered rows count too: highest 1005 with 2 rows (limit 1008) is plausible: 1006', sched_next_uids('b5000000-0000-0000-0000-0000000f3005', c1, 1)::text, '{1006}');
+END $$;
+
+-- ===== 14. r3d M1: a uid never travels between jobs (X26) =====
+-- Moving a numbered row to another job would hand that job a uid it may already have spent (a later merge of an older file would then
+-- match and overwrite the moved row). API roles: job_id may not change on a row that holds an msp_uid (A2U01); an unnumbered row may move.
+DO $$
+DECLARE
+  c1 constant uuid := 'c1000000-0000-0000-0000-000000000001'; w1 constant uuid := '11111111-1111-1111-1111-111111111111';
+  ja constant uuid := 'b6000000-0000-0000-0000-0000000f4001'; jb constant uuid := 'b6000000-0000-0000-0000-0000000f4002';
+  tu constant uuid := 'f6000000-0000-0000-0000-0000000f4001'; tn constant uuid := 'f6000000-0000-0000-0000-0000000f4002';
+  pu constant uuid := 'f6100000-0000-0000-0000-0000000f4001'; pn constant uuid := 'f6100000-0000-0000-0000-0000000f4002';
+  kids constant uuid := 'f6000000-0000-0000-0000-0000000f4003'; kidn constant uuid := 'f6000000-0000-0000-0000-0000000f4004';
+  par constant uuid := 'f6000000-0000-0000-0000-0000000f4005';
+BEGIN
+  INSERT INTO jobs (id, company_id, job_no, status) VALUES (ja, c1, 'WO-M1A', 'Open'), (jb, c1, 'WO-M1B', 'Open');
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES (tu, c1, ja, 1, 'numbered', 7), (tn, c1, ja, 2, 'plain', NULL);
+  INSERT INTO job_phases (id, company_id, job_id, sort_order, name, msp_uid) VALUES (pu, c1, ja, 1, 'numbered phase', 8), (pn, c1, ja, 2, 'plain phase', NULL);
+  PERFORM t_expect('m1: struct: both msp_uid guards also fire on job_id changes',
+    (SELECT count(*)::text FROM pg_trigger WHERE tgname IN ('job_phases_msp_uid_guard', 'job_tasks_msp_uid_guard')
+        AND pg_get_triggerdef(oid) LIKE '%BEFORE INSERT OR UPDATE OF msp_uid, job_id ON%'), '2');
+  -- the attack
+  PERFORM t_expect('m1: writer cannot move a numbered task to another job', t_dml_api('authenticated', w1, format('UPDATE job_tasks SET job_id = %L WHERE id = %L', jb, tu)), 'err:A2U01');
+  PERFORM t_expect('m1: writer cannot move a numbered phase to another job', t_dml_api('authenticated', w1, format('UPDATE job_phases SET job_id = %L WHERE id = %L', jb, pu)), 'err:A2U01');
+  PERFORM t_expect('m1: service_role cannot either (task and phase)',
+    t_dml_api('service_role', NULL, format('UPDATE job_tasks SET job_id = %L WHERE id = %L', jb, tu)) || t_dml_api('service_role', NULL, format('UPDATE job_phases SET job_id = %L WHERE id = %L', jb, pu)), 'err:A2U01err:A2U01');
+  PERFORM t_expect('m1: moving and clearing the uid in one statement is refused too',
+    t_dml_api('authenticated', w1, format('UPDATE job_tasks SET job_id = %L, msp_uid = NULL WHERE id = %L', jb, tu)), 'err:A2U01');
+  PERFORM t_expect('m1: the refusals changed nothing', (SELECT job_id::text || msp_uid::text FROM job_tasks WHERE id = tu) || (SELECT job_id::text || msp_uid::text FROM job_phases WHERE id = pu), ja::text || '7' || ja::text || '8');
+  -- positive
+  PERFORM t_expect('m1: a task and a phase WITHOUT a uid can still move (the export numbers them in the new job)',
+    t_dml_api('authenticated', w1, format('UPDATE job_tasks SET job_id = %L WHERE id = %L', jb, tn)) || t_dml_api('authenticated', w1, format('UPDATE job_phases SET job_id = %L WHERE id = %L', jb, pn)), 'rows:1rows:1');
+  PERFORM t_expect('m1: ... and they are in the new job', (SELECT job_id::text FROM job_tasks WHERE id = tn) || (SELECT job_id::text FROM job_phases WHERE id = pn), jb::text || jb::text);
+  PERFORM t_expect('m1: a no-op job_id write on a numbered row passes (task and phase)',
+    t_dml_api('authenticated', w1, format('UPDATE job_tasks SET job_id = %L WHERE id = %L', ja, tu)) || t_dml_api('authenticated', w1, format('UPDATE job_phases SET job_id = job_id WHERE id = %L', pu)), 'rows:1rows:1');
+  PERFORM t_expect('m1: other columns of a numbered row still edit freely', t_dml_api('authenticated', w1, format('UPDATE job_tasks SET task_name = ''n2'', progress = 5 WHERE id = %L', tu)), 'rows:1');
+  PERFORM t_expect('m1: the owner (definer code, DBA) can still move a numbered row', pg_temp.try(format('UPDATE job_tasks SET job_id = %L WHERE id = %L', jb, tu)), 'ok');
+  UPDATE job_tasks SET job_id = ja WHERE id = tu;
+  -- A2H05 interplay: a task with a parent/children cannot change job. Both guards refuse; the uid guard runs first for a numbered one.
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES (par, c1, ja, 5, 'parent', NULL);
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid, parent_task_id) VALUES (kids, c1, ja, 6, 'kid with uid', 21, par), (kidn, c1, ja, 7, 'kid no uid', NULL, par);
+  PERFORM t_expect('m1: A2H05 kept: an unnumbered child cannot move (hierarchy guard)', t_dml_api('authenticated', w1, format('UPDATE job_tasks SET job_id = %L WHERE id = %L', jb, kidn)), 'err:A2H05');
+  PERFORM t_expect('m1: a numbered child is refused by the uid guard first (A2U01)', t_dml_api('authenticated', w1, format('UPDATE job_tasks SET job_id = %L WHERE id = %L', jb, kids)), 'err:A2U01');
+  PERFORM t_expect('m1: an unnumbered parent with children cannot move (A2H05)', t_dml_api('authenticated', w1, format('UPDATE job_tasks SET job_id = %L WHERE id = %L', jb, par)), 'err:A2H05');
+  PERFORM t_expect('m1: the owner moving a numbered child is still stopped by A2H05', pg_temp.try(format('UPDATE job_tasks SET job_id = %L WHERE id = %L', jb, kids)), 'A2H05');
+  PERFORM t_expect('m1: nothing moved', (SELECT count(*)::text FROM job_tasks WHERE id IN (par, kids, kidn, tu) AND job_id = ja), '4');
+END $$;
+
+-- ===== 15. r3d M2: no link between a task and its own ancestor / descendant (keeps job_schedule_status linear) =====
+-- SQLSTATEs: A2L01 a link (insert / retarget) would join a task and its own ancestor or descendant; A2L02 a re-parenting would make an
+-- existing link do so. Pre-existing (DBA-planted) links of that kind stay valid: only a NEW relation is refused.
+-- Hierarchy: S(7001) > K(7002) > G(7003); S > K2(7006); X(7004), Y(7005) are roots.
+DO $$
+DECLARE
+  c1 constant uuid := 'c1000000-0000-0000-0000-000000000001'; w1 constant uuid := '11111111-1111-1111-1111-111111111111';
+  jm constant uuid := 'b3000000-0000-0000-0000-000000000020'; jo constant uuid := 'b3000000-0000-0000-0000-000000000021'; r text;
+BEGIN
+  INSERT INTO jobs (id, company_id, job_no, status) VALUES (jm, c1, 'WO-M2A', 'Open'), (jo, c1, 'WO-M2B', 'Open');
+  PERFORM pg_temp.ins(7001, jm); PERFORM pg_temp.ins(7002, jm, 7001); PERFORM pg_temp.ins(7003, jm, 7002);
+  PERFORM pg_temp.ins(7004, jm); PERFORM pg_temp.ins(7005, jm); PERFORM pg_temp.ins(7006, jm, 7001); PERFORM pg_temp.ins(7020, jo);
+  PERFORM t_expect('m2: struct: link trigger BEFORE INSERT OR UPDATE OF task_id, predecessor_id, job_id; parent trigger BEFORE UPDATE OF parent_task_id',
+    (SELECT count(*)::text FROM pg_trigger WHERE (tgname = 'job_task_links_hierarchy_guard' AND tgrelid = 'public.job_task_links'::regclass
+        AND pg_get_triggerdef(oid) LIKE '%BEFORE INSERT OR UPDATE OF task_id, predecessor_id, job_id ON%')
+       OR (tgname = 'job_tasks_parent_link_guard' AND tgrelid = 'public.job_tasks'::regclass AND pg_get_triggerdef(oid) LIKE '%BEFORE UPDATE OF parent_task_id ON%')), '2');
+  PERFORM t_expect('m2: struct: both functions pinned search_path, not callable by API roles',
+    (SELECT string_agg(prosecdef::text || (array_to_string(proconfig, ',') LIKE '%search_path=public, pg_temp%')::text
+        || has_function_privilege('authenticated', oid, 'EXECUTE')::text || has_function_privilege('anon', oid, 'EXECUTE')::text
+        || has_function_privilege('service_role', oid, 'EXECUTE')::text, ',' ORDER BY proname)
+       FROM pg_proc WHERE proname IN ('job_task_links_hierarchy_guard', 'job_tasks_parent_link_guard')), 'truetruefalsefalsefalse,truetruefalsefalsefalse');
+  -- link insert
+  PERFORM t_expect('m2: link S after its own child K -> A2L01', pg_temp.lnk(7001, 7002), 'A2L01');
+  PERFORM t_expect('m2: link child K after its own summary S -> A2L01', pg_temp.lnk(7002, 7001), 'A2L01');
+  PERFORM t_expect('m2: link S after its grandchild G -> A2L01', pg_temp.lnk(7001, 7003), 'A2L01');
+  PERFORM t_expect('m2: link grandchild G after S -> A2L01 (typed link too)', pg_temp.lnk(7003, 7001, 'SS'), 'A2L01');
+  PERFORM t_expect('m2: link K after its child G -> A2L01', pg_temp.lnk(7002, 7003, 'FF'), 'A2L01');
+  PERFORM t_expect('m2: the refused links left no row', (SELECT count(*)::text FROM job_task_links WHERE job_id = jm), '0');
+  PERFORM t_expect('m2: the error says what is wrong', (pg_temp.msg('INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id) VALUES (''' || c1 || ''', ''' || jm || ''', pg_temp.tid(7001), pg_temp.tid(7002))') LIKE '%own ancestor or descendant%')::text, 'true');
+  PERFORM t_expect('m2: the writer role is refused the same way', t_dml_api('authenticated', w1,
+    format('INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id) VALUES (%L, %L, %L, %L)', c1, jm, pg_temp.tid(7001), pg_temp.tid(7003))), 'err:A2L01');
+  -- links that stay allowed
+  PERFORM t_expect('m2: link from an outside task into a summary stays allowed', pg_temp.lnk(7001, 7004), 'ok');
+  PERFORM t_expect('m2: link from a summary to an outside task stays allowed', pg_temp.lnk(7005, 7001), 'ok');
+  PERFORM t_expect('m2: link from a leaf under a summary to an outside task stays allowed', pg_temp.lnk(7003, 7004), 'ok');
+  PERFORM t_expect('m2: link between siblings stays allowed', pg_temp.lnk(7006, 7002), 'ok');
+  PERFORM t_expect('m2: link between cousins (K2 and G) stays allowed', pg_temp.lnk(7003, 7006, 'SF'), 'ok');
+  PERFORM t_expect('m2: link between two roots stays allowed', pg_temp.lnk(7005, 7004), 'ok');
+  -- a link across jobs is still refused by the older checks, not masked by this guard
+  PERFORM t_expect('m2: link to a task of another job is still refused (23514)', pg_temp.lnk(7001, 7020), '23514');
+  -- link update (retargeting)
+  PERFORM pg_temp.lnk(7006, 7004);
+  PERFORM t_expect('m2: update: pointing a link at the task''s own parent -> A2L01',
+    pg_temp.try('UPDATE job_task_links SET predecessor_id = pg_temp.tid(7001) WHERE task_id = pg_temp.tid(7006) AND predecessor_id = pg_temp.tid(7004)'), 'A2L01');
+  PERFORM pg_temp.lnk(7005, 7002);
+  PERFORM t_expect('m2: update: moving a link to a task that is the predecessor''s child -> A2L01',
+    pg_temp.try('UPDATE job_task_links SET task_id = pg_temp.tid(7003) WHERE task_id = pg_temp.tid(7005) AND predecessor_id = pg_temp.tid(7002)'), 'A2L01');
+  PERFORM t_expect('m2: update: retargeting to an unrelated task is allowed',
+    pg_temp.try('UPDATE job_task_links SET predecessor_id = pg_temp.tid(7005) WHERE task_id = pg_temp.tid(7006) AND predecessor_id = pg_temp.tid(7004)'), 'ok');
+  PERFORM t_expect('m2: update: lag / type edits are allowed', pg_temp.try('UPDATE job_task_links SET lag_days = 3, link_type = ''FF'' WHERE task_id = pg_temp.tid(7006)'), 'ok');
+  -- a link planted by a DBA (trigger off) stays valid and editable; only moving it onto another related pair is refused
+  ALTER TABLE job_task_links DISABLE TRIGGER job_task_links_hierarchy_guard;
+  PERFORM pg_temp.lnk(7003, 7001);
+  ALTER TABLE job_task_links ENABLE TRIGGER job_task_links_hierarchy_guard;
+  PERFORM t_expect('m2: planted G-after-S link exists', (SELECT count(*)::text FROM job_task_links WHERE task_id = pg_temp.tid(7003) AND predecessor_id = pg_temp.tid(7001)), '1');
+  PERFORM t_expect('m2: a planted link can still have its lag and type edited',
+    pg_temp.try('UPDATE job_task_links SET lag_days = 2, link_type = ''SS'' WHERE task_id = pg_temp.tid(7003) AND predecessor_id = pg_temp.tid(7001)'), 'ok');
+  PERFORM t_expect('m2: ... and a no-op rewrite of its endpoints passes',
+    pg_temp.try('UPDATE job_task_links SET task_id = task_id, predecessor_id = predecessor_id WHERE task_id = pg_temp.tid(7003) AND predecessor_id = pg_temp.tid(7001)'), 'ok');
+  PERFORM t_expect('m2: ... but retargeting it onto another related pair is refused',
+    pg_temp.try('UPDATE job_task_links SET predecessor_id = pg_temp.tid(7002) WHERE task_id = pg_temp.tid(7003) AND predecessor_id = pg_temp.tid(7001)'), 'A2L01');
+  -- re-parenting (A2L02)
+  PERFORM t_expect('m2: reparent: Y under S while S is linked to Y -> A2L02', pg_temp.mv(7005, 7001), 'A2L02');
+  PERFORM t_expect('m2: reparent: X under G while S and G are linked to X -> A2L02', pg_temp.mv(7004, 7003), 'A2L02');
+  PERFORM t_expect('m2: reparent: K (with its child G) under X while G is linked to X -> A2L02', pg_temp.mv(7002, 7004), 'A2L02');
+  PERFORM t_expect('m2: reparent: K2 under K while K2 is linked to K -> A2L02', pg_temp.mv(7006, 7002), 'A2L02');
+  PERFORM pg_temp.ins(7008, jm); PERFORM pg_temp.lnk(7008, 7001);
+  PERFORM t_expect('m2: reparent: task linked to S moved under G (S is only the grandparent chain: G > K > S) -> A2L02', pg_temp.mv(7008, 7003), 'A2L02');
+  PERFORM t_expect('m2: reparent: ... and under K2 (S is its parent) -> A2L02; under the unlinked root Y it is fine', pg_temp.mv(7008, 7006) || '/' || pg_temp.mv(7008, 7005), 'A2L02/ok');
+  PERFORM t_expect('m2: reparent: the refusals changed nothing', pg_temp.par(7005) || pg_temp.par(7004) || (pg_temp.par(7002) = pg_temp.tid(7001)::text)::text || (pg_temp.par(7006) = pg_temp.tid(7001)::text)::text, 'nullnulltruetrue');
+  PERFORM t_expect('m2: reparent: the writer role is refused too', t_dml_api('authenticated', w1,
+    format('UPDATE job_tasks SET parent_task_id = %L WHERE id = %L', pg_temp.tid(7003), pg_temp.tid(7004))), 'err:A2L02');
+  PERFORM t_expect('m2: reparent: cycle and depth errors keep their own codes (the parent guard runs first)',
+    pg_temp.mv(7001, 7003) || '/' || pg_temp.mv(7001, 7002), 'A2H02/A2H02');
+  PERFORM t_expect('m2: reparent: an unlinked task moves freely (under G, to the root, under K2)',
+    pg_temp.ins(7007, jm) || pg_temp.mv(7007, 7003) || pg_temp.mv(7007, NULL) || pg_temp.mv(7007, 7006), 'okokokok');
+  PERFORM t_expect('m2: ... and is then covered by the link guard (A2L01 for a link to its new parent)', pg_temp.lnk(7007, 7006), 'A2L01');
+  PERFORM t_expect('m2: reparent: detaching to the root is always allowed', pg_temp.mv(7006, NULL) || pg_temp.mv(7006, 7001), 'okok');
+  -- only a NEW relation counts: G was already below the (planted) linked S; moving it from K up to S adds no ancestor, and back adds K only
+  PERFORM t_expect('m2: reparent: G from K up to S adds no new ancestor of the planted pair -> allowed', pg_temp.mv(7003, 7001), 'ok');
+  PERFORM t_expect('m2: reparent: G back under K adds only K (not linked to G) -> allowed', pg_temp.mv(7003, 7002), 'ok');
+  PERFORM t_expect('m2: deleting a parent promotes its children and is never refused',
+    pg_temp.try('DELETE FROM job_tasks WHERE id = pg_temp.tid(7002)') || pg_temp.par(7003), 'oknull');
 END $$;
 
 ROLLBACK;

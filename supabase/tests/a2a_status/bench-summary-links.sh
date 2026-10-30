@@ -66,3 +66,13 @@ SQL
     echo
   done
 done
+# r3d M2: the one-link repro (a link joining the summary and one of its own kids) is refused at the INSERT now, so it can no longer be stored
+echo "-- repro: INSERT job_task_links(task = summary, predecessor = its own kid) with the triggers on"
+run -At <<SQL
+DO \$\$ BEGIN
+  INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days, link_type)
+  VALUES ('$CO', 'b7000000-0000-0000-0000-000000000001', $(uid 1), $(uid 2), 0, 'FS');
+  RAISE NOTICE 'REPRO NOT REFUSED';
+EXCEPTION WHEN SQLSTATE 'A2L01' THEN RAISE NOTICE 'REPRO REFUSED with A2L01';
+END \$\$;
+SQL

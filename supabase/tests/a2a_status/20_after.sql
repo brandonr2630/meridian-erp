@@ -275,10 +275,14 @@ BEGIN
     END IF;
   END LOOP;
   PERFORM set_config('session_replication_role', 'origin', true);
+  -- r3d M2: job_task_links_hierarchy_guard refuses a link between a task and its own ancestor / descendant, but job_schedule_status must keep
+  -- giving the same answer for such links already stored (DBA-planted / legacy data): the harness plants them with ONLY that trigger off
+  ALTER TABLE job_task_links DISABLE TRIGGER job_task_links_hierarchy_guard;
   FOR l IN SELECT * FROM jsonb_array_elements(coalesce(j->'links', '[]'::jsonb)) LOOP
     INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days, link_type)
     VALUES (co, jid, uu[array_position(keys, l->>'task')], uu[array_position(keys, l->>'pred')], coalesce((l->>'lag')::int, 0), coalesce(l->>'type', 'FS'));
   END LOOP;
+  ALTER TABLE job_task_links ENABLE TRIGGER job_task_links_hierarchy_guard;
   RETURN pg_temp.st(jid::text, (j->>'today')::date);
 END $$;
 -- a task in ANOTHER job, used as a foreign parent
@@ -1560,6 +1564,15 @@ BEGIN
   PERFORM set_config('session_replication_role', 'origin', true);
   PERFORM t_expect('r3: cyclic links keep the array order (non-settling values unchanged)', pg_temp.st('b1000000-0000-0000-0000-0000000b0002', '2026-03-02'), '1:On track|2027-02-07|null');
   PERFORM t_expect('r3: a summary keeps the array order (non-settling values unchanged)', pg_temp.st('b1000000-0000-0000-0000-0000000b0003', '2026-03-02'), '1:On track|2027-01-29|null');
+END $$;
+
+-- r3d M2: the harness plants ancestor / descendant links with ONLY job_task_links_hierarchy_guard switched off, and switches it back on
+DO $$
+BEGIN
+  PERFORM t_expect('r3d: the link hierarchy guard is enabled again after the planted-link cases',
+    (SELECT tgenabled::text FROM pg_trigger WHERE tgname = 'job_task_links_hierarchy_guard'), 'O');
+  PERFORM t_expect('r3d: a stored summary<->kid link (planted) is still evaluated: one status row, no error',
+    (pg_temp.a2run('{"today":"2026-03-02","job":{"status":"In Progress"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1},{"key":"K","sort_order":2,"parent":"S","start_date":"2026-03-02","end_date":"2026-03-04"}],"links":[{"task":"S","pred":"K"}]}'::jsonb) ~ '^1:')::text, 'true');
 END $$;
 
 DO $$

@@ -369,6 +369,15 @@ BEGIN
   PERFORM t_expect('r3: a summary keeps the array order (non-settling values unchanged)', pg_temp.st('b1000000-0000-0000-0000-0000000b0003', '2026-03-02'), '1:On track|2027-01-29|null');
 END $$;
 
+-- r3d M2: the harness plants ancestor / descendant links with ONLY job_task_links_hierarchy_guard switched off, and switches it back on
+DO $$
+BEGIN
+  PERFORM t_expect('r3d: the link hierarchy guard is enabled again after the planted-link cases',
+    (SELECT tgenabled::text FROM pg_trigger WHERE tgname = 'job_task_links_hierarchy_guard'), 'O');
+  PERFORM t_expect('r3d: a stored summary<->kid link (planted) is still evaluated: one status row, no error',
+    (pg_temp.a2run('{"today":"2026-03-02","job":{"status":"In Progress"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1},{"key":"K","sort_order":2,"parent":"S","start_date":"2026-03-02","end_date":"2026-03-04"}],"links":[{"task":"S","pred":"K"}]}'::jsonb) ~ '^1:')::text, 'true');
+END $$;
+
 DO $$
 BEGIN
 -- @@UNCHECKED@@

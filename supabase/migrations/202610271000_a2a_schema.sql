@@ -143,21 +143,26 @@ REVOKE ALL ON FUNCTION sched_next_uids(uuid, uuid, integer, boolean) FROM PUBLIC
 -- Invoker trigger on purpose: inside a definer function current_user is the function owner, so only that code (and a DBA) passes; an API
 -- session has current_user = authenticated / anon / service_role and no flag can be set by a caller. The client never writes the column
 -- (index.html and schedule-msp.js only read it); import goes through import_job_schedule. A write that leaves msp_uid as it was is allowed.
+-- r3d M1 (rule X26, a uid is never handed out twice in a job): the trigger also fires on job_id changes, and an API role may not move a row that
+-- holds a uid to another job (it would give the target job a uid it may have spent already; a later merge of an older file would match and
+-- overwrite the moved row). A row without a uid may still move. For a task that also has a parent / children A2H05 (hierarchy guard) applies as before.
 CREATE OR REPLACE FUNCTION job_schedule_msp_uid_guard() RETURNS trigger
 LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
 BEGIN
   IF current_user IN ('authenticated', 'anon', 'service_role')
-     AND ((TG_OP = 'INSERT' AND NEW.msp_uid IS NOT NULL) OR (TG_OP = 'UPDATE' AND NEW.msp_uid IS DISTINCT FROM OLD.msp_uid)) THEN
-    RAISE EXCEPTION 'msp_uid is assigned by schedule export / import only' USING ERRCODE = 'A2U01';
+     AND ((TG_OP = 'INSERT' AND NEW.msp_uid IS NOT NULL) OR (TG_OP = 'UPDATE' AND NEW.msp_uid IS DISTINCT FROM OLD.msp_uid)
+         -- r3d M1 (rule X26): a numbered row may not change job, its uid would travel with it (see the comment above)
+         OR (TG_OP = 'UPDATE' AND OLD.msp_uid IS NOT NULL AND NEW.job_id IS DISTINCT FROM OLD.job_id)) THEN
+    RAISE EXCEPTION 'msp_uid is assigned by schedule export / import only (a numbered row cannot change job)' USING ERRCODE = 'A2U01';
   END IF;
   RETURN NEW;
 END $$;
 REVOKE ALL ON FUNCTION job_schedule_msp_uid_guard() FROM PUBLIC, anon, authenticated, service_role;
 DROP TRIGGER IF EXISTS job_phases_msp_uid_guard ON job_phases;
-CREATE TRIGGER job_phases_msp_uid_guard BEFORE INSERT OR UPDATE OF msp_uid ON job_phases
+CREATE TRIGGER job_phases_msp_uid_guard BEFORE INSERT OR UPDATE OF msp_uid, job_id ON job_phases
   FOR EACH ROW EXECUTE FUNCTION job_schedule_msp_uid_guard();
 DROP TRIGGER IF EXISTS job_tasks_msp_uid_guard ON job_tasks;
-CREATE TRIGGER job_tasks_msp_uid_guard BEFORE INSERT OR UPDATE OF msp_uid ON job_tasks
+CREATE TRIGGER job_tasks_msp_uid_guard BEFORE INSERT OR UPDATE OF msp_uid, job_id ON job_tasks
   FOR EACH ROW EXECUTE FUNCTION job_schedule_msp_uid_guard();
 
 -- ===== L3 (review 2): a job with schedule rows keeps its company =====
@@ -252,3 +257,106 @@ END $$;
 DROP TRIGGER IF EXISTS job_tasks_parent_guard ON job_tasks;
 CREATE TRIGGER job_tasks_parent_guard BEFORE INSERT OR UPDATE OF parent_task_id, job_id, company_id ON job_tasks
   FOR EACH ROW EXECUTE FUNCTION job_tasks_parent_guard();
+
+-- ===== r3d M2: no link between a task and its own ancestor / descendant =====
+-- Why: job_schedule_status relaxes links in dependency order and settles in a few passes, but a link that joins a task and its own
+-- summary (or any ancestor / descendant) makes the passes never settle, so it falls back to the slow cyclic path (every pass re-scans the
+-- tasks): 2000 tasks ~2.7 s, 5000 ~17 s from ONE such link. The scheduling meaning of such a link is nil anyway (a summary is derived from
+-- its children), so it is refused at the source. SQLSTATEs (custom class A2, "link"):
+--   A2L01  a link INSERT / retarget (task_id, predecessor_id, job_id changed) would join a task and its own ancestor or descendant
+--   A2L02  a re-parenting (job_tasks.parent_task_id changed) would make an existing link join a task and its own ancestor or descendant
+-- Pre-existing links of that kind (DBA-planted, legacy) stay valid and editable (lag, type); job_schedule_status still evaluates them
+-- unchanged through its cyclic fallback. Only a NEW relation is refused: the re-parent check ignores pairs that were already related.
+-- Serialisation: both triggers take the SAME per-job advisory lock as job_tasks_parent_guard ('job_tasks_parent:' || job_id), so a link
+-- insert and a re-parent of the same job cannot jointly create the forbidden state (each sees the other's committed rows after the lock).
+-- Both are SECURITY DEFINER with a fixed search_path and look only at tasks of the link's / task's own job, so RLS cannot hide a chain
+-- link and the error cannot be used to probe other jobs; trigger functions need no EXECUTE grant (revoked from every API role).
+-- Trigger names sort AFTER the older checks on purpose: job_task_links_company_guard (company/job), then this guard, then
+-- job_task_links_no_cycle (cross-job -> 23514, link cycle); on job_tasks the parent guard (A2H01..06) runs before job_tasks_parent_link_guard.
+-- Walks are bounded (50 levels) so a legacy hierarchy cycle cannot loop.
+CREATE OR REPLACE FUNCTION job_task_links_hierarchy_guard() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE v uuid; n integer;
+BEGIN
+  IF TG_OP = 'UPDATE'
+     AND NEW.task_id IS NOT DISTINCT FROM OLD.task_id AND NEW.predecessor_id IS NOT DISTINCT FROM OLD.predecessor_id
+     AND NEW.job_id IS NOT DISTINCT FROM OLD.job_id THEN
+    RETURN NEW;                                   -- the link's endpoints did not change (lag, type, ...)
+  END IF;
+  IF NEW.task_id = NEW.predecessor_id THEN RETURN NEW; END IF;      -- the CHECK constraint reports a self-link
+
+  PERFORM pg_advisory_xact_lock(hashtextextended('job_tasks_parent:' || NEW.job_id::text, 0));
+
+  -- Two primary-key walks up the parent chain (depth <= 5 by the hierarchy guard; capped at 50 so legacy cycles cannot loop). Plain index
+  -- probes on purpose: a recursive CTE here was planned as a scan of job_tasks (2 ms per link, 6 s for a 3000-link import).
+  v := NEW.task_id; n := 0;                       -- is the predecessor an ancestor of the task?
+  LOOP
+    SELECT t.parent_task_id INTO v FROM job_tasks t WHERE t.id = v AND t.job_id = NEW.job_id;
+    n := n + 1;
+    EXIT WHEN v IS NULL OR n > 50;
+    IF v = NEW.predecessor_id THEN
+      RAISE EXCEPTION 'a link cannot join a task and its own ancestor or descendant: % and %', NEW.task_id, NEW.predecessor_id USING ERRCODE = 'A2L01';
+    END IF;
+  END LOOP;
+  v := NEW.predecessor_id; n := 0;                -- is the task an ancestor of the predecessor?
+  LOOP
+    SELECT t.parent_task_id INTO v FROM job_tasks t WHERE t.id = v AND t.job_id = NEW.job_id;
+    n := n + 1;
+    EXIT WHEN v IS NULL OR n > 50;
+    IF v = NEW.task_id THEN
+      RAISE EXCEPTION 'a link cannot join a task and its own ancestor or descendant: % and %', NEW.task_id, NEW.predecessor_id USING ERRCODE = 'A2L01';
+    END IF;
+  END LOOP;
+  RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION job_task_links_hierarchy_guard() FROM PUBLIC, anon, authenticated, service_role;
+DROP TRIGGER IF EXISTS job_task_links_hierarchy_guard ON job_task_links;
+CREATE TRIGGER job_task_links_hierarchy_guard BEFORE INSERT OR UPDATE OF task_id, predecessor_id, job_id ON job_task_links
+  FOR EACH ROW EXECUTE FUNCTION job_task_links_hierarchy_guard();
+
+-- Re-parenting: task X moves under P. X's subtree D (X and its descendants) gets the new ancestors N = (P and P's ancestors) minus the
+-- ancestors it already had (the old parent and its ancestors). Refused when a link joins a member of D and a member of N.
+CREATE OR REPLACE FUNCTION job_tasks_parent_link_guard() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE v uuid; n integer; v_new uuid[] := ARRAY[]::uuid[]; v_old uuid[] := ARRAY[]::uuid[]; v_desc uuid[]; v_front uuid[];
+BEGIN
+  IF NEW.parent_task_id IS NULL OR NEW.parent_task_id IS NOT DISTINCT FROM OLD.parent_task_id THEN
+    RETURN NEW;                                   -- detached or unchanged: no new ancestor
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtextextended('job_tasks_parent:' || NEW.job_id::text, 0));
+
+  -- new ancestors: the new parent and its ancestors, minus those the subtree already had (old parent and its ancestors). Primary-key walks, capped at 50.
+  v := NEW.parent_task_id; n := 0;
+  WHILE v IS NOT NULL AND n < 50 LOOP
+    v_new := v_new || v;  n := n + 1;
+    SELECT t.parent_task_id INTO v FROM job_tasks t WHERE t.id = v;
+  END LOOP;
+  v := OLD.parent_task_id; n := 0;
+  WHILE v IS NOT NULL AND n < 50 LOOP
+    v_old := v_old || v;  n := n + 1;
+    SELECT t.parent_task_id INTO v FROM job_tasks t WHERE t.id = v;
+  END LOOP;
+  v_new := ARRAY(SELECT DISTINCT x FROM unnest(v_new) x WHERE x <> ALL (v_old));
+  IF cardinality(v_new) = 0 THEN RETURN NEW; END IF;
+
+  -- the moved subtree, level by level through the parent index (capped at 50 levels)
+  v_desc := ARRAY[NEW.id];  v_front := ARRAY[NEW.id];  n := 0;
+  WHILE n < 50 LOOP
+    SELECT coalesce(array_agg(c.id), ARRAY[]::uuid[]) INTO v_front FROM job_tasks c WHERE c.parent_task_id = ANY (v_front);
+    EXIT WHEN cardinality(v_front) = 0;
+    v_desc := v_desc || v_front;  n := n + 1;
+  END LOOP;
+
+  -- a link between a subtree member and a new ancestor: one index probe per member and direction (unique index task_id, predecessor_id / predecessor index)
+  IF EXISTS (SELECT 1 FROM unnest(v_desc) d(id) JOIN job_task_links l ON l.task_id = d.id WHERE l.predecessor_id = ANY (v_new))
+     OR EXISTS (SELECT 1 FROM unnest(v_desc) d(id) JOIN job_task_links l ON l.predecessor_id = d.id WHERE l.task_id = ANY (v_new)) THEN
+    RAISE EXCEPTION 'cannot move task % under %: a link already joins the task (or one of its sub-tasks) and one of its new ancestors', NEW.id, NEW.parent_task_id
+      USING ERRCODE = 'A2L02';
+  END IF;
+  RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION job_tasks_parent_link_guard() FROM PUBLIC, anon, authenticated, service_role;
+DROP TRIGGER IF EXISTS job_tasks_parent_link_guard ON job_tasks;
+CREATE TRIGGER job_tasks_parent_link_guard BEFORE UPDATE OF parent_task_id ON job_tasks
+  FOR EACH ROW EXECUTE FUNCTION job_tasks_parent_link_guard();

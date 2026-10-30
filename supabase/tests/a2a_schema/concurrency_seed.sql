@@ -1,0 +1,6 @@
+-- Committed fixture for concurrency.sh: one job with two root tasks X and Y, no links.
+INSERT INTO jobs (id, company_id, job_no, status) VALUES
+ ('b1000000-0000-0000-0000-0000000000d0','c1000000-0000-0000-0000-000000000001','WO-SCONC','Open');
+INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES
+ ('f1000000-0000-0000-0000-0000000000d1','c1000000-0000-0000-0000-000000000001','b1000000-0000-0000-0000-0000000000d0',1,'X'),
+ ('f1000000-0000-0000-0000-0000000000d2','c1000000-0000-0000-0000-000000000001','b1000000-0000-0000-0000-0000000000d0',2,'Y');
