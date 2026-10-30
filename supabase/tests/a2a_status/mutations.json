@@ -62,26 +62,6 @@
   "reason": "a summary is only scheduled when some kid is, and deriveFwd then sets its end to the latest kid end, so it can never exceed the leaves: the forecast is identical"
  },
  {
-  "name": "parent cycle cut at the wrong edge",
-  "find": "IF nx = ANY (seen) THEN par[k] := 0; EXIT; END IF;",
-  "replace": "IF nx = ANY (seen) THEN par[i] := 0; EXIT; END IF;"
- },
- {
-  "name": "SS into a summary is ignored like a finish-bound link",
-  "find": "IF is_sum[t] AND ty NOT IN ('FS', 'SS') THEN CONTINUE; END IF;",
-  "replace": "IF is_sum[t] AND ty NOT IN ('FS') THEN CONTINUE; END IF;"
- },
- {
-  "name": "FF into a summary is applied to its leaves",
-  "find": "IF is_sum[t] AND ty NOT IN ('FS', 'SS') THEN CONTINUE; END IF;",
-  "replace": "IF is_sum[t] AND ty NOT IN ('FS', 'SS', 'FF') THEN CONTINUE; END IF;"
- },
- {
-  "name": "backward: FF from a summary predecessor ignored",
-  "find": "IF is_sum[p] AND ty NOT IN ('FS', 'FF') THEN CONTINUE; END IF;",
-  "replace": "IF is_sum[p] AND ty NOT IN ('FS') THEN CONTINUE; END IF;"
- },
- {
   "name": "summaries not processed deepest first",
   "find": "ORDER BY depth[g.ix] DESC, g.ix",
   "replace": "ORDER BY g.ix"
@@ -102,18 +82,6 @@
   "name": "the parent column is ignored (no hierarchy at all)",
   "find": "IF k IS NOT NULL AND k <> i THEN par[i] := k; END IF;",
   "replace": "IF FALSE THEN par[i] := k; END IF;"
- },
- {
-  "name": "a pass that does not settle raises instead of stopping",
-  "find": "IF pass > n + 1 THEN EXIT; END IF;",
-  "replace": "IF pass > n + 1 THEN RAISE EXCEPTION 'dependency cycle in job %', p_job_id; END IF;"
- },
- {
-  "name": "summary leaf targets include nested summaries",
-  "find": "IF is_sum[c] THEN CONTINUE; END IF;",
-  "replace": "IF FALSE THEN CONTINUE; END IF;",
-  "equivalent": true,
-  "reason": "a nested summary hit as a target has its es/ef re-derived from its kids at the start of the next pass, so only wasted passes change, never a leaf or the output"
  },
  {
   "name": "undated link participants no longer scheduled (Phase A rule)",
@@ -141,27 +109,199 @@
   "replace": "GREATEST(r.end_date, DATE '2000-01-01')"
  },
  {
-  "name": "r3: link reordering also runs when a summary exists",
-  "find": "IF m > 1 AND NOT EXISTS (SELECT 1 FROM unnest(is_sum) AS u(x) WHERE x) THEN",
-  "replace": "IF m > 1 THEN"
+  "name": "parent cycle cut at the wrong edge",
+  "find": "IF stamp[nx] = i THEN par[k] := 0; EXIT; END IF;",
+  "replace": "IF stamp[nx] = i THEN par[i] := 0; EXIT; END IF;"
  },
  {
-  "name": "r3: link reordering also runs on a cyclic link graph",
-  "find": "IF qt = n THEN ",
-  "replace": "IF TRUE THEN "
+  "name": "SS into a summary is ignored like a finish-bound link (sweep)",
+  "find": "IF is_sum[t] AND ty NOT IN ('FS', 'SS') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN ef[v]",
+  "replace": "IF is_sum[t] AND ty NOT IN ('FS') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN ef[v]"
  },
  {
-  "name": "r3: forward pass walks the links in array order again",
-  "find": "j := fo[jj];",
-  "replace": "j := jj;",
+  "name": "FF into a summary is applied to its leaves (sweep)",
+  "find": "IF is_sum[t] AND ty NOT IN ('FS', 'SS') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN ef[v]",
+  "replace": "IF is_sum[t] AND ty NOT IN ('FS', 'SS', 'FF') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN ef[v]"
+ },
+ {
+  "name": "SS into a summary is ignored like a finish-bound link (pass loop)",
+  "find": "IF is_sum[t] AND ty NOT IN ('FS', 'SS') THEN CONTINUE; END IF;\n        c_lo := CASE WHEN is_sum[t] THEN lo[t]",
+  "replace": "IF is_sum[t] AND ty NOT IN ('FS') THEN CONTINUE; END IF;\n        c_lo := CASE WHEN is_sum[t] THEN lo[t]"
+ },
+ {
+  "name": "FF into a summary is applied to its leaves (pass loop)",
+  "find": "IF is_sum[t] AND ty NOT IN ('FS', 'SS') THEN CONTINUE; END IF;\n        c_lo := CASE WHEN is_sum[t] THEN lo[t]",
+  "replace": "IF is_sum[t] AND ty NOT IN ('FS', 'SS', 'FF') THEN CONTINUE; END IF;\n        c_lo := CASE WHEN is_sum[t] THEN lo[t]"
+ },
+ {
+  "name": "backward: FF from a summary predecessor ignored (sweep)",
+  "find": "IF is_sum[p] AND ty NOT IN ('FS', 'FF') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN ls[v]",
+  "replace": "IF is_sum[p] AND ty NOT IN ('FS') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN ls[v]"
+ },
+ {
+  "name": "backward: SS from a summary predecessor applied (sweep)",
+  "find": "IF is_sum[p] AND ty NOT IN ('FS', 'FF') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN ls[v]",
+  "replace": "IF is_sum[p] AND ty NOT IN ('FS', 'FF', 'SS') THEN CONTINUE; END IF;\n        cand := CASE ty WHEN 'FS' THEN ls[v]"
+ },
+ {
+  "name": "backward: FF from a summary predecessor ignored (pass loop)",
+  "find": "IF is_sum[p] AND ty NOT IN ('FS', 'FF') THEN CONTINUE; END IF;\n        c_lo := CASE WHEN is_sum[p] THEN lo[p]",
+  "replace": "IF is_sum[p] AND ty NOT IN ('FS') THEN CONTINUE; END IF;\n        c_lo := CASE WHEN is_sum[p] THEN lo[p]"
+ },
+ {
+  "name": "backward: SS from a summary predecessor applied (pass loop)",
+  "find": "IF is_sum[p] AND ty NOT IN ('FS', 'FF') THEN CONTINUE; END IF;\n        c_lo := CASE WHEN is_sum[p] THEN lo[p]",
+  "replace": "IF is_sum[p] AND ty NOT IN ('FS', 'FF', 'SS') THEN CONTINUE; END IF;\n        c_lo := CASE WHEN is_sum[p] THEN lo[p]"
+ },
+ {
+  "name": "a forward pass that does not settle raises instead of stopping",
+  "find": "IF pass > n + 1 THEN EXIT; END IF;\n    END LOOP;\n    FOREACH s IN ARRAY sd LOOP",
+  "replace": "IF pass > n + 1 THEN RAISE EXCEPTION 'dependency cycle in job %', p_job_id; END IF;\n    END LOOP;\n    FOREACH s IN ARRAY sd LOOP"
+ },
+ {
+  "name": "a backward pass that does not settle raises instead of stopping",
+  "find": "IF pass > n + 1 THEN EXIT; END IF;\n    END LOOP;\n  END IF;\n\n  -- slack",
+  "replace": "IF pass > n + 1 THEN RAISE EXCEPTION 'dependency cycle in job %', p_job_id; END IF;\n    END LOOP;\n  END IF;\n\n  -- slack"
+ },
+ {
+  "name": "r3 sweep: a cyclic forward graph is swept anyway",
+  "find": "acyc_f := (qt = nd);",
+  "replace": "acyc_f := TRUE;"
+ },
+ {
+  "name": "r3 sweep: a cyclic backward graph is swept anyway",
+  "find": "acyc_b := (qt = nd);",
+  "replace": "acyc_b := TRUE;"
+ },
+ {
+  "name": "r3 sweep: the kid -> summary derive edge is missing",
+  "find": "ne := ne + 1; esrc[ne] := i; edst[ne] := par[i];",
+  "replace": "ne := ne + 1; esrc[ne] := n + par[i]; edst[ne] := par[i];"
+ },
+ {
+  "name": "r3 sweep: the summary-constraint -> kid inherit edge is missing",
+  "find": "ne := ne + 1; esrc[ne] := n + par[i]; edst[ne] := CASE WHEN is_sum[i] THEN n + i ELSE i END;",
+  "replace": "ne := ne + 1; esrc[ne] := n + par[i]; edst[ne] := par[i];"
+ },
+ {
+  "name": "r3 sweep: forward link into a start-bound summary adds no edge (SS)",
+  "find": "v_ok := NOT is_sum[s] OR ty IN ('FS', 'SS');",
+  "replace": "v_ok := NOT is_sum[s];"
+ },
+ {
+  "name": "r3 sweep: backward link into a summary predecessor adds no edge",
+  "find": "v_ok := NOT is_sum[s] OR ty IN ('FS', 'FF');",
+  "replace": "v_ok := NOT is_sum[s];"
+ },
+ {
+  "name": "r3 sweep: a summary constraint is not inherited by nested kids (forward)",
+  "find": "IF effo[par[s]] IS NOT NULL AND (effo[s] IS NULL OR effo[par[s]] > effo[s]) THEN",
+  "replace": "IF FALSE THEN"
+ },
+ {
+  "name": "r3 sweep: a summary constraint takes the smaller value (forward)",
+  "find": "effo[par[s]] > effo[s]) THEN",
+  "replace": "effo[par[s]] < effo[s]) THEN"
+ },
+ {
+  "name": "r3 sweep: a summary constraint takes the larger value (backward)",
+  "find": "effb[par[s]] < effb[s]) THEN",
+  "replace": "effb[par[s]] > effb[s]) THEN"
+ },
+ {
+  "name": "r3 sweep: a leaf ignores the constraint of its summary (forward)",
+  "find": "IF effo[par[v]] > es[v] THEN",
+  "replace": "IF FALSE THEN"
+ },
+ {
+  "name": "r3 sweep: a leaf ignores the constraint of its summary (backward)",
+  "find": "IF effb[par[v]] < lf[v] THEN",
+  "replace": "IF FALSE THEN"
+ },
+ {
+  "name": "r3 sweep: several links into one summary keep the smaller (forward)",
+  "find": "IF ownf[t] IS NULL OR cand > ownf[t] THEN",
+  "replace": "IF ownf[t] IS NULL OR cand < ownf[t] THEN"
+ },
+ {
+  "name": "r3 sweep: several links from one summary keep the larger (backward)",
+  "find": "IF ownb[p] IS NULL OR cand < ownb[p] THEN",
+  "replace": "IF ownb[p] IS NULL OR cand > ownb[p] THEN"
+ },
+ {
+  "name": "r3 sweep: a link into a done leaf is applied",
+  "find": "ELSIF NOT done[t] AND cand > es[t] THEN",
+  "replace": "ELSIF cand > es[t] THEN"
+ },
+ {
+  "name": "r3 pass loop: pruning skips a larger constraint (forward)",
+  "find": "cand <= fapp[t] THEN CONTINUE;",
+  "replace": "cand >= fapp[t] THEN CONTINUE;"
+ },
+ {
+  "name": "r3 pass loop: pruning skips a smaller constraint (backward)",
+  "find": "cand >= bapp[p] THEN CONTINUE;",
+  "replace": "cand <= bapp[p] THEN CONTINUE;"
+ },
+ {
+  "name": "r3 pass loop: pruning removed (forward)",
+  "find": "IF is_sum[t] AND fapp[t] IS NOT NULL AND cand <= fapp[t] THEN CONTINUE; END IF;",
+  "replace": "NULL;",
   "equivalent": true,
-  "reason": "performance only: with no summary and no link cycle the fixpoint is unique and independent of link order (the n+1 cut-off cannot fire), so output is identical; the 2000-task reversed-chain timing in bench-reversed-chain.sh is the check"
+  "reason": "performance only: when cand <= fapp[t] every leaf of t already starts at or after cand, so the leaf loop changes nothing; output is identical, only the work differs (bench-summary-links.sh cyclic variant)"
  },
  {
-  "name": "r3: backward pass walks the links in array order again",
-  "find": "j := bo[jj];",
-  "replace": "j := jj;",
+  "name": "r3 pass loop: pruning removed (backward)",
+  "find": "IF is_sum[p] AND bapp[p] IS NOT NULL AND cand >= bapp[p] THEN CONTINUE; END IF;",
+  "replace": "NULL;",
   "equivalent": true,
-  "reason": "performance only, same argument as the forward pass; covered by the bench-reversed-chain.sh timing, not by output"
+  "reason": "performance only, same argument as the forward pruning (bench-summary-links.sh cyclic variant)"
+ },
+ {
+  "name": "r3 pass loop: leaves after p keep the value from before p was raised (forward)",
+  "find": "cand1 := cand + CASE ty WHEN 'FS' THEN ef[p] - f0 ELSE es[p] - e0 END;",
+  "replace": "cand1 := cand;"
+ },
+ {
+  "name": "r3 pass loop: leaves after t keep the value from before t was lowered (backward)",
+  "find": "cand1 := cand + CASE ty WHEN 'FS' THEN ls[t] - e0 ELSE lf[t] - f0 END;",
+  "replace": "cand1 := cand;"
+ },
+ {
+  "name": "r3 pass loop: the leaf p itself also sees the raised value (forward)",
+  "find": "candc := CASE WHEN c > p THEN cand1 ELSE cand END;",
+  "replace": "candc := CASE WHEN c >= p THEN cand1 ELSE cand END;"
+ },
+ {
+  "name": "r3 pass loop: the leaf t itself also sees the lowered value (backward)",
+  "find": "candc := CASE WHEN c > t THEN cand1 ELSE cand END;",
+  "replace": "candc := CASE WHEN c >= t THEN cand1 ELSE cand END;"
+ },
+ {
+  "name": "r3 pass loop: a done leaf p is raised by a link into its own summary",
+  "find": "AND NOT done[p] AND cand > es[p] THEN",
+  "replace": "AND cand > es[p] THEN"
+ },
+ {
+  "name": "r3 hierarchy: depth not tracked (summaries not deepest first)",
+  "find": "depth[c] := depth[k] + 1;",
+  "replace": "depth[c] := 0;"
+ },
+ {
+  "name": "r3 hierarchy: the leaf range of a summary ends one leaf early",
+  "find": "hi[k] := nl; sp := sp - 1;",
+  "replace": "hi[k] := nl - 1; sp := sp - 1;"
+ },
+ {
+  "name": "r3 hierarchy: the parent-cycle shortcut stops at unproven chains",
+  "find": "IF okp[nx] THEN EXIT; END IF;",
+  "replace": "IF okp[nx] THEN par[k] := 0; EXIT; END IF;"
+ },
+ {
+  "name": "r3 hierarchy: parent-cycle shortcut removed",
+  "find": "IF okp[nx] THEN EXIT; END IF;",
+  "replace": "NULL;",
+  "equivalent": true,
+  "reason": "performance only: walking on from a chain already proven to reach a root finds no cycle (it cannot contain a node of the current walk), so the cut set is identical; covered by the deep-nesting timing in bench-summary-links.sh"
  }
 ]

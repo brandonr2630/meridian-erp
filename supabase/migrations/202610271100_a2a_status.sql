@@ -20,6 +20,13 @@
 --   * a pass that does not settle (n+1 passes) STOPS and carries on with the values so far, as JS does ('cycle' warning), instead
 --     of raising: a leaf linked to its own summary is reachable through the hierarchy (the link trigger only sees link cycles),
 --     and a status function that raises would break the dashboard and the nightly snapshot for the whole job.
+--   * r3 performance (behaviour-preserving). A link into a summary used to re-scan every task, with a parent-chain walk, per link and per pass,
+--     and a chain listed against its direction needs ~n passes: a writer could make the function exceed statement_timeout (601 tasks / 599
+--     links: 13 s). Now: kids / leaf-range tables are built once; when the value-flow graph of a direction is acyclic the fixpoint is unique and
+--     ONE sweep in topological order computes it (links into a summary are folded into a per-summary bound that its leaves inherit); when it
+--     is cyclic (only possible through the hierarchy, e.g. a leaf linked to its own summary) the original pass loop runs unchanged, with exact
+--     ascending-leaf-order semantics kept and an exact prune (a bound already applied to every leaf of a summary is not re-applied).
+--     Tests: tests/a2a_status/{bench-summary-links.sh,diff-vs-old.sh,pin-old.sh}, pinned r3 cases in 20_after.sql.
 CREATE OR REPLACE FUNCTION job_schedule_status(
   p_job_id uuid,
   p_today  date DEFAULT (timezone('America/Port_of_Spain', now()))::date)
@@ -35,7 +42,10 @@ DECLARE
   lt int[] := '{}'; lp int[] := '{}'; llag int[] := '{}'; lty text[] := '{}';
   pids uuid[] := '{}'; par int[] := '{}'; is_sum boolean[] := '{}'; depth int[] := '{}';
   sd int[]; sumids uuid[] := '{}'; seen int[];
-  fo int[]; bo int[]; jj int; indeg int[]; outc int[]; ostart int[]; olnk int[]; q int[]; rk int[]; qh int; qt int;   -- r3 link-order helpers
+  jj int; ne int; nd int; dr int; e int; v int; qq int; qh int; qt int; nl int; sp int;                       -- r3 helpers
+  kc int[]; kst int[]; kl int[]; lo int[]; hi int[]; lv int[]; stk int[]; kp int[]; lpos int[]; okp boolean[]; stamp int[]; cand1 date; candc date;
+  esrc int[]; edst int[]; indeg int[]; ocnt int[]; ost int[]; oe int[]; q int[]; ford int[]; bord int[]; acyc_f boolean; acyc_b boolean;
+  fps int[]; fpl int[]; bss int[]; bsl int[]; ownf date[]; effo date[]; ownb date[]; effb date[]; fapp date[]; bapp date[];
   c int; c_lo int; c_hi int; k int; nx int; s int; ty text; e0 date; f0 date; b0 date; v_all boolean; v_any boolean; v_ok boolean;
   r record; v_changed boolean; cand date; v_deadline date; v_fe date; v_minslack int;
   v_overall numeric; v_planned numeric; v_has_bl boolean; v_base_end date; v_slip int; v_gap numeric;
@@ -92,111 +102,211 @@ BEGIN
       IF k IS NOT NULL AND k <> i THEN par[i] := k; END IF;
     END IF;
   END LOOP;
-  FOR i IN 1..n LOOP                                -- cut a parent cycle: drop the edge that closes the loop
-    seen := ARRAY[i]; k := i;
+  okp := array_fill(false, ARRAY[n]); stamp := array_fill(0, ARRAY[n]);
+  FOR i IN 1..n LOOP                                -- cut a parent cycle: drop the edge that closes the loop (a chain already known to reach a root is not walked again: linear)
+    IF okp[i] THEN CONTINUE; END IF;
+    stamp[i] := i; k := i;
     WHILE par[k] <> 0 LOOP
       nx := par[k];
-      IF nx = ANY (seen) THEN par[k] := 0; EXIT; END IF;
-      seen := seen || nx; k := nx;
+      IF okp[nx] THEN EXIT; END IF;
+      IF stamp[nx] = i THEN par[k] := 0; EXIT; END IF;
+      stamp[nx] := i; k := nx;
     END LOOP;
+    k := i;
+    WHILE k <> 0 AND NOT okp[k] LOOP okp[k] := true; k := par[k]; END LOOP;
   END LOOP;
   FOR i IN 1..n LOOP IF par[i] <> 0 THEN is_sum[par[i]] := true; END IF; END LOOP;
+  -- r3 summary perf: kids of every task (CSR, ascending index) and, per task, the contiguous range lo..hi of its LEAF descendants in
+  -- the leaf list lv (depth-first order), so "every leaf under summary t" is a slice, not a scan of all tasks with a parent-chain walk.
+  kc := array_fill(0, ARRAY[n + 1]); kst := array_fill(0, ARRAY[n + 1]); kl := array_fill(0, ARRAY[n]);
+  FOR i IN 1..n LOOP IF par[i] <> 0 THEN kc[par[i]] := kc[par[i]] + 1; END IF; END LOOP;
+  kst[1] := 1;
+  FOR i IN 1..n LOOP kst[i + 1] := kst[i] + kc[i]; kc[i] := 0; END LOOP;
+  FOR i IN 1..n LOOP IF par[i] <> 0 THEN kl[kst[par[i]] + kc[par[i]]] := i; kc[par[i]] := kc[par[i]] + 1; END IF; END LOOP;
+  lo := array_fill(0, ARRAY[n]); hi := array_fill(0, ARRAY[n]); lv := array_fill(0, ARRAY[n]); lpos := array_fill(0, ARRAY[n]);
+  stk := array_fill(0, ARRAY[n]); kp := array_fill(0, ARRAY[n]); nl := 0;
   FOR i IN 1..n LOOP
-    k := par[i];
-    WHILE k <> 0 LOOP depth[i] := depth[i] + 1; k := par[k]; END LOOP;
+    IF par[i] <> 0 THEN CONTINUE; END IF;
+    sp := 1; stk[1] := i; lo[i] := nl + 1; kp[i] := kst[i];
+    IF NOT is_sum[i] THEN nl := nl + 1; lv[nl] := i; lpos[i] := nl; END IF;
+    WHILE sp > 0 LOOP
+      k := stk[sp];
+      IF kp[k] < kst[k + 1] THEN
+        c := kl[kp[k]]; kp[k] := kp[k] + 1;
+        sp := sp + 1; stk[sp] := c; kp[c] := kst[c]; lo[c] := nl + 1; depth[c] := depth[k] + 1;
+        IF NOT is_sum[c] THEN nl := nl + 1; lv[nl] := c; lpos[c] := nl; END IF;
+      ELSE
+        hi[k] := nl; sp := sp - 1;
+      END IF;
+    END LOOP;
   END LOOP;
   -- summaries, deepest first, so a parent derives from finished children
   sd := ARRAY(SELECT g.ix FROM generate_series(1, n) AS g(ix) WHERE is_sum[g.ix] ORDER BY depth[g.ix] DESC, g.ix);
   FOR i IN 1..n LOOP IF is_sum[i] THEN sumids := sumids || ids[i]; END IF; END LOOP;
   FOREACH s IN ARRAY sd LOOP
     v_all := true; v_any := false;
-    FOR c IN 1..n LOOP
-      IF par[c] = s THEN
-        IF NOT done[c] THEN v_all := false; END IF;
-        IF sched[c] THEN v_any := true; END IF;
-      END IF;
+    FOR jj IN kst[s]..kst[s + 1] - 1 LOOP
+      c := kl[jj];
+      IF NOT done[c] THEN v_all := false; END IF;
+      IF sched[c] THEN v_any := true; END IF;
     END LOOP;
     done[s] := v_all; sched[s] := v_any;
   END LOOP;
 
-  -- r3 perf: the passes below relax the links in array order, so a chain listed against its direction (each predecessor appears
-  -- later) advances one step per pass: O(n) passes x O(m) links. With NO summaries and NO link cycle the fixpoint is unique and
-  -- reached in <= n passes either way (the "n+1 passes" cut-off can never fire), so any link order gives identical results;
-  -- fo / bo are then the links in dependency order (forward: successors in topological order; backward: reverse), which settles in
-  -- one pass plus the confirming one. Otherwise (a summary exists, or the links are cyclic) fo = bo = array order, exactly as before.
-  fo := ARRAY(SELECT g FROM generate_series(1, m) AS g); bo := fo;
-  IF m > 1 AND NOT EXISTS (SELECT 1 FROM unnest(is_sum) AS u(x) WHERE x) THEN
-    indeg := array_fill(0, ARRAY[n]); outc := array_fill(0, ARRAY[n + 1]); ostart := array_fill(0, ARRAY[n + 1]);
-    olnk := array_fill(0, ARRAY[m]); rk := array_fill(0, ARRAY[n]); q := array_fill(0, ARRAY[n]);
-    FOR j IN 1..m LOOP indeg[lt[j]] := indeg[lt[j]] + 1; outc[lp[j]] := outc[lp[j]] + 1; END LOOP;
-    ostart[1] := 1;
-    FOR i IN 1..n LOOP ostart[i + 1] := ostart[i] + outc[i]; outc[i] := 0; END LOOP;       -- CSR of links by predecessor
-    FOR j IN 1..m LOOP olnk[ostart[lp[j]] + outc[lp[j]]] := j; outc[lp[j]] := outc[lp[j]] + 1; END LOOP;
+  -- r3 order: links by predecessor (fps/fpl) and by successor (bss/bsl), CSR.
+  fps := array_fill(0, ARRAY[n + 1]); fpl := array_fill(0, ARRAY[m]); bss := array_fill(0, ARRAY[n + 1]); bsl := array_fill(0, ARRAY[m]);
+  ocnt := array_fill(0, ARRAY[n + 1]);
+  FOR j IN 1..m LOOP ocnt[lp[j]] := ocnt[lp[j]] + 1; END LOOP;
+  fps[1] := 1;
+  FOR i IN 1..n LOOP fps[i + 1] := fps[i] + ocnt[i]; ocnt[i] := 0; END LOOP;
+  FOR j IN 1..m LOOP fpl[fps[lp[j]] + ocnt[lp[j]]] := j; ocnt[lp[j]] := ocnt[lp[j]] + 1; END LOOP;
+  ocnt := array_fill(0, ARRAY[n + 1]);
+  FOR j IN 1..m LOOP ocnt[lt[j]] := ocnt[lt[j]] + 1; END LOOP;
+  bss[1] := 1;
+  FOR i IN 1..n LOOP bss[i + 1] := bss[i] + ocnt[i]; ocnt[i] := 0; END LOOP;
+  FOR j IN 1..m LOOP bsl[bss[lt[j]] + ocnt[lt[j]]] := j; ocnt[lt[j]] := ocnt[lt[j]] + 1; END LOOP;
+
+  -- r3 order: the value-flow graph of each pass direction, nodes 1..n = a task (a summary: its derived span) and n+s = the constraints
+  -- that links INTO summary s put on all its leaves. Forward edges: predecessor -> successor (-> n+s when the successor is a summary and
+  -- the type is start-bound), kid -> summary (derive), n+s -> every kid (leaf kid, or n+kid for a summary kid). Backward: successor ->
+  -- predecessor (FS/FF into a summary predecessor), the same derive and inherit edges. Acyclic => the fixpoint is unique and one sweep in
+  -- topological order computes it exactly (the n+1 pass cut-off cannot fire: the longest chain has <= n+1 edges). Cyclic (a leaf
+  -- linked to its own summary: reachable through the hierarchy) => the original pass loop below, so non-settling values are unchanged.
+  nd := 2 * n;
+  esrc := array_fill(0, ARRAY[GREATEST(m + 2 * n, 1)]); edst := array_fill(0, ARRAY[GREATEST(m + 2 * n, 1)]);
+  FOR dr IN 1..2 LOOP
+    ne := 0;
+    FOR j IN 1..m LOOP
+      IF dr = 1 THEN s := lt[j]; c := lp[j]; ty := lty[j]; v_ok := NOT is_sum[s] OR ty IN ('FS', 'SS');   -- s = target, c = source
+      ELSE           s := lp[j]; c := lt[j]; ty := lty[j]; v_ok := NOT is_sum[s] OR ty IN ('FS', 'FF'); END IF;
+      IF v_ok THEN ne := ne + 1; esrc[ne] := c; edst[ne] := CASE WHEN is_sum[s] THEN n + s ELSE s END; END IF;
+    END LOOP;
+    FOR i IN 1..n LOOP
+      IF par[i] <> 0 THEN
+        ne := ne + 1; esrc[ne] := i; edst[ne] := par[i];
+        ne := ne + 1; esrc[ne] := n + par[i]; edst[ne] := CASE WHEN is_sum[i] THEN n + i ELSE i END;
+      END IF;
+    END LOOP;
+    indeg := array_fill(0, ARRAY[GREATEST(nd, 1)]); ocnt := array_fill(0, ARRAY[GREATEST(nd, 1) + 1]);
+    ost := array_fill(0, ARRAY[GREATEST(nd, 1) + 1]); oe := array_fill(0, ARRAY[GREATEST(ne, 1)]); q := array_fill(0, ARRAY[GREATEST(nd, 1)]);
+    FOR e IN 1..ne LOOP indeg[edst[e]] := indeg[edst[e]] + 1; ocnt[esrc[e]] := ocnt[esrc[e]] + 1; END LOOP;
+    ost[1] := 1;
+    FOR i IN 1..nd LOOP ost[i + 1] := ost[i] + ocnt[i]; ocnt[i] := 0; END LOOP;
+    FOR e IN 1..ne LOOP oe[ost[esrc[e]] + ocnt[esrc[e]]] := edst[e]; ocnt[esrc[e]] := ocnt[esrc[e]] + 1; END LOOP;
     qt := 0;                                                                              -- Kahn's algorithm
-    FOR i IN 1..n LOOP IF indeg[i] = 0 THEN qt := qt + 1; q[qt] := i; END IF; END LOOP;
+    FOR i IN 1..nd LOOP IF indeg[i] = 0 THEN qt := qt + 1; q[qt] := i; END IF; END LOOP;
     qh := 1;
     WHILE qh <= qt LOOP
-      i := q[qh]; rk[i] := qh; qh := qh + 1;
-      FOR jj IN ostart[i]..ostart[i + 1] - 1 LOOP
-        j := olnk[jj]; indeg[lt[j]] := indeg[lt[j]] - 1;
-        IF indeg[lt[j]] = 0 THEN qt := qt + 1; q[qt] := lt[j]; END IF;
+      i := q[qh]; qh := qh + 1;
+      FOR e IN ost[i]..ost[i + 1] - 1 LOOP
+        indeg[oe[e]] := indeg[oe[e]] - 1;
+        IF indeg[oe[e]] = 0 THEN qt := qt + 1; q[qt] := oe[e]; END IF;
       END LOOP;
     END LOOP;
-    IF qt = n THEN                                                                        -- acyclic: reorder
-      fo := ARRAY(SELECT g FROM generate_series(1, m) AS g ORDER BY rk[lt[g]], g);
-      bo := ARRAY(SELECT g FROM generate_series(1, m) AS g ORDER BY rk[lt[g]] DESC, g);
-    END IF;
-  END IF;
+    IF dr = 1 THEN ford := q[1:qt]; acyc_f := (qt = nd); ELSE bord := q[1:qt]; acyc_b := (qt = nd); END IF;
+  END LOOP;
 
-  -- forward pass (relaxation over links; a pass that does not settle stops, like JS). A summary predecessor uses its derived
-  -- start/end; a link INTO a summary constrains every leaf of it for FS/SS and is ignored for FF/SF.
-  pass := 0;
-  LOOP
-    v_changed := false;
-    FOREACH s IN ARRAY sd LOOP                      -- deriveFwd: summary span = min start / max end of its scheduled kids
+  -- forward pass. A summary predecessor uses its derived start/end; a link INTO a summary constrains every leaf of it for FS/SS and is
+  -- ignored for FF/SF.
+  IF acyc_f THEN
+    -- one sweep in topological order. A node is final when reached: a leaf has received every link and every ancestor-summary
+    -- constraint (effo, own link constraints of the summary maxed with its parent's), a summary derives from its kids (deriveFwd).
+    ownf := array_fill(NULL::date, ARRAY[n]); effo := array_fill(NULL::date, ARRAY[n]);
+    FOREACH v IN ARRAY ford LOOP
+      IF v > n THEN
+        s := v - n;
+        IF is_sum[s] THEN
+          effo[s] := ownf[s];
+          IF par[s] <> 0 THEN
+            IF effo[par[s]] IS NOT NULL AND (effo[s] IS NULL OR effo[par[s]] > effo[s]) THEN effo[s] := effo[par[s]]; END IF;
+          END IF;
+        END IF;
+        CONTINUE;
+      END IF;
+      IF is_sum[v] THEN
+        e0 := NULL; f0 := NULL;
+        FOR jj IN kst[v]..kst[v + 1] - 1 LOOP
+          c := kl[jj];
+          IF sched[c] THEN
+            IF e0 IS NULL OR es[c] < e0 THEN e0 := es[c]; END IF;
+            IF f0 IS NULL OR ef[c] > f0 THEN f0 := ef[c]; END IF;
+          END IF;
+        END LOOP;
+        IF e0 IS NOT NULL THEN es[v] := e0; ef[v] := f0; END IF;
+      ELSIF par[v] <> 0 AND sched[v] AND NOT done[v] THEN
+        IF effo[par[v]] > es[v] THEN es[v] := effo[par[v]]; ef[v] := es[v] + rem[v]; END IF;
+      END IF;
+      FOR jj IN fps[v]..fps[v + 1] - 1 LOOP           -- the links that have v as predecessor
+        j := fpl[jj]; t := lt[j]; ty := lty[j];
+        IF NOT (sched[t] AND sched[v] AND ef[v] IS NOT NULL) THEN CONTINUE; END IF;
+        IF is_sum[t] AND ty NOT IN ('FS', 'SS') THEN CONTINUE; END IF;
+        cand := CASE ty WHEN 'FS' THEN ef[v] + llag[j]
+                        WHEN 'SS' THEN es[v] + llag[j]
+                        WHEN 'FF' THEN ef[v] + llag[j] - rem[t]
+                        ELSE           es[v] + llag[j] - rem[t] END;
+        IF is_sum[t] THEN
+          IF ownf[t] IS NULL OR cand > ownf[t] THEN ownf[t] := cand; END IF;
+        ELSIF NOT done[t] AND cand > es[t] THEN
+          es[t] := cand; ef[t] := cand + rem[t];
+        END IF;
+      END LOOP;
+    END LOOP;
+  ELSE
+    fapp := array_fill(NULL::date, ARRAY[n]);       -- fapp[t]: a constraint already applied to ALL leaves of summary t (they are all >= it: starts only grow)
+    pass := 0;
+    LOOP
+      v_changed := false;
+      FOREACH s IN ARRAY sd LOOP                    -- deriveFwd: summary span = min start / max end of its scheduled kids
+        e0 := NULL; f0 := NULL;
+        FOR jj IN kst[s]..kst[s + 1] - 1 LOOP
+          c := kl[jj];
+          IF sched[c] THEN
+            IF e0 IS NULL OR es[c] < e0 THEN e0 := es[c]; END IF;
+            IF f0 IS NULL OR ef[c] > f0 THEN f0 := ef[c]; END IF;
+          END IF;
+        END LOOP;
+        IF e0 IS NOT NULL THEN es[s] := e0; ef[s] := f0; END IF;
+      END LOOP;
+      FOR j IN 1..m LOOP
+        t := lt[j]; p := lp[j]; ty := lty[j];
+        IF NOT (sched[t] AND sched[p] AND ef[p] IS NOT NULL) THEN CONTINUE; END IF;
+        IF is_sum[t] AND ty NOT IN ('FS', 'SS') THEN CONTINUE; END IF;
+        c_lo := CASE WHEN is_sum[t] THEN lo[t] ELSE 1 END; c_hi := CASE WHEN is_sum[t] THEN hi[t] ELSE 1 END;
+        c := CASE WHEN is_sum[t] THEN lv[c_lo] ELSE t END;
+        cand := CASE ty WHEN 'FS' THEN ef[p] + llag[j]
+                        WHEN 'SS' THEN es[p] + llag[j]
+                        WHEN 'FF' THEN ef[p] + llag[j] - rem[c]
+                        ELSE           es[p] + llag[j] - rem[c] END;   -- for a summary target (FS/SS only) the value does not depend on the leaf
+        IF is_sum[t] AND fapp[t] IS NOT NULL AND cand <= fapp[t] THEN CONTINUE; END IF;
+        cand1 := cand;                              -- the value the leaves AFTER p (higher index) see, when p is itself one of the leaves
+        IF is_sum[t] AND NOT is_sum[p] AND lpos[p] BETWEEN c_lo AND c_hi AND NOT done[p] AND cand > es[p] THEN
+          e0 := es[p]; f0 := ef[p]; es[p] := cand; ef[p] := cand + rem[p]; v_changed := true;
+          cand1 := cand + CASE ty WHEN 'FS' THEN ef[p] - f0 ELSE es[p] - e0 END;
+        END IF;
+        FOR qq IN c_lo..c_hi LOOP                   -- leaves in ascending index order matter only through p, handled above
+          c := CASE WHEN is_sum[t] THEN lv[qq] ELSE t END;
+          IF NOT sched[c] OR done[c] THEN CONTINUE; END IF;
+          candc := CASE WHEN c > p THEN cand1 ELSE cand END;
+          IF candc > es[c] THEN es[c] := candc; ef[c] := candc + rem[c]; v_changed := true; END IF;
+        END LOOP;
+        IF is_sum[t] THEN fapp[t] := cand; END IF;
+      END LOOP;
+      EXIT WHEN NOT v_changed;
+      pass := pass + 1;
+      IF pass > n + 1 THEN EXIT; END IF;
+    END LOOP;
+    FOREACH s IN ARRAY sd LOOP                      -- deriveFwd once more, on the settled values
       e0 := NULL; f0 := NULL;
-      FOR c IN 1..n LOOP
-        IF par[c] = s AND sched[c] THEN
+      FOR jj IN kst[s]..kst[s + 1] - 1 LOOP
+        c := kl[jj];
+        IF sched[c] THEN
           IF e0 IS NULL OR es[c] < e0 THEN e0 := es[c]; END IF;
           IF f0 IS NULL OR ef[c] > f0 THEN f0 := ef[c]; END IF;
         END IF;
       END LOOP;
       IF e0 IS NOT NULL THEN es[s] := e0; ef[s] := f0; END IF;
     END LOOP;
-    FOR jj IN 1..m LOOP
-      j := fo[jj];
-      t := lt[j]; p := lp[j]; ty := lty[j];
-      IF NOT (sched[t] AND sched[p] AND ef[p] IS NOT NULL) THEN CONTINUE; END IF;
-      IF is_sum[t] AND ty NOT IN ('FS', 'SS') THEN CONTINUE; END IF;
-      c_lo := CASE WHEN is_sum[t] THEN 1 ELSE t END; c_hi := CASE WHEN is_sum[t] THEN n ELSE t END;
-      FOR c IN c_lo..c_hi LOOP
-        IF is_sum[t] THEN                           -- targets = the leaf descendants of the summary t
-          IF is_sum[c] THEN CONTINUE; END IF;
-          k := par[c]; WHILE k <> 0 AND k <> t LOOP k := par[k]; END LOOP;
-          IF k <> t THEN CONTINUE; END IF;
-        END IF;
-        IF NOT sched[c] OR done[c] THEN CONTINUE; END IF;
-        cand := CASE ty WHEN 'FS' THEN ef[p] + llag[j]
-                        WHEN 'SS' THEN es[p] + llag[j]
-                        WHEN 'FF' THEN ef[p] + llag[j] - rem[c]
-                        ELSE           es[p] + llag[j] - rem[c] END;
-        IF cand > es[c] THEN es[c] := cand; ef[c] := cand + rem[c]; v_changed := true; END IF;
-      END LOOP;
-    END LOOP;
-    EXIT WHEN NOT v_changed;
-    pass := pass + 1;
-    IF pass > n + 1 THEN EXIT; END IF;
-  END LOOP;
-  FOREACH s IN ARRAY sd LOOP                        -- deriveFwd once more, on the settled values
-    e0 := NULL; f0 := NULL;
-    FOR c IN 1..n LOOP
-      IF par[c] = s AND sched[c] THEN
-        IF e0 IS NULL OR es[c] < e0 THEN e0 := es[c]; END IF;
-        IF f0 IS NULL OR ef[c] > f0 THEN f0 := ef[c]; END IF;
-      END IF;
-    END LOOP;
-    IF e0 IS NOT NULL THEN es[s] := e0; ef[s] := f0; END IF;
-  END LOOP;
+  END IF;
 
   SELECT max(ef[g.ix]) INTO v_fe FROM generate_subscripts(ef, 1) AS g(ix) WHERE sched[g.ix] AND NOT is_sum[g.ix];
   v_deadline := coalesce(v_due, v_fe);
@@ -205,44 +315,95 @@ BEGIN
   FOR i IN 1..n LOOP
     IF sched[i] AND NOT done[i] AND NOT is_sum[i] THEN lf[i] := v_deadline; ls[i] := v_deadline - rem[i]; END IF;
   END LOOP;
-  pass := 0;
-  LOOP
-    v_changed := false;
-    FOREACH s IN ARRAY sd LOOP                      -- deriveBwd: min late start / max late finish of incomplete scheduled kids
-      b0 := NULL; f0 := NULL;
-      FOR c IN 1..n LOOP
-        IF par[c] = s AND sched[c] AND NOT done[c] THEN
-          IF b0 IS NULL OR ls[c] < b0 THEN b0 := ls[c]; END IF;
-          IF f0 IS NULL OR lf[c] > f0 THEN f0 := lf[c]; END IF;
+  IF acyc_b THEN
+    -- one sweep in topological order of the backward graph (see the forward sweep): a task is final when reached.
+    ownb := array_fill(NULL::date, ARRAY[n]); effb := array_fill(NULL::date, ARRAY[n]);
+    FOREACH v IN ARRAY bord LOOP
+      IF v > n THEN
+        s := v - n;
+        IF is_sum[s] THEN
+          effb[s] := ownb[s];
+          IF par[s] <> 0 THEN
+            IF effb[par[s]] IS NOT NULL AND (effb[s] IS NULL OR effb[par[s]] < effb[s]) THEN effb[s] := effb[par[s]]; END IF;
+          END IF;
+        END IF;
+        CONTINUE;
+      END IF;
+      IF is_sum[v] THEN                             -- deriveBwd: min late start / max late finish of incomplete scheduled kids
+        b0 := NULL; f0 := NULL;
+        FOR jj IN kst[v]..kst[v + 1] - 1 LOOP
+          c := kl[jj];
+          IF sched[c] AND NOT done[c] THEN
+            IF b0 IS NULL OR ls[c] < b0 THEN b0 := ls[c]; END IF;
+            IF f0 IS NULL OR lf[c] > f0 THEN f0 := lf[c]; END IF;
+          END IF;
+        END LOOP;
+        IF b0 IS NOT NULL THEN ls[v] := b0; lf[v] := f0; END IF;
+      ELSIF par[v] <> 0 AND sched[v] AND NOT done[v] THEN
+        IF effb[par[v]] < lf[v] THEN lf[v] := effb[par[v]]; ls[v] := lf[v] - rem[v]; END IF;
+      END IF;
+      FOR jj IN bss[v]..bss[v + 1] - 1 LOOP         -- the links that have v as successor
+        j := bsl[jj]; p := lp[j]; ty := lty[j];
+        IF NOT (sched[v] AND sched[p] AND NOT done[v] AND NOT done[p]) THEN CONTINUE; END IF;
+        IF ls[v] IS NULL OR lf[v] IS NULL THEN CONTINUE; END IF;
+        IF is_sum[p] AND ty NOT IN ('FS', 'FF') THEN CONTINUE; END IF;
+        cand := CASE ty WHEN 'FS' THEN ls[v] - llag[j]
+                        WHEN 'FF' THEN lf[v] - llag[j]
+                        WHEN 'SS' THEN ls[v] - llag[j] + rem[p]
+                        ELSE           lf[v] - llag[j] + rem[p] END;
+        IF is_sum[p] THEN
+          IF ownb[p] IS NULL OR cand < ownb[p] THEN ownb[p] := cand; END IF;
+        ELSIF cand < lf[p] THEN
+          lf[p] := cand; ls[p] := cand - rem[p];
         END IF;
       END LOOP;
-      IF b0 IS NOT NULL THEN ls[s] := b0; lf[s] := f0; END IF;
     END LOOP;
-    FOR jj IN 1..m LOOP
-      j := bo[jj];
-      t := lt[j]; p := lp[j]; ty := lty[j];         -- t = successor, p = predecessor
-      IF NOT (sched[t] AND sched[p] AND NOT done[t] AND NOT done[p]) THEN CONTINUE; END IF;
-      IF ls[t] IS NULL OR lf[t] IS NULL THEN CONTINUE; END IF;
-      IF is_sum[p] AND ty NOT IN ('FS', 'FF') THEN CONTINUE; END IF;
-      c_lo := CASE WHEN is_sum[p] THEN 1 ELSE p END; c_hi := CASE WHEN is_sum[p] THEN n ELSE p END;
-      FOR c IN c_lo..c_hi LOOP
-        IF is_sum[p] THEN                           -- targets = the leaf descendants of the summary p
-          IF is_sum[c] THEN CONTINUE; END IF;
-          k := par[c]; WHILE k <> 0 AND k <> p LOOP k := par[k]; END LOOP;
-          IF k <> p THEN CONTINUE; END IF;
-        END IF;
-        IF NOT sched[c] OR done[c] THEN CONTINUE; END IF;
+  ELSE
+    bapp := array_fill(NULL::date, ARRAY[n]);       -- bapp[p]: a constraint already applied to ALL leaves of summary p (their late finish is <= it)
+    pass := 0;
+    LOOP
+      v_changed := false;
+      FOREACH s IN ARRAY sd LOOP                    -- deriveBwd: min late start / max late finish of incomplete scheduled kids
+        b0 := NULL; f0 := NULL;
+        FOR jj IN kst[s]..kst[s + 1] - 1 LOOP
+          c := kl[jj];
+          IF sched[c] AND NOT done[c] THEN
+            IF b0 IS NULL OR ls[c] < b0 THEN b0 := ls[c]; END IF;
+            IF f0 IS NULL OR lf[c] > f0 THEN f0 := lf[c]; END IF;
+          END IF;
+        END LOOP;
+        IF b0 IS NOT NULL THEN ls[s] := b0; lf[s] := f0; END IF;
+      END LOOP;
+      FOR j IN 1..m LOOP
+        t := lt[j]; p := lp[j]; ty := lty[j];       -- t = successor, p = predecessor
+        IF NOT (sched[t] AND sched[p] AND NOT done[t] AND NOT done[p]) THEN CONTINUE; END IF;
+        IF ls[t] IS NULL OR lf[t] IS NULL THEN CONTINUE; END IF;
+        IF is_sum[p] AND ty NOT IN ('FS', 'FF') THEN CONTINUE; END IF;
+        c_lo := CASE WHEN is_sum[p] THEN lo[p] ELSE 1 END; c_hi := CASE WHEN is_sum[p] THEN hi[p] ELSE 1 END;
+        c := CASE WHEN is_sum[p] THEN lv[c_lo] ELSE p END;
         cand := CASE ty WHEN 'FS' THEN ls[t] - llag[j]
                         WHEN 'FF' THEN lf[t] - llag[j]
                         WHEN 'SS' THEN ls[t] - llag[j] + rem[c]
-                        ELSE           lf[t] - llag[j] + rem[c] END;
-        IF cand < lf[c] THEN lf[c] := cand; ls[c] := cand - rem[c]; v_changed := true; END IF;
+                        ELSE           lf[t] - llag[j] + rem[c] END;   -- for a summary predecessor (FS/FF only) the value does not depend on the leaf
+        IF is_sum[p] AND bapp[p] IS NOT NULL AND cand >= bapp[p] THEN CONTINUE; END IF;
+        cand1 := cand;                              -- the value the leaves AFTER t (higher index) see, when t is itself one of the leaves
+        IF is_sum[p] AND NOT is_sum[t] AND lpos[t] BETWEEN c_lo AND c_hi AND cand < lf[t] THEN
+          e0 := ls[t]; f0 := lf[t]; lf[t] := cand; ls[t] := cand - rem[t]; v_changed := true;
+          cand1 := cand + CASE ty WHEN 'FS' THEN ls[t] - e0 ELSE lf[t] - f0 END;
+        END IF;
+        FOR qq IN c_lo..c_hi LOOP
+          c := CASE WHEN is_sum[p] THEN lv[qq] ELSE p END;
+          IF NOT sched[c] OR done[c] THEN CONTINUE; END IF;
+          candc := CASE WHEN c > t THEN cand1 ELSE cand END;
+          IF candc < lf[c] THEN lf[c] := candc; ls[c] := candc - rem[c]; v_changed := true; END IF;
+        END LOOP;
+        IF is_sum[p] THEN bapp[p] := cand; END IF;
       END LOOP;
+      EXIT WHEN NOT v_changed;
+      pass := pass + 1;
+      IF pass > n + 1 THEN EXIT; END IF;
     END LOOP;
-    EXIT WHEN NOT v_changed;
-    pass := pass + 1;
-    IF pass > n + 1 THEN EXIT; END IF;
-  END LOOP;
+  END IF;
 
   -- slack and critical set: slack <= 0; if the deadline is later than the forecast (min slack > 0) the min-slack path.
   -- Summaries are never critical and never late on their own.
