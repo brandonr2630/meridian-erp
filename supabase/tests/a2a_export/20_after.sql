@@ -394,10 +394,65 @@ DO $$
 DECLARE d text := regexp_replace(pg_get_functiondef('schedule_export_core(uuid,text)'::regprocedure), '\s+', ' ', 'g');
 BEGIN
   PERFORM t_expect('r4: struct: the task numbering UPDATE matches id AND job AND company AND "no uid yet"',
-    (d LIKE '%UPDATE job_tasks t SET msp_uid = v_free[v_pnull + n.rn] FROM n WHERE t.id = n.id AND t.job_id = p_job_id AND t.company_id = v_company AND t.msp_uid IS NULL;%')::text, 'true');
+    (d LIKE '%UPDATE job_tasks t SET msp_uid = v_free[v_pnull + n.rn] FROM n WHERE n.rn <= v_tnull AND t.id = n.id AND t.job_id = p_job_id AND t.company_id = v_company AND t.msp_uid IS NULL;%')::text, 'true');
   PERFORM t_expect('r4: struct: the phase numbering UPDATE matches id AND job AND company AND "no uid yet"',
-    (d LIKE '%UPDATE job_phases p SET msp_uid = v_free[n.rn] FROM n WHERE p.id = n.id AND p.job_id = p_job_id AND p.company_id = v_company AND p.msp_uid IS NULL;%')::text, 'true');
+    (d LIKE '%UPDATE job_phases p SET msp_uid = v_free[n.rn] FROM n WHERE n.rn <= v_pnull AND p.id = n.id AND p.job_id = p_job_id AND p.company_id = v_company AND p.msp_uid IS NULL;%')::text, 'true');
 END $$;
+
+-- ===== 6d. r5 M-A: rows inserted between the counting and the numbering never get a duplicate uid =====
+-- The two-session version is concurrency_move.sh S7/S8. Here the interleaving is made deterministic: sched_next_uids is wrapped so that it inserts
+-- a new row with sort_order 0 (phase or task, chosen by a setting) right before it returns - exactly what a concurrent writer does while the
+-- export waits for the uid counter. The caps are n.rn <= v_pnull (phases) and n.rn <= v_tnull (tasks). Rename and wrapper roll back with the transaction.
+INSERT INTO jobs (id, company_id, job_no, status) VALUES
+ ('b1000000-0000-0000-0000-0000000000d1','c1000000-0000-0000-0000-000000000001','WO-D01','Open'),
+ ('b1000000-0000-0000-0000-0000000000d2','c1000000-0000-0000-0000-000000000001','WO-D02','Open');
+INSERT INTO job_phases (id, company_id, job_id, sort_order, name) VALUES
+ ('f6000000-0000-0000-0000-000000000dd1','c1000000-0000-0000-0000-000000000001','b1000000-0000-0000-0000-0000000000d1',1,'D1 p1'),
+ ('f6000000-0000-0000-0000-000000000dd2','c1000000-0000-0000-0000-000000000001','b1000000-0000-0000-0000-0000000000d1',2,'D1 p2'),
+ ('f6000000-0000-0000-0000-000000000dd3','c1000000-0000-0000-0000-000000000001','b1000000-0000-0000-0000-0000000000d2',1,'D2 p1'),
+ ('f6000000-0000-0000-0000-000000000dd4','c1000000-0000-0000-0000-000000000001','b1000000-0000-0000-0000-0000000000d2',2,'D2 p2');
+INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES
+ ('f7000000-0000-0000-0000-000000000dd1','c1000000-0000-0000-0000-000000000001','b1000000-0000-0000-0000-0000000000d1',1,'D1 t1'),
+ ('f7000000-0000-0000-0000-000000000dd2','c1000000-0000-0000-0000-000000000001','b1000000-0000-0000-0000-0000000000d1',2,'D1 t2'),
+ ('f7000000-0000-0000-0000-000000000dd3','c1000000-0000-0000-0000-000000000001','b1000000-0000-0000-0000-0000000000d2',1,'D2 t1'),
+ ('f7000000-0000-0000-0000-000000000dd4','c1000000-0000-0000-0000-000000000001','b1000000-0000-0000-0000-0000000000d2',2,'D2 t2');
+ALTER FUNCTION sched_next_uids(uuid, uuid, integer, boolean) RENAME TO sched_next_uids_real;
+CREATE FUNCTION sched_next_uids(p_job_id uuid, p_company uuid, p_n integer, p_replace boolean DEFAULT false) RETURNS integer[]
+LANGUAGE plpgsql AS $$
+DECLARE v integer[];
+BEGIN
+  v := sched_next_uids_real(p_job_id, p_company, p_n, p_replace);
+  IF current_setting('a2a.inject', true) = 'phase' THEN
+    INSERT INTO job_phases (company_id, job_id, sort_order, name) VALUES (p_company, p_job_id, 0, 'injected phase');
+  ELSIF current_setting('a2a.inject', true) = 'task' THEN
+    INSERT INTO job_tasks (company_id, job_id, sort_order, task_name) VALUES (p_company, p_job_id, 0, 'injected task');
+  END IF;
+  RETURN v;
+END $$;
+DO $$
+DECLARE ops uuid := '11111111-1111-1111-1111-111111111111'; d1 text := 'b1000000-0000-0000-0000-0000000000d1'; d2 text := 'b1000000-0000-0000-0000-0000000000d2';
+BEGIN
+  PERFORM set_config('a2a.inject', 'phase', true);
+  PERFORM t_expect('r5 M-A: phase injected mid-export: reports only the 4 rows it counted', t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', d1)), 'ok:4');
+  PERFORM t_expect('r5 M-A: phase injected mid-export: no duplicate uid across phases and tasks',
+    (SELECT (count(u) - count(DISTINCT u))::text FROM (SELECT msp_uid u FROM job_phases WHERE job_id = d1::uuid UNION ALL SELECT msp_uid FROM job_tasks WHERE job_id = d1::uuid) s), '0');
+  PERFORM t_expect('r5 M-A: phase injected mid-export: exactly one phase stays un-numbered',
+    (SELECT count(*)::text FROM job_phases WHERE job_id = d1::uuid AND msp_uid IS NULL), '1');
+  PERFORM t_expect('r5 M-A: phase injected mid-export: tasks got the two numbers after the phases', (SELECT string_agg(msp_uid::text, ',' ORDER BY msp_uid) FROM job_tasks WHERE job_id = d1::uuid), '3,4');
+  PERFORM set_config('a2a.inject', '', true);
+  PERFORM t_expect('r5 M-A: the next export numbers the leftover phase', t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', d1)), 'ok:1');
+  PERFORM t_expect('r5 M-A: ... with a fresh uid (no reuse)', (SELECT string_agg(msp_uid::text, ',' ORDER BY msp_uid) FROM (SELECT msp_uid FROM job_phases WHERE job_id = d1::uuid UNION ALL SELECT msp_uid FROM job_tasks WHERE job_id = d1::uuid) s), '1,2,3,4,5');
+
+  PERFORM set_config('a2a.inject', 'task', true);
+  PERFORM t_expect('r5 M-A: task injected mid-export: reports only the 4 rows it counted', t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', d2)), 'ok:4');
+  PERFORM t_expect('r5 M-A: task injected mid-export: exactly one task stays un-numbered',
+    (SELECT count(*)::text FROM job_tasks WHERE job_id = d2::uuid AND msp_uid IS NULL), '1');
+  PERFORM t_expect('r5 M-A: task injected mid-export: no duplicate uid',
+    (SELECT (count(u) - count(DISTINCT u))::text FROM (SELECT msp_uid u FROM job_phases WHERE job_id = d2::uuid UNION ALL SELECT msp_uid FROM job_tasks WHERE job_id = d2::uuid) s), '0');
+  PERFORM set_config('a2a.inject', '', true);
+END $$;
+DROP FUNCTION sched_next_uids(uuid, uuid, integer, boolean);
+ALTER FUNCTION sched_next_uids_real(uuid, uuid, integer, boolean) RENAME TO sched_next_uids;
 ROLLBACK;
 
 -- ===== 7. committed marker (idempotent) so 30_rollback can prove audit rows and uids survive the rollback =====

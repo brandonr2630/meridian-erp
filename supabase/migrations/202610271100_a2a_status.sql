@@ -33,13 +33,51 @@
 -- (dashboard, nightly snapshot). job_sched_dadd(d, n) is d + n, SATURATING at the ends of the date range: 5874897-12-31 and 4714-11-24 BC.
 -- It equals d + n whenever that is in range, so every graph that evaluated without error before gives exactly the same answer; only a graph that
 -- used to raise now returns dates that sit on that bound (a forward runaway can end at forecast_end 5874897-12-31, a backward one at 4714-11-24 BC).
+-- r5 M-B (infinite dates): a writer can store 'infinity' / '-infinity' in any date column (task start / end, baseline dates, jobs.due_date), and
+-- pass an infinite p_today; "date - date" and "date + integer" raise 22008 on them, which broke the dashboard / nightly snapshot for the whole job,
+-- and -p_n raised 22003 for the most negative bigint. NO CHECK constraint is added (that would touch existing rows). The status stack now handles
+-- them by ONE rule: a non-finite date is SATURATED to the end of the range it is infinite towards, +infinity -> 5874897-12-31 and
+-- -infinity -> 4714-11-24 BC (job_sched_dfin; NULL stays NULL, every finite date is returned unchanged, so no finite input changes its answer).
+--   * job_sched_dadd(d, n): d is saturated first (infinity - 5 = 5874897-12-26); the day count is compared, never negated, so no bigint overflow.
+--   * job_task_weight / job_task_planned_pct (Phase A helpers, same signatures and bodies except that every date goes through job_sched_dfin).
+--     The widest span the saturated bounds can give is 2147483495 days, which still fits an integer, so the arithmetic is total.
+--   * job_schedule_status: p_today, jobs.due_date and the tasks' baseline_end are saturated on entry. Task start / end dates were already clamped
+--     to 2000-01-01..2100-12-31 on load (r2 M1), so an infinite one behaves as that bound there.
+-- Rollback restores the Phase A bodies of the two helpers and drops job_sched_dfin.
+CREATE OR REPLACE FUNCTION job_sched_dfin(p_d date) RETURNS date
+LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
+  SELECT CASE WHEN p_d = DATE 'infinity' THEN DATE '5874897-12-31'
+              WHEN p_d = DATE '-infinity' THEN DATE '4714-11-24 BC'
+              ELSE p_d END $$;
+REVOKE ALL ON FUNCTION job_sched_dfin(date) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION job_sched_dfin(date) TO authenticated, service_role;
+
 CREATE OR REPLACE FUNCTION job_sched_dadd(p_d date, p_n bigint) RETURNS date
 LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
   SELECT CASE WHEN p_n >= 0
-              THEN CASE WHEN p_n > DATE '5874897-12-31' - p_d THEN DATE '5874897-12-31' ELSE p_d + p_n::integer END
-              ELSE CASE WHEN -p_n > p_d - DATE '4714-11-24 BC' THEN DATE '4714-11-24 BC' ELSE p_d + p_n::integer END END $$;
+              THEN CASE WHEN p_n > DATE '5874897-12-31' - x.d THEN DATE '5874897-12-31' ELSE x.d + p_n::integer END
+              ELSE CASE WHEN p_n < DATE '4714-11-24 BC' - x.d THEN DATE '4714-11-24 BC' ELSE x.d + p_n::integer END END
+    FROM (SELECT job_sched_dfin(p_d) AS d) x $$;
 REVOKE ALL ON FUNCTION job_sched_dadd(date, bigint) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION job_sched_dadd(date, bigint) TO authenticated, service_role;
+
+-- Phase A helpers (X1 / X20), made total for infinite dates (r5 M-B). Same signature, IMMUTABLE, search_path and grants (CREATE OR REPLACE keeps them);
+-- the formulas are Phase A's, only the dates pass through job_sched_dfin first.
+CREATE OR REPLACE FUNCTION job_task_weight(p_milestone boolean, p_weight numeric, p_start date, p_end date)
+RETURNS numeric LANGUAGE sql IMMUTABLE PARALLEL SAFE SET search_path = public, pg_temp AS $$
+  SELECT CASE WHEN p_milestone THEN 0::numeric
+              ELSE COALESCE(p_weight,
+                            GREATEST(1, CASE WHEN p_start IS NOT NULL AND p_end IS NOT NULL
+                                             THEN job_sched_dfin(p_end) - job_sched_dfin(p_start) + 1 ELSE 1 END)::numeric) END
+$$;
+CREATE OR REPLACE FUNCTION job_task_planned_pct(p_bstart date, p_bend date, p_start date, p_end date, p_on date)
+RETURNS numeric LANGUAGE sql IMMUTABLE PARALLEL SAFE SET search_path = public, pg_temp AS $$
+  SELECT CASE
+    WHEN COALESCE(p_bstart, p_start) IS NULL OR COALESCE(p_bend, p_end) IS NULL THEN 0::numeric
+    ELSE 100 * LEAST(1::numeric, GREATEST(0::numeric,
+         (job_sched_dfin(p_on) - job_sched_dfin(COALESCE(p_bstart, p_start)) + 1)::numeric
+         / GREATEST(1, job_sched_dfin(COALESCE(p_bend, p_end)) - job_sched_dfin(COALESCE(p_bstart, p_start)) + 1)::numeric)) END
+$$;
 
 CREATE OR REPLACE FUNCTION job_schedule_status(
   p_job_id uuid,
@@ -65,7 +103,8 @@ DECLARE
   v_overall numeric; v_planned numeric; v_has_bl boolean; v_base_end date; v_slip int; v_gap numeric;
   v_late boolean := false; v_late_days int := 0; v_status text; v_dur int; v_prog int; v_sd date; v_ed date;
 BEGIN
-  SELECT j.status, j.due_date INTO v_jstatus, v_due FROM jobs j WHERE j.id = p_job_id;
+  p_today := job_sched_dfin(p_today);             -- r5 M-B: infinite dates saturate (see job_sched_dfin); finite dates and NULL are unchanged
+  SELECT j.status, job_sched_dfin(j.due_date) INTO v_jstatus, v_due FROM jobs j WHERE j.id = p_job_id;
   IF NOT FOUND THEN RETURN; END IF;               -- invisible under RLS or missing: no rows
 
   -- load tasks (milestones: rem 0; done = progress 100)
@@ -442,7 +481,7 @@ BEGIN
    WHERE w > 0 AND NOT (x.id = ANY (sumids));
 
   SELECT EXISTS (SELECT 1 FROM job_tasks WHERE job_id = p_job_id AND baseline_locked_at IS NOT NULL) INTO v_has_bl;
-  SELECT coalesce(max(baseline_end), v_due) INTO v_base_end FROM job_tasks WHERE job_id = p_job_id;
+  SELECT coalesce(max(job_sched_dfin(baseline_end)), v_due) INTO v_base_end FROM job_tasks WHERE job_id = p_job_id;
   v_slip := CASE WHEN v_fe IS NOT NULL AND v_base_end IS NOT NULL THEN v_fe - v_base_end END;
   v_gap  := CASE WHEN v_has_bl THEN v_overall - v_planned END;
 

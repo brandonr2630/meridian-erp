@@ -7,6 +7,9 @@
 #   S1  task: W moves a uid-less task A -> B and holds 3 s; the export of A (1 s later) waits, then must skip it.   S2  the same for a phase.
 #   S3  task, other order: the export of A numbers everything and holds 3 s; W's move (1 s later) waits, then is refused (A2U01: numbered row).  S4 phase.
 #   S5  a DBA session sets msp_uid = 99 on a task of A and holds 3 s; the export waits, then must leave 99 alone.                                  S6 phase.
+#   S7  (r5 M-A) a PHASE is inserted (sort_order 0) while the export, which already counted its uid-less rows, waits for the uid counter held by a
+#       third session: the numbering must be capped at the counted rows (no uid shared by a phase and a task; the surplus row stays un-numbered).
+#   S8  the same with a TASK. Both then check that a second export numbers the leftover row without a duplicate.
 # Success token (normal mode): "CONCURRENCY MOVE OK". With a mutant argument: exit 0 = MUTANT CAUGHT, exit 1 = MUTANT SURVIVED.
 set -uo pipefail
 MUT="${1:-}"
@@ -43,6 +46,12 @@ for s in 1 2 3 4 5 6; do
   printf "INSERT INTO jobs (id, company_id, job_no, status) VALUES ('%s','%s','WO-MV%s','Open');\n" "$(ja $s)" "$CO" "$s" >> "$SEED"
   printf "INSERT INTO job_phases (id, company_id, job_id, sort_order, name) VALUES ('%s','%s','%s',1,'P1'),(gen_random_uuid(),'%s','%s',2,'P2'),(gen_random_uuid(),'%s','%s',3,'P3');\n" "$(ph $s)" "$CO" "$(ja $s)" "$CO" "$(ja $s)" "$CO" "$(ja $s)" >> "$SEED"
   printf "INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES ('%s','%s','%s',1,'T1'),(gen_random_uuid(),'%s','%s',2,'T2'),(gen_random_uuid(),'%s','%s',3,'T3');\n" "$(tk $s)" "$CO" "$(ja $s)" "$CO" "$(ja $s)" "$CO" "$(ja $s)" >> "$SEED"
+done
+for s in 7 8; do
+  printf "INSERT INTO jobs (id, company_id, job_no, status) VALUES ('%s','%s','WO-MV%s','Open');\n" "$(ja $s)" "$CO" "$s" >> "$SEED"
+  printf "INSERT INTO job_phases (id, company_id, job_id, sort_order, name) VALUES (gen_random_uuid(),'%s','%s',1,'P1'),(gen_random_uuid(),'%s','%s',2,'P2');\n" "$CO" "$(ja $s)" "$CO" "$(ja $s)" >> "$SEED"
+  printf "INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES (gen_random_uuid(),'%s','%s',1,'T1'),(gen_random_uuid(),'%s','%s',2,'T2');\n" "$CO" "$(ja $s)" "$CO" "$(ja $s)" >> "$SEED"
+  printf "INSERT INTO job_schedule_uid_counter (job_id, last_uid) VALUES ('%s', 0);\n" "$(ja $s)" >> "$SEED"
 done
 psqlx < "$SEED" >/dev/null
 
@@ -105,6 +114,41 @@ RE="$(grep -o 'E result [0-9]*' "$OB" | awk '{print $3}')"; cat "$OA" "$OB" | gr
 check "S6 export assigned (2 phases + 3 tasks)" "$RE" "5"
 check "S6 the DBA's uid 99 is still there" "$(q "SELECT msp_uid FROM job_phases WHERE id = '$(ph 6)'")" "99"
 check "S6 no uid used twice in the job" "$(dups "$(ja 6)")" "0"
+
+# S7/S8 (r5 M-A): three sessions. B holds the uid counter row, so export A (which has already counted its uid-less rows) pauses inside
+# sched_next_uids; C then inserts a row with sort_order 0 into the job; B commits; A resumes and numbers.
+three() {       # $1 = job, $2 = insert statement for C
+  OA="$(mktemp)"; OB="$(mktemp)"; OC="$(mktemp)"
+  printf "BEGIN;\nSELECT last_uid FROM job_schedule_uid_counter WHERE job_id = '%s' FOR UPDATE;\nSELECT pg_sleep(4);\nCOMMIT;\n" "$1" | psqlx > "$OB" 2>&1 &
+  local PB=$!
+  sleep 1
+  printf '%s' "$(exp_sql "$1" 0)" | psqlx > "$OA" 2>&1 &
+  local PA=$!
+  sleep 1.5
+  printf '%s\n' "$2" | psqlx > "$OC" 2>&1
+  wait "$PA"; wait "$PB"
+}
+uids() { q "SELECT string_agg(u::text, ',' ORDER BY u) FROM (SELECT msp_uid u FROM job_phases WHERE job_id = '$1' AND msp_uid IS NOT NULL UNION ALL SELECT msp_uid FROM job_tasks WHERE job_id = '$1' AND msp_uid IS NOT NULL) s"; }
+again() { printf '%s' "$(exp_sql "$1" 0)" | psqlx 2>&1 | grep -o 'E result [0-9]*' | awk '{print $3}'; }   # a second export, same job
+
+echo "S7 a phase is inserted while the export waits for the uid counter"
+three "$(ja 7)" "INSERT INTO job_phases (company_id, job_id, sort_order, name) VALUES ('$CO','$(ja 7)',0,'PNEW');"
+RE="$(grep -o 'E result [0-9]*' "$OA" | awk '{print $3}')"; cat "$OA" "$OC" | grep -E "result|ERROR" | tr '\n' ' '; echo
+check "S7 export assigned only the 2 phases + 2 tasks it counted" "$RE" "4"
+check "S7 no uid used twice in the job" "$(dups "$(ja 7)")" "0"
+check "S7 exactly one phase is left without a uid" "$(q "SELECT count(*) FROM job_phases WHERE job_id = '$(ja 7)' AND msp_uid IS NULL")" "1"
+check "S7 uids handed out are 1..4" "$(uids "$(ja 7)")" "1,2,3,4"
+check "S7 the next export numbers the leftover phase" "$(again "$(ja 7)")" "1"
+check "S7 after it: five distinct uids" "$(uids "$(ja 7)")" "1,2,3,4,5"
+
+echo "S8 a task is inserted while the export waits for the uid counter"
+three "$(ja 8)" "INSERT INTO job_tasks (company_id, job_id, sort_order, task_name) VALUES ('$CO','$(ja 8)',0,'TNEW');"
+RE="$(grep -o 'E result [0-9]*' "$OA" | awk '{print $3}')"; cat "$OA" "$OC" | grep -E "result|ERROR" | tr '\n' ' '; echo
+check "S8 export assigned only the 2 phases + 2 tasks it counted" "$RE" "4"
+check "S8 no uid used twice in the job" "$(dups "$(ja 8)")" "0"
+check "S8 exactly one task is left without a uid" "$(q "SELECT count(*) FROM job_tasks WHERE job_id = '$(ja 8)' AND msp_uid IS NULL")" "1"
+check "S8 uids handed out are 1..4" "$(uids "$(ja 8)")" "1,2,3,4"
+check "S8 the next export numbers the leftover task" "$(again "$(ja 8)")" "1"
 
 if [ "$FAIL" = 0 ]; then
   [ -n "$MUT" ] && { echo "MUTANT SURVIVED"; exit 1; }

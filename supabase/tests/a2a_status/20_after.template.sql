@@ -492,6 +492,98 @@ BEGIN
     PERFORM t_expect('r4: scale ' || (2 * K + 1) || ' tasks: the loop S -> Y -> kid -> S evaluates (no 22008), forecast pinned', pg_temp.st(jb::text, '2026-03-01'), CASE K WHEN 150 THEN '1:On track|63939-08-10|null' ELSE '1:On track|410742-01-27|null' END);
   END LOOP;
 END $$;
+
+-- ===== r5 M-B: infinite dates (what an ordinary writer can store) never make the status stack raise 22008 / 22003 =====
+-- RULE (documented in the migration): a non-finite date is SATURATED to the end of the date range it is infinite towards: +infinity = 5874897-12-31,
+-- -infinity = 4714-11-24 BC (job_sched_dfin). It applies to job_sched_dadd (its date and its day count, which can no longer raise 22003 for
+-- -9223372036854775808), job_task_weight / job_task_planned_pct (all their dates), and job_schedule_status (due_date, baseline_end, p_today).
+-- Task start / end dates were already clamped to 2000-01-01..2100-12-31 when loaded. A finite date is never changed, so every finite input gives
+-- the answer it gave before (diff-vs-old.sh = 0 differences). The pre-change functions raised 22008 on every infinity case below. Each case is checked
+-- against the SAME job with the saturation bound written out as a finite date (equal answers = saturation), and as a plain "one row came back".
+CREATE FUNCTION pg_temp.eqc(p_label text, p_inf jsonb, p_fin jsonb) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM t_expect('r5 M-B: ' || p_label, pg_temp.a2run(p_inf), pg_temp.a2run(p_fin));
+END $$;
+DO $$
+DECLARE
+  tasks_end text := '"tasks":[{"key":"A","sort_order":1,"start_date":"2026-03-02","end_date":"2026-03-05"},{"key":"B","sort_order":2,"start_date":"2026-03-02","end_date":"2026-03-05"},{"key":"C","sort_order":3,"start_date":"2026-03-10","end_date":"%s"}],"links":[{"task":"B","pred":"A"}]';
+  tasks_bl  text := '"tasks":[{"key":"A","sort_order":1,"start_date":"2026-03-02","end_date":"2026-03-05","baseline_start":"2026-03-02","baseline_end":"%s","progress":30},{"key":"B","sort_order":2,"start_date":"2026-03-04","end_date":"2026-03-09","baseline_start":"2026-03-02","baseline_end":"2026-03-08"}],"links":[{"task":"B","pred":"A"}]';
+  plain     text := '"tasks":[{"key":"A","sort_order":1,"start_date":"2026-03-02","end_date":"2026-03-05"},{"key":"B","sort_order":2,"start_date":"2026-03-02","end_date":"2026-03-05"}],"links":[{"task":"B","pred":"A"}]';
+  hi text := '5874897-12-31'; lo text := '4714-11-24 BC';
+BEGIN
+  -- a task end_date / start_date of infinity (raised in job_task_weight / job_task_planned_pct)
+  PERFORM pg_temp.eqc('task end_date infinity = the late bound', ('{"today":"2026-03-02","job":{"status":"In Progress"},"baselineLocked":false,' || format(tasks_end, 'infinity') || '}')::jsonb,
+                                                                  ('{"today":"2026-03-02","job":{"status":"In Progress"},"baselineLocked":false,' || format(tasks_end, hi) || '}')::jsonb);
+  -- (job_tasks_dates_chk requires start <= end, so -infinity as an end needs -infinity as the start, and infinity as a start needs infinity as the end)
+  PERFORM pg_temp.eqc('task start and end -infinity = the early bound',
+    '{"today":"2026-03-02","job":{"status":"In Progress"},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"-infinity","end_date":"-infinity"},{"key":"B","sort_order":2,"start_date":"2026-03-02","end_date":"2026-03-05"}],"links":[{"task":"B","pred":"A"}]}'::jsonb,
+    ('{"today":"2026-03-02","job":{"status":"In Progress"},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"' || lo || '","end_date":"' || lo || '"},{"key":"B","sort_order":2,"start_date":"2026-03-02","end_date":"2026-03-05"}],"links":[{"task":"B","pred":"A"}]}')::jsonb);
+  PERFORM pg_temp.eqc('task start_date and end_date infinity = the late bound',
+    ('{"today":"2026-03-02","job":{"status":"In Progress"},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"infinity","end_date":"infinity"}]}')::jsonb,
+    ('{"today":"2026-03-02","job":{"status":"In Progress"},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"' || hi || '","end_date":"' || hi || '"}]}')::jsonb);
+  PERFORM pg_temp.eqc('task start_date -infinity = the early bound',
+    ('{"today":"2026-03-02","job":{"status":"In Progress"},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"-infinity","end_date":"2026-03-05"}]}')::jsonb,
+    ('{"today":"2026-03-02","job":{"status":"In Progress"},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"' || lo || '","end_date":"2026-03-05"}]}')::jsonb);
+  -- baseline dates of infinity on a LOCKED baseline (planned % and the slip against the baseline end)
+  PERFORM pg_temp.eqc('baseline_end infinity (locked) = the late bound', ('{"today":"2026-03-04","job":{"status":"In Progress"},"baselineLocked":true,' || format(tasks_bl, 'infinity') || '}')::jsonb,
+                                                                          ('{"today":"2026-03-04","job":{"status":"In Progress"},"baselineLocked":true,' || format(tasks_bl, hi) || '}')::jsonb);
+  PERFORM pg_temp.eqc('baseline_start and baseline_end -infinity (locked) = the early bound',
+    '{"today":"2026-03-04","job":{"status":"In Progress"},"baselineLocked":true,"tasks":[{"key":"A","sort_order":1,"start_date":"2026-03-02","end_date":"2026-03-05","baseline_start":"-infinity","baseline_end":"-infinity","progress":30},{"key":"B","sort_order":2,"start_date":"2026-03-04","end_date":"2026-03-09","baseline_start":"2026-03-02","baseline_end":"2026-03-08"}],"links":[{"task":"B","pred":"A"}]}'::jsonb,
+    ('{"today":"2026-03-04","job":{"status":"In Progress"},"baselineLocked":true,"tasks":[{"key":"A","sort_order":1,"start_date":"2026-03-02","end_date":"2026-03-05","baseline_start":"' || lo || '","baseline_end":"' || lo || '","progress":30},{"key":"B","sort_order":2,"start_date":"2026-03-04","end_date":"2026-03-09","baseline_start":"2026-03-02","baseline_end":"2026-03-08"}],"links":[{"task":"B","pred":"A"}]}')::jsonb);
+  -- the job's due_date (raised inside job_sched_dadd)
+  PERFORM pg_temp.eqc('due_date infinity = the late bound', ('{"today":"2026-03-02","job":{"status":"In Progress","due_date":"infinity"},"baselineLocked":false,' || plain || '}')::jsonb,
+                                                             ('{"today":"2026-03-02","job":{"status":"In Progress","due_date":"' || hi || '"},"baselineLocked":false,' || plain || '}')::jsonb);
+  PERFORM pg_temp.eqc('due_date -infinity = the early bound', ('{"today":"2026-03-02","job":{"status":"In Progress","due_date":"-infinity"},"baselineLocked":false,' || plain || '}')::jsonb,
+                                                               ('{"today":"2026-03-02","job":{"status":"In Progress","due_date":"' || lo || '"},"baselineLocked":false,' || plain || '}')::jsonb);
+  PERFORM pg_temp.eqc('due_date infinity, no tasks = the late bound', '{"today":"2026-03-02","job":{"status":"In Progress","due_date":"infinity"},"baselineLocked":false,"tasks":[]}'::jsonb,
+                      ('{"today":"2026-03-02","job":{"status":"In Progress","due_date":"' || hi || '"},"baselineLocked":false,"tasks":[]}')::jsonb);
+  -- the p_today argument
+  PERFORM pg_temp.eqc('p_today infinity = the late bound', ('{"today":"infinity","job":{"status":"In Progress"},"baselineLocked":false,' || plain || '}')::jsonb,
+                                                            ('{"today":"' || hi || '","job":{"status":"In Progress"},"baselineLocked":false,' || plain || '}')::jsonb);
+  PERFORM pg_temp.eqc('p_today -infinity = the early bound', ('{"today":"-infinity","job":{"status":"In Progress"},"baselineLocked":false,' || plain || '}')::jsonb,
+                                                              ('{"today":"' || lo || '","job":{"status":"In Progress"},"baselineLocked":false,' || plain || '}')::jsonb);
+  PERFORM pg_temp.eqc('p_today infinity with a done and a started task and a link = the late bound',
+    '{"today":"infinity","job":{"status":"In Progress","due_date":"2026-04-01"},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"2026-03-02","end_date":"2026-03-05","progress":100},{"key":"B","sort_order":2,"start_date":"2026-03-02","end_date":"2026-03-05","progress":40}],"links":[{"task":"B","pred":"A"}]}'::jsonb,
+    ('{"today":"' || hi || '","job":{"status":"In Progress","due_date":"2026-04-01"},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"2026-03-02","end_date":"2026-03-05","progress":100},{"key":"B","sort_order":2,"start_date":"2026-03-02","end_date":"2026-03-05","progress":40}],"links":[{"task":"B","pred":"A"}]}')::jsonb);
+  -- everything at once: still exactly one row
+  PERFORM t_expect('r5 M-B: every date infinite at once: one row, no error',
+    left(pg_temp.a2run('{"today":"infinity","job":{"status":"In Progress","due_date":"-infinity"},"baselineLocked":true,"tasks":[{"key":"A","sort_order":1,"start_date":"-infinity","end_date":"infinity","baseline_start":"-infinity","baseline_end":"infinity"},{"key":"B","sort_order":2,"start_date":"infinity","end_date":"infinity","baseline_start":"infinity","baseline_end":"infinity"}],"links":[{"task":"B","pred":"A"}]}'::jsonb), 2), '1:');
+END $$;
+-- the helper functions themselves
+DO $$
+BEGIN
+  PERFORM t_expect('r5 M-B: struct: job_sched_dfin is IMMUTABLE SQL, executable by authenticated and service_role only',
+    (SELECT provolatile::text || (SELECT lanname FROM pg_language l WHERE l.oid = prolang) || has_function_privilege('authenticated', oid, 'EXECUTE')::text || has_function_privilege('service_role', oid, 'EXECUTE')::text
+        || has_function_privilege('anon', oid, 'EXECUTE')::text FROM pg_proc WHERE proname = 'job_sched_dfin'), 'isqltruetruefalse');
+  PERFORM t_expect('r5 M-B: dfin: finite dates (incl. both ends of the range) are returned unchanged, NULL stays NULL',
+    job_sched_dfin(DATE '2026-03-01')::text || '|' || job_sched_dfin(DATE '5874897-12-31')::text || '|' || job_sched_dfin(DATE '4714-11-24 BC')::text || '|' || coalesce(job_sched_dfin(NULL)::text, 'null'),
+    '2026-03-01|5874897-12-31|4714-11-24 BC|null');
+  PERFORM t_expect('r5 M-B: dfin: +infinity -> 5874897-12-31, -infinity -> 4714-11-24 BC',
+    job_sched_dfin(DATE 'infinity')::text || '|' || job_sched_dfin(DATE '-infinity')::text, '5874897-12-31|4714-11-24 BC');
+  PERFORM t_expect('r5 M-B: dadd: an infinite DATE saturates first (infinity+5, -infinity-5, infinity-5, -infinity+5)',
+    job_sched_dadd(DATE 'infinity', 5)::text || '|' || job_sched_dadd(DATE '-infinity', -5)::text || '|' || job_sched_dadd(DATE 'infinity', -5)::text || '|' || job_sched_dadd(DATE '-infinity', 5)::text,
+    '5874897-12-31|4714-11-24 BC|5874897-12-26|4714-11-29 BC');
+  PERFORM t_expect('r5 M-B: dadd: the most negative bigint (whose negation overflowed: 22003) saturates at the early bound',
+    job_sched_dadd(DATE '2026-01-01', -9223372036854775807 - 1)::text || '|' || job_sched_dadd(DATE '2026-01-01', 9223372036854775807)::text || '|' || job_sched_dadd(DATE 'infinity', -9223372036854775807 - 1)::text,
+    '4714-11-24 BC|5874897-12-31|4714-11-24 BC');
+  PERFORM t_expect('r5 M-B: dadd: NULL days stays NULL', coalesce(job_sched_dadd(DATE '2026-01-01', NULL)::text, 'null'), 'null');
+  PERFORM t_expect('r5 M-B: weight: an infinite end / start equals the saturated bound (no 22008)',
+    (job_task_weight(false, NULL, DATE '2026-03-01', DATE 'infinity') = job_task_weight(false, NULL, DATE '2026-03-01', DATE '5874897-12-31'))::text
+    || (job_task_weight(false, NULL, DATE '-infinity', DATE '2026-03-01') = job_task_weight(false, NULL, DATE '4714-11-24 BC', DATE '2026-03-01'))::text
+    || (job_task_weight(false, NULL, DATE '-infinity', DATE 'infinity') = job_task_weight(false, NULL, DATE '4714-11-24 BC', DATE '5874897-12-31'))::text
+    || (job_task_weight(false, NULL, DATE 'infinity', DATE '-infinity') = 1)::text, 'truetruetruetrue');
+  PERFORM t_expect('r5 M-B: weight: explicit weight and milestone ignore infinite dates', job_task_weight(false, 3, DATE '-infinity', DATE 'infinity')::text || job_task_weight(true, NULL, DATE 'infinity', DATE 'infinity')::text, '30');
+  PERFORM t_expect('r5 M-B: planned: infinite dates equal the saturated bounds (baseline, current, and p_on)',
+    (job_task_planned_pct(NULL, NULL, DATE '2026-03-01', DATE 'infinity', DATE '2026-03-10') = job_task_planned_pct(NULL, NULL, DATE '2026-03-01', DATE '5874897-12-31', DATE '2026-03-10'))::text
+    || (job_task_planned_pct(DATE '-infinity', DATE '2026-03-01', NULL, NULL, DATE '2026-03-10') = job_task_planned_pct(DATE '4714-11-24 BC', DATE '2026-03-01', NULL, NULL, DATE '2026-03-10'))::text
+    || (job_task_planned_pct(NULL, NULL, DATE '2026-03-01', DATE '2026-03-05', DATE 'infinity') = 100)::text
+    || (job_task_planned_pct(NULL, NULL, DATE '2026-03-01', DATE '2026-03-05', DATE '-infinity') = 0)::text
+    || (job_task_planned_pct(DATE 'infinity', DATE '-infinity', NULL, NULL, DATE '2026-03-10') = 0)::text, 'truetruetruetruetrue');
+  PERFORM t_expect('r5 M-B: planned: the extreme finite bounds themselves do not overflow',
+    (job_task_planned_pct(DATE '4714-11-24 BC', DATE '5874897-12-31', NULL, NULL, DATE '5874897-12-31') = 100)::text
+    || (job_task_planned_pct(DATE '4714-11-24 BC', DATE '5874897-12-31', NULL, NULL, DATE '4714-11-24 BC') > 0)::text, 'truetrue');
+END $$;
+
 DO $$
 BEGIN
 
