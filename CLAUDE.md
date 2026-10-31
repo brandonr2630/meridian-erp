@@ -12,6 +12,10 @@ Live URL: `erp.terranresources.com` · Repo: `brandonr2630/meridian-erp`
 - **Navigation:** `navigate(view)` sets `currentView` and calls `loadViewData(view)`.
 - **State:** global vars declared at `// ── STATE ──` (~line 3373): `currentUser`, `currentCompany`, `accounts`, `contacts`, `journalEntries`, `bankAccounts`, etc.
 
+## Audit log rule
+
+`job_audit_log` rows with these action types are written only by SECURITY DEFINER database functions, and a browser session may not insert them (the D0c insert policy refuses them): `baseline_locked`, `baseline_reset`, `visibility_changed`, `schedule_exported`, `schedule_imported`. The web app itself writes only `job_saved` and `job_deleted`. If a database function starts writing a new action type, add it to the list in the policy in a NEW migration (see `supabase/migrations/*_d0c_audit_reserved.sql`) and run `node scripts/verify-audit-reserved.mjs`; it fails when a function-written type is not reserved, when the writer is not SECURITY DEFINER, or when the app writes a reserved type.
+
 ## Roles
 
 `super_admin` > `admin` > `sales` > `user`. Finance modules (AP, Bank, CoA, Journal, Reports) are admin-only. Check `canPost()`, `canVoid()`, `canFinance()` before rendering controls.
