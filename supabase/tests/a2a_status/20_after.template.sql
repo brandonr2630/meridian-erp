@@ -4,8 +4,8 @@
 -- Parts: (1) everything Phase A's 20_after.sql asserts about job_schedule_status, copied verbatim so the legacy behaviour is
 -- proven on the new body; (2) signature / shape / volatility / security / grants unchanged; (3) A2 cases; (4) link types the
 -- CHECK refuses (constraint dropped inside the transaction) behave as FS.
--- MUTATION HARNESS: supabase/tests/a2a_status/mutations.json (23 mutants of the migration body, 3 marked equivalent with a reason).
---   node supabase/tests/d0c_common/mutate.mjs a2a_status     -> "mutation check passed: 20/20 mutants caught"
+-- MUTATION HARNESS: supabase/tests/a2a_status/mutations.json (31 mutants of the migration body, 5 marked equivalent with a reason).
+--   node supabase/tests/d0c_common/mutate.mjs a2a_status     -> "mutation check passed: 26/26 mutants caught"
 --   one mutant by hand: bash supabase/tests/d0c_common/run.sh a2a_status <mutated-migration.sql>   (exit 0 = caught, 1 = survived)
 --   Each mutant is applied in place of the migration and only THIS file is run; a failing assertion (or a migration that no longer applies) = caught.
 -- Identities as in phase_a_sql: ops = operations_tech C1, viewr, fin (no ops atoms), clnt (client-shaped, no erp_users row), anon.
@@ -316,61 +316,277 @@ BEGIN
   PERFORM t_expect('m1: a lone task starting in year 100 forecasts inside the clamp range', r, 'true');
 END $$;
 
--- ===== (6) M2 (review 2): a long dependency chain settles in a few passes whatever order the links are stored in =====
--- 2503 tasks (prime, so (i * 37) % n is a permutation: the chain order is scrambled against the task order). Each task is 2 days, unstarted, so the
--- forecast is today + 2 * n; the first task of the chain is in the past, so the job is Late only when the backward pass reached it (it is critical).
--- Before the fix this took about 6 s (a pass per task); each call is timed and must finish in under 3 s (the fixed function needs about 0.4 s).
--- (statement_timeout cannot do this inside a DO block: it only applies to the statement that is already running.)
+-- r3 perf: the passes relax links in dependency order when there is no summary and no link cycle (any order gives the same fixpoint).
+-- Oracle: a 60-task DAG with mixed link types, links listed against the direction, in direction, and with a dummy summary that
+-- forces the legacy array order (the dummy is a done task under a summary, so it changes no status, forecast or slip).
 DO $$
-DECLARE
-  c1 constant uuid := 'c1000000-0000-0000-0000-000000000001';
-  n constant integer := 2503; k integer := 0; shape text; j uuid; ord text; step text; res text; t0 timestamptz; secs numeric;
-  s constant uuid := 'f9000000-0000-0000-0000-0000000000a0'; xx constant uuid := 'f9000000-0000-0000-0000-0000000000a1';
+DECLARE tk jsonb; lk_rev jsonb; lk_fwd jsonb; r_rev text; r_fwd text; r_leg text; r_dag text;
 BEGIN
-  FOREACH shape IN ARRAY ARRAY['asc', 'desc', 'random', 'skip'] LOOP
-    k := k + 1;
-    j := ('b9000000-0000-0000-0000-0000000000' || lpad(k::text, 2, '0'))::uuid;
-    ord := CASE shape WHEN 'asc' THEN 'a.cp' WHEN 'desc' THEN 'a.cp DESC' ELSE 'md5(a.id::text || b.id::text)' END;
-    step := CASE shape WHEN 'skip' THEN 'b.cp IN (a.cp + 1, a.cp + 2)' ELSE 'b.cp = a.cp + 1' END;
-    INSERT INTO jobs (id, company_id, job_no, status) VALUES (j, c1, 'WO-P' || k, 'In Progress');
-    SET LOCAL session_replication_role = replica;
-    INSERT INTO job_tasks (company_id, job_id, sort_order, task_name, start_date, end_date, progress)
-      SELECT c1, j, i, 'T' || i, CASE WHEN cp = 1 THEN DATE '2026-02-20' ELSE DATE '2026-03-02' END, CASE WHEN cp = 1 THEN DATE '2026-02-21' ELSE DATE '2026-03-03' END, 0
-        FROM (SELECT i, ((i * 37) % n) + 1 AS cp FROM generate_series(1, n) i) q;
-    EXECUTE format('INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days)
-      SELECT %L, %L, b.id, a.id, 0 FROM (SELECT id, ((sort_order * 37) %% %s) + 1 AS cp FROM job_tasks WHERE job_id = %L) a
-        JOIN (SELECT id, ((sort_order * 37) %% %s) + 1 AS cp FROM job_tasks WHERE job_id = %L) b ON %s ORDER BY %s', c1, j, n, j, n, j, step, ord);
-    SET LOCAL session_replication_role = origin;
-    t0 := clock_timestamp();
-    SELECT x.status || '|' || x.forecast_end::text INTO res FROM job_schedule_status(j, DATE '2026-03-02') x;
-    secs := extract(epoch FROM clock_timestamp() - t0);
-    PERFORM t_expect('m2: a ' || n || '-task chain with links stored ' || shape || ' gives the right answer (Late: the critical first task is past)',
-      res, 'Late|' || (DATE '2026-03-02' + 2 * n)::text);
-    PERFORM t_expect('m2: ... and settles in under 3 s with links stored ' || shape, (secs < 3)::text, 'true');
-  END LOOP;
+  SELECT jsonb_agg(jsonb_build_object('key', 'T' || k, 'sort_order', k, 'start_date', (DATE '2026-03-02' + (k % 5))::text,
+                                      'end_date', (DATE '2026-03-02' + (k % 5) + 3)::text) ORDER BY k) INTO tk FROM generate_series(1, 60) k;
+  SELECT jsonb_agg(jsonb_build_object('task', 'T' || k, 'pred', 'T' || (1 + (k * 7) % (k - 1)), 'lag', (k % 3) - 1,
+                                      'type', (ARRAY['FS', 'SS', 'FF', 'SF'])[1 + k % 4]) ORDER BY k DESC) INTO lk_rev FROM generate_series(2, 60) k;
+  SELECT jsonb_agg(l ORDER BY o DESC) INTO lk_fwd FROM jsonb_array_elements(lk_rev) WITH ORDINALITY AS x(l, o);
+  r_rev := pg_temp.a2run(jsonb_build_object('today', '2026-03-02', 'job', jsonb_build_object('status', 'In Progress'), 'baselineLocked', false,
+                                            'tasks', tk, 'links', lk_rev));
+  r_fwd := pg_temp.a2run(jsonb_build_object('today', '2026-03-02', 'job', jsonb_build_object('status', 'In Progress'), 'baselineLocked', false,
+                                            'tasks', tk, 'links', lk_fwd));
+  r_leg := pg_temp.a2run(jsonb_build_object('today', '2026-03-02', 'job', jsonb_build_object('status', 'In Progress'), 'baselineLocked', false,
+                                            'tasks', tk || jsonb_build_array(
+                                               jsonb_build_object('key', 'S', 'sort_order', 100),
+                                               jsonb_build_object('key', 'Sc', 'sort_order', 101, 'parent', 'S', 'progress', 100,
+                                                                  'start_date', '2026-01-01', 'end_date', '2026-01-02')),
+                                            'links', lk_rev));
+  PERFORM t_expect('r3: the reversed DAG gives a forecast (not an empty result)', (r_rev ~ '^1:[A-Za-z ]+\|20')::text, 'true');
+  PERFORM t_expect('r3: link order does not matter (reversed vs forward listing)', r_rev, r_fwd);
+  PERFORM t_expect('r3: dependency order equals the legacy array order (a summary forces the latter)', r_rev, r_leg);
+END $$;
 
-  -- a summary with 1200 scrambled chained leaves and a task X that follows the summary (the link leaves a summary)
-  j := 'b9000000-0000-0000-0000-0000000000f0';
-  INSERT INTO jobs (id, company_id, job_no, status) VALUES (j, c1, 'WO-PH', 'In Progress');
-  SET LOCAL session_replication_role = replica;
-  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, start_date, end_date, progress) VALUES (s, c1, j, 0, 'S', DATE '2026-03-02', DATE '2026-03-03', 0), (xx, c1, j, 5000, 'X', DATE '2026-03-02', DATE '2026-03-03', 0);
-  INSERT INTO job_tasks (company_id, job_id, sort_order, task_name, start_date, end_date, progress, parent_task_id)
-    SELECT c1, j, i, 'L' || i, CASE WHEN cp = 1 THEN DATE '2026-02-20' ELSE DATE '2026-03-02' END, CASE WHEN cp = 1 THEN DATE '2026-02-21' ELSE DATE '2026-03-03' END, 0, s
-      FROM (SELECT i, ((i * 37) % 1201) + 1 AS cp FROM generate_series(1, 1200) i) q;
-  INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days)
-    SELECT c1, j, b.id, a.id, 0 FROM (SELECT id, ((sort_order * 37) % 1201) + 1 AS cp FROM job_tasks WHERE job_id = j AND parent_task_id = s) a
-      JOIN (SELECT id, ((sort_order * 37) % 1201) + 1 AS cp FROM job_tasks WHERE job_id = j AND parent_task_id = s) b ON b.cp = a.cp + 1 ORDER BY md5(a.id::text);
-  INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days) VALUES (c1, j, xx, s, 0);
-  SET LOCAL session_replication_role = origin;
-  t0 := clock_timestamp();
-  SELECT x.status || '|' || x.forecast_end::text INTO res FROM job_schedule_status(j, DATE '2026-03-02') x;
-  secs := extract(epoch FROM clock_timestamp() - t0);
-  PERFORM t_expect('m2: a summary of 1200 chained leaves followed by a task: forecast is today + 2 * 1200 + 2 (the status is the same as the engine gave before the ordering change)', res, 'On track|' || (DATE '2026-03-02' + 2402)::text);
-  PERFORM t_expect('m2: ... and it settles in under 3 s', (secs < 3)::text, 'true');
+-- r3 perf, the cases where the link order must NOT change: a pass that never settles stops after n+1 passes with the values so far,
+-- and those values depend on the order the links are relaxed in. Expected values are the ones the pre-r3 body (array order) gave.
+-- (a) a cyclic link graph (inserted with triggers off: the link trigger refuses cycles) + a reversed chain with lag 300 feeding it.
+-- (b) a leaf linked to its own summary (never settles; the link graph itself is acyclic) + the same reversed chain.
+DO $$
+DECLARE co constant uuid := 'c1000000-0000-0000-0000-000000000001';
+BEGIN
+  INSERT INTO jobs (id, company_id, job_no, status) VALUES ('b1000000-0000-0000-0000-0000000b0002', co, 'CYC-1', 'Open'), ('b1000000-0000-0000-0000-0000000b0003', co, 'CYC-2', 'Open');
+  PERFORM set_config('session_replication_role', 'replica', true);
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, start_date, end_date)
+  SELECT ('e1000000-0000-0000-0000-' || lpad(g::text, 12, '0'))::uuid, co, 'b1000000-0000-0000-0000-0000000b0002', g, 'T' || g, DATE '2026-03-02', DATE '2026-03-04'
+    FROM generate_series(1, 6) g;                    -- 1..4 = chain R1..R4, 5 and 6 = the cycle C1, C2
+  INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days, link_type)
+  SELECT co, 'b1000000-0000-0000-0000-0000000b0002', ('e1000000-0000-0000-0000-' || lpad(a::text, 12, '0'))::uuid, ('e1000000-0000-0000-0000-' || lpad(b::text, 12, '0'))::uuid, lag, 'FS'
+    FROM (VALUES (1,2,0,1),(2,3,0,2),(3,4,300,3),(5,6,0,4),(6,5,0,5),(5,1,0,6)) v(a,b,lag,o) ORDER BY o;
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, start_date, end_date, parent_task_id)
+  SELECT ('e2000000-0000-0000-0000-' || lpad(g::text, 12, '0'))::uuid, co, 'b1000000-0000-0000-0000-0000000b0003', g, 'T' || g, DATE '2026-03-02', DATE '2026-03-04',
+         CASE WHEN g IN (6, 7) THEN 'e2000000-0000-0000-0000-000000000005'::uuid END
+    FROM generate_series(1, 7) g;                    -- 1..4 = chain, 5 = summary S, 6 and 7 = its kids
+  INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days, link_type)
+  SELECT co, 'b1000000-0000-0000-0000-0000000b0003', ('e2000000-0000-0000-0000-' || lpad(a::text, 12, '0'))::uuid, ('e2000000-0000-0000-0000-' || lpad(b::text, 12, '0'))::uuid, lag, 'FS'
+    FROM (VALUES (1,2,0,1),(2,3,0,2),(3,4,300,3),(6,5,0,4),(6,1,0,5)) v(a,b,lag,o) ORDER BY o;
+  PERFORM set_config('session_replication_role', 'origin', true);
+  PERFORM t_expect('r3: cyclic links keep the array order (non-settling values unchanged)', pg_temp.st('b1000000-0000-0000-0000-0000000b0002', '2026-03-02'), '1:On track|2027-02-07|null');
+  PERFORM t_expect('r3: a summary keeps the array order (non-settling values unchanged)', pg_temp.st('b1000000-0000-0000-0000-0000000b0003', '2026-03-02'), '1:On track|2027-01-29|null');
+END $$;
+
+-- r3d M2: the harness plants ancestor / descendant links with ONLY job_task_links_hierarchy_guard switched off, and switches it back on
+DO $$
+BEGIN
+  PERFORM t_expect('r3d: the link hierarchy guard is enabled again after the planted-link cases',
+    (SELECT tgenabled::text FROM pg_trigger WHERE tgname = 'job_task_links_z_hierarchy_guard'), 'O');
+  PERFORM t_expect('r3d: a stored summary<->kid link (planted) is still evaluated: one status row, no error',
+    (pg_temp.a2run('{"today":"2026-03-02","job":{"status":"In Progress"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1},{"key":"K","sort_order":2,"parent":"S","start_date":"2026-03-02","end_date":"2026-03-04"}],"links":[{"task":"S","pred":"K"}]}'::jsonb) ~ '^1:')::text, 'true');
+END $$;
+
+
+
+-- ===== r4 M1(b): the cyclic fallback can no longer raise 22008 "date out of range"; every graph that evaluated before gives the same answer =====
+-- The link guards (a2a_schema) refuse a link that closes a loop THROUGH the hierarchy (S > X, Y after S, X after Y), but DBA-planted / legacy data can
+-- still hold one; job_schedule_status then never settles and, with a few hundred tasks, its dates ran past the end of the date range and the function
+-- raised for the whole job (dashboard, nightly snapshot). Day arithmetic now saturates at 5874897-12-31 / 4714-11-24 BC (job_sched_dadd). The links
+-- below are planted by pg_temp.a2run (hierarchy guard off); the expectations for the small graphs are what the PRE-CHANGE function returned (it did not
+-- raise there: same answer), for the overflow cases the PRE-CHANGE function raised 22008 and the value below is the saturated result.
+DO $$
+BEGIN
+  PERFORM t_expect('r4: struct: job_sched_dadd is IMMUTABLE SQL, executable by authenticated and service_role only',
+    (SELECT provolatile::text || (SELECT lanname FROM pg_language l WHERE l.oid = prolang) || has_function_privilege('authenticated', oid, 'EXECUTE')::text || has_function_privilege('service_role', oid, 'EXECUTE')::text
+        || has_function_privilege('anon', oid, 'EXECUTE')::text FROM pg_proc WHERE proname = 'job_sched_dadd'), 'isqltruetruefalse');
+  PERFORM t_expect('r4: dadd: equals d + n when in range (forward, backward, zero)',
+    job_sched_dadd(DATE '2026-03-01', 10)::text || job_sched_dadd(DATE '2026-03-01', -10)::text || job_sched_dadd(DATE '2026-03-01', 0)::text, '2026-03-112026-02-192026-03-01');
+  PERFORM t_expect('r4: dadd: saturates at the last day 5874897-12-31 (just in range, one over, far over)',
+    job_sched_dadd(DATE '5874897-12-30', 1)::text || '|' || job_sched_dadd(DATE '5874897-12-30', 2)::text || '|' || job_sched_dadd(DATE '2026-03-01', 9000000000)::text, '5874897-12-31|5874897-12-31|5874897-12-31');
+  PERFORM t_expect('r4: dadd: saturates at the first day 4714-11-24 BC (just in range, one over, far over)',
+    job_sched_dadd(DATE '4714-11-25 BC', -1)::text || '|' || job_sched_dadd(DATE '4714-11-25 BC', -2)::text || '|' || job_sched_dadd(DATE '2026-03-01', -9000000000)::text, '4714-11-24 BC|4714-11-24 BC|4714-11-24 BC');
+  PERFORM t_expect('r4: dadd: the last representable sums are exact (the end of the range is reached, not clamped early)',
+    (job_sched_dadd(DATE '5874897-12-29', 1) = DATE '5874897-12-30')::text || (job_sched_dadd(DATE '4714-11-26 BC', -1) = DATE '4714-11-25 BC')::text, 'truetrue');
+  PERFORM t_expect('r4: dadd: NULL stays NULL', coalesce(job_sched_dadd(NULL, 5)::text, 'null'), 'null');
 END $$;
 
 DO $$
 BEGIN
+  PERFORM t_expect('r4: planted loop S > X, Y after S, X after Y: one row, same answer as the pre-change function',
+    pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-01","end_date":"2026-03-03"},{"key":"X","sort_order":2,"parent":"S","start_date":"2026-03-01","end_date":"2026-03-03"},{"key":"Y","sort_order":3,"start_date":"2026-03-01","end_date":"2026-03-03"}],"links":[{"task":"Y","pred":"S"},{"task":"X","pred":"Y"}]}$j$::jsonb), '1:On track|2026-04-03|null');
+  PERFORM t_expect('r4: planted loop, the other way round (Y after X, S after Y): same answer as the pre-change function',
+    pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-01","end_date":"2026-03-03"},{"key":"X","sort_order":2,"parent":"S","start_date":"2026-03-01","end_date":"2026-03-03"},{"key":"Y","sort_order":3,"start_date":"2026-03-01","end_date":"2026-03-03"}],"links":[{"task":"Y","pred":"X"},{"task":"S","pred":"Y"}]}$j$::jsonb), '1:On track|2026-04-03|null');
+  PERFORM t_expect('r4: planted loop through nested summaries (S > K > X, lag 2, SS): same answer as the pre-change function',
+    pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-01","end_date":"2026-03-03"},{"key":"K","sort_order":2,"parent":"S","start_date":"2026-03-01","end_date":"2026-03-03"},{"key":"X","sort_order":3,"parent":"K","start_date":"2026-03-01","end_date":"2026-03-05"},{"key":"Y","sort_order":4,"start_date":"2026-03-01","end_date":"2026-03-03"}],"links":[{"task":"Y","pred":"S","lag":2},{"task":"X","pred":"Y","lag":2,"type":"SS"}]}$j$::jsonb), '1:On track|2026-04-29|null');
+END $$;
+
+-- overflow cases: the pre-change function raised 22008 on each of these; the saturated values are pinned
+DO $$
+BEGIN
+  PERFORM t_expect('r4: ovf fwd acyclic FS: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"B","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-14"}],"links":[{"task":"B","pred":"A","lag":5,"type":"FS"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf fwd cyclic FS: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"Y","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"Y","pred":"S","lag":5,"type":"FS"},{"task":"X","pred":"Y","lag":5,"type":"FS"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf fwd into summary FS: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"W","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"S","pred":"W","lag":5,"type":"FS"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf fwd from summary FS: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"W","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"W","pred":"S","lag":5,"type":"FS"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf fwd summary after own kid FS: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"}],"links":[{"task":"S","pred":"X","lag":5,"type":"FS"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf fwd kid after own summary FS: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"X2","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"}],"links":[{"task":"X","pred":"S","lag":5,"type":"FS"},{"task":"X2","pred":"X","lag":5,"type":"FS"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf bwd acyclic FS: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"B","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-14"}],"links":[{"task":"B","pred":"A","lag":5,"type":"FS"}]}$j$::jsonb), '1:Late|2026-03-17|2461114');
+  PERFORM t_expect('r4: ovf bwd cyclic FS: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"Y","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"Y","pred":"S","lag":5,"type":"FS"},{"task":"X","pred":"Y","lag":5,"type":"FS"}]}$j$::jsonb), '1:Late|2026-06-14|2461203');
+  PERFORM t_expect('r4: ovf bwd into summary FS: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"W","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"S","pred":"W","lag":5,"type":"FS"}]}$j$::jsonb), '1:Late|2026-03-16|2461113');
+  PERFORM t_expect('r4: ovf bwd from summary FS: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"W","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"W","pred":"S","lag":5,"type":"FS"}]}$j$::jsonb), '1:Late|2026-03-16|2461113');
+  PERFORM t_expect('r4: ovf bwd summary after own kid FS: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"}],"links":[{"task":"S","pred":"X","lag":5,"type":"FS"}]}$j$::jsonb), '1:Late|2026-04-15|2461143');
+  PERFORM t_expect('r4: ovf bwd kid after own summary FS: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"X2","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"}],"links":[{"task":"X","pred":"S","lag":5,"type":"FS"},{"task":"X2","pred":"X","lag":5,"type":"FS"}]}$j$::jsonb), '1:Late|2026-06-14|2461203');
+  PERFORM t_expect('r4: ovf fwd acyclic SS: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"B","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-14"}],"links":[{"task":"B","pred":"A","lag":5,"type":"SS"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf fwd cyclic SS: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"Y","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"Y","pred":"S","lag":5,"type":"SS"},{"task":"X","pred":"Y","lag":5,"type":"SS"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf fwd into summary SS: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"W","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"S","pred":"W","lag":5,"type":"SS"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf fwd from summary SS: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"W","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"W","pred":"S","lag":5,"type":"SS"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf fwd summary after own kid SS: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"}],"links":[{"task":"S","pred":"X","lag":5,"type":"SS"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf fwd kid after own summary SS: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"X2","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"}],"links":[{"task":"X","pred":"S","lag":5,"type":"SS"},{"task":"X2","pred":"X","lag":5,"type":"SS"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf bwd acyclic SS: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"B","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-14"}],"links":[{"task":"B","pred":"A","lag":5,"type":"SS"}]}$j$::jsonb), '1:Late|2026-03-12|2461109');
+  PERFORM t_expect('r4: ovf bwd cyclic SS: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"Y","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"Y","pred":"S","lag":5,"type":"SS"},{"task":"X","pred":"Y","lag":5,"type":"SS"}]}$j$::jsonb), '1:Late|2026-04-25|2461153');
+  PERFORM t_expect('r4: ovf bwd into summary SS: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"W","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"S","pred":"W","lag":5,"type":"SS"}]}$j$::jsonb), '1:Late|2026-03-11|2461108');
+  PERFORM t_expect('r4: ovf bwd from summary SS: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"W","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"W","pred":"S","lag":5,"type":"SS"}]}$j$::jsonb), '1:Late|2026-03-11|2461108');
+  PERFORM t_expect('r4: ovf bwd summary after own kid SS: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"}],"links":[{"task":"S","pred":"X","lag":5,"type":"SS"}]}$j$::jsonb), '1:Late|2026-03-26|2461123');
+  PERFORM t_expect('r4: ovf bwd kid after own summary SS: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"X2","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"}],"links":[{"task":"X","pred":"S","lag":5,"type":"SS"},{"task":"X2","pred":"X","lag":5,"type":"SS"}]}$j$::jsonb), '1:Late|2026-04-05|2461133');
+  PERFORM t_expect('r4: ovf fwd acyclic FF: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"B","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-14"}],"links":[{"task":"B","pred":"A","lag":5,"type":"FF"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf fwd cyclic FF: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"Y","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"Y","pred":"S","lag":5,"type":"FF"},{"task":"X","pred":"Y","lag":5,"type":"FF"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf fwd into summary FF: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"W","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"S","pred":"W","lag":5,"type":"FF"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf fwd from summary FF: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"W","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"W","pred":"S","lag":5,"type":"FF"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf fwd summary after own kid FF: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"}],"links":[{"task":"S","pred":"X","lag":5,"type":"FF"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf fwd kid after own summary FF: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"X2","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"}],"links":[{"task":"X","pred":"S","lag":5,"type":"FF"},{"task":"X2","pred":"X","lag":5,"type":"FF"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf bwd acyclic FF: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"B","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-14"}],"links":[{"task":"B","pred":"A","lag":5,"type":"FF"}]}$j$::jsonb), '1:Late|2026-03-11|2461108');
+  PERFORM t_expect('r4: ovf bwd cyclic FF: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"Y","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"Y","pred":"S","lag":5,"type":"FF"},{"task":"X","pred":"Y","lag":5,"type":"FF"}]}$j$::jsonb), '1:Late|2026-04-25|2461153');
+  PERFORM t_expect('r4: ovf bwd into summary FF: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"W","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"S","pred":"W","lag":5,"type":"FF"}]}$j$::jsonb), '1:Late|2026-03-06|2461103');
+  PERFORM t_expect('r4: ovf bwd from summary FF: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"W","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"W","pred":"S","lag":5,"type":"FF"}]}$j$::jsonb), '1:Late|2026-03-11|2461108');
+  PERFORM t_expect('r4: ovf bwd summary after own kid FF: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"}],"links":[{"task":"S","pred":"X","lag":5,"type":"FF"}]}$j$::jsonb), '1:Late|2026-03-06|2461103');
+  PERFORM t_expect('r4: ovf bwd kid after own summary FF: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"X2","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"}],"links":[{"task":"X","pred":"S","lag":5,"type":"FF"},{"task":"X2","pred":"X","lag":5,"type":"FF"}]}$j$::jsonb), '1:Late|2026-04-25|2461153');
+  PERFORM t_expect('r4: ovf fwd acyclic SF: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"B","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-14"}],"links":[{"task":"B","pred":"A","lag":5,"type":"SF"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf fwd cyclic SF: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"Y","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"Y","pred":"S","lag":5,"type":"SF"},{"task":"X","pred":"Y","lag":5,"type":"SF"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf fwd into summary SF: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"W","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"S","pred":"W","lag":5,"type":"SF"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf fwd from summary SF: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"W","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"W","pred":"S","lag":5,"type":"SF"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf fwd summary after own kid SF: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"}],"links":[{"task":"S","pred":"X","lag":5,"type":"SF"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf fwd kid after own summary SF: no 22008, saturated result', pg_temp.a2run($j${"today":"5874897-12-28","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"X2","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"}],"links":[{"task":"X","pred":"S","lag":5,"type":"SF"},{"task":"X2","pred":"X","lag":5,"type":"SF"}]}$j$::jsonb), '1:Late|5874897-12-31|null');
+  PERFORM t_expect('r4: ovf bwd acyclic SF: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"B","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-14"}],"links":[{"task":"B","pred":"A","lag":5,"type":"SF"}]}$j$::jsonb), '1:Late|2026-03-07|2461104');
+  PERFORM t_expect('r4: ovf bwd cyclic SF: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"Y","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"Y","pred":"S","lag":5,"type":"SF"},{"task":"X","pred":"Y","lag":5,"type":"SF"}]}$j$::jsonb), '1:Late|2026-03-06|2461103');
+  PERFORM t_expect('r4: ovf bwd into summary SF: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"W","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"S","pred":"W","lag":5,"type":"SF"}]}$j$::jsonb), '1:Late|2026-03-06|2461103');
+  PERFORM t_expect('r4: ovf bwd from summary SF: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"W","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13"}],"links":[{"task":"W","pred":"S","lag":5,"type":"SF"}]}$j$::jsonb), '1:Late|2026-03-06|2461103');
+  PERFORM t_expect('r4: ovf bwd summary after own kid SF: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"}],"links":[{"task":"S","pred":"X","lag":5,"type":"SF"}]}$j$::jsonb), '1:Late|2026-03-06|2461103');
+  PERFORM t_expect('r4: ovf bwd kid after own summary SF: no 22008, saturated result', pg_temp.a2run($j${"today":"2026-03-01","job":{"status":"In Progress","due_date":"4714-11-27 BC"},"baselineLocked":false,"tasks":[{"key":"S","sort_order":1,"start_date":"2026-03-09","end_date":"2026-03-13"},{"key":"X","sort_order":2,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"},{"key":"X2","sort_order":3,"start_date":"2026-03-09","end_date":"2026-03-13","parent":"S"}],"links":[{"task":"X","pred":"S","lag":5,"type":"SF"},{"task":"X2","pred":"X","lag":5,"type":"SF"}]}$j$::jsonb), '1:Late|2026-03-06|2461103');
+END $$;
+
+-- the reviewer's scale: S with K kids chained against their direction, K outsiders before S, lag 365, full-range dates; Y after S, the last kid after Y
+-- (planted: the guard refuses it). 301 tasks: the pre-change function raised 22008 after 0.1 s; 2001 tasks: after 3.5 s.
+DO $$
+DECLARE co constant uuid := 'c1000000-0000-0000-0000-000000000001'; K int; jb uuid; b bigint;
+BEGIN
+  FOREACH K IN ARRAY ARRAY[150, 1000] LOOP
+    jb := gen_random_uuid(); b := K * 10000;
+    INSERT INTO jobs (id, company_id, job_no, status) VALUES (jb, co, 'OV-' || K, 'Open');
+    PERFORM set_config('session_replication_role', 'replica', true);
+    INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, start_date, end_date)
+      VALUES (('e3000000-0000-0000-0000-' || lpad((b + 1)::text, 12, '0'))::uuid, co, jb, 1, 'S', DATE '2000-01-01', DATE '2100-12-31');
+    INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, start_date, end_date, parent_task_id)
+      SELECT ('e3000000-0000-0000-0000-' || lpad((b + g)::text, 12, '0'))::uuid, co, jb, g, 'T' || g, DATE '2000-01-01', DATE '2100-12-31',
+             ('e3000000-0000-0000-0000-' || lpad((b + 1)::text, 12, '0'))::uuid FROM generate_series(2, K + 1) g;
+    INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, start_date, end_date)
+      SELECT ('e3000000-0000-0000-0000-' || lpad((b + 5000 + g)::text, 12, '0'))::uuid, co, jb, 5000 + g, 'O' || g, DATE '2000-01-01', DATE '2100-12-31' FROM generate_series(1, K) g;
+    INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days)
+      SELECT co, jb, ('e3000000-0000-0000-0000-' || lpad((b + g)::text, 12, '0'))::uuid, ('e3000000-0000-0000-0000-' || lpad((b + g + 1)::text, 12, '0'))::uuid, 365 FROM generate_series(2, K) g;
+    INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days)
+      SELECT co, jb, ('e3000000-0000-0000-0000-' || lpad((b + 1)::text, 12, '0'))::uuid, ('e3000000-0000-0000-0000-' || lpad((b + 5000 + g)::text, 12, '0'))::uuid, 365 FROM generate_series(1, K) g;
+    INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days) VALUES
+      (co, jb, ('e3000000-0000-0000-0000-' || lpad((b + 5001)::text, 12, '0'))::uuid, ('e3000000-0000-0000-0000-' || lpad((b + 1)::text, 12, '0'))::uuid, 365),
+      (co, jb, ('e3000000-0000-0000-0000-' || lpad((b + K + 1)::text, 12, '0'))::uuid, ('e3000000-0000-0000-0000-' || lpad((b + 5001)::text, 12, '0'))::uuid, 365);
+    PERFORM set_config('session_replication_role', 'origin', true);
+    PERFORM t_expect('r4: scale ' || (2 * K + 1) || ' tasks: the loop S -> Y -> kid -> S evaluates (no 22008), forecast pinned', pg_temp.st(jb::text, '2026-03-01'), CASE K WHEN 150 THEN '1:On track|63939-08-10|null' ELSE '1:On track|410742-01-27|null' END);
+  END LOOP;
+END $$;
+
+-- ===== r5 M-B: infinite dates (what an ordinary writer can store) never make the status stack raise 22008 / 22003 =====
+-- RULE (documented in the migration): a non-finite date is SATURATED to the end of the date range it is infinite towards: +infinity = 5874897-12-31,
+-- -infinity = 4714-11-24 BC (job_sched_dfin). It applies to job_sched_dadd (its date and its day count, which can no longer raise 22003 for
+-- -9223372036854775808), job_task_weight / job_task_planned_pct (all their dates), and job_schedule_status (due_date, baseline_end, p_today).
+-- Task start / end dates were already clamped to 2000-01-01..2100-12-31 when loaded. A finite date is never changed, so every finite input gives
+-- the answer it gave before (diff-vs-old.sh = 0 differences). The pre-change functions raised 22008 on every infinity case below. Each case is checked
+-- against the SAME job with the saturation bound written out as a finite date (equal answers = saturation), and as a plain "one row came back".
+CREATE FUNCTION pg_temp.eqc(p_label text, p_inf jsonb, p_fin jsonb) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM t_expect('r5 M-B: ' || p_label, pg_temp.a2run(p_inf), pg_temp.a2run(p_fin));
+END $$;
+DO $$
+DECLARE
+  tasks_end text := '"tasks":[{"key":"A","sort_order":1,"start_date":"2026-03-02","end_date":"2026-03-05"},{"key":"B","sort_order":2,"start_date":"2026-03-02","end_date":"2026-03-05"},{"key":"C","sort_order":3,"start_date":"2026-03-10","end_date":"%s"}],"links":[{"task":"B","pred":"A"}]';
+  tasks_bl  text := '"tasks":[{"key":"A","sort_order":1,"start_date":"2026-03-02","end_date":"2026-03-05","baseline_start":"2026-03-02","baseline_end":"%s","progress":30},{"key":"B","sort_order":2,"start_date":"2026-03-04","end_date":"2026-03-09","baseline_start":"2026-03-02","baseline_end":"2026-03-08"}],"links":[{"task":"B","pred":"A"}]';
+  plain     text := '"tasks":[{"key":"A","sort_order":1,"start_date":"2026-03-02","end_date":"2026-03-05"},{"key":"B","sort_order":2,"start_date":"2026-03-02","end_date":"2026-03-05"}],"links":[{"task":"B","pred":"A"}]';
+  hi text := '5874897-12-31'; lo text := '4714-11-24 BC';
+BEGIN
+  -- a task end_date / start_date of infinity (raised in job_task_weight / job_task_planned_pct)
+  PERFORM pg_temp.eqc('task end_date infinity = the late bound', ('{"today":"2026-03-02","job":{"status":"In Progress"},"baselineLocked":false,' || format(tasks_end, 'infinity') || '}')::jsonb,
+                                                                  ('{"today":"2026-03-02","job":{"status":"In Progress"},"baselineLocked":false,' || format(tasks_end, hi) || '}')::jsonb);
+  -- (job_tasks_dates_chk requires start <= end, so -infinity as an end needs -infinity as the start, and infinity as a start needs infinity as the end)
+  PERFORM pg_temp.eqc('task start and end -infinity = the early bound',
+    '{"today":"2026-03-02","job":{"status":"In Progress"},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"-infinity","end_date":"-infinity"},{"key":"B","sort_order":2,"start_date":"2026-03-02","end_date":"2026-03-05"}],"links":[{"task":"B","pred":"A"}]}'::jsonb,
+    ('{"today":"2026-03-02","job":{"status":"In Progress"},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"' || lo || '","end_date":"' || lo || '"},{"key":"B","sort_order":2,"start_date":"2026-03-02","end_date":"2026-03-05"}],"links":[{"task":"B","pred":"A"}]}')::jsonb);
+  PERFORM pg_temp.eqc('task start_date and end_date infinity = the late bound',
+    ('{"today":"2026-03-02","job":{"status":"In Progress"},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"infinity","end_date":"infinity"}]}')::jsonb,
+    ('{"today":"2026-03-02","job":{"status":"In Progress"},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"' || hi || '","end_date":"' || hi || '"}]}')::jsonb);
+  PERFORM pg_temp.eqc('task start_date -infinity = the early bound',
+    ('{"today":"2026-03-02","job":{"status":"In Progress"},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"-infinity","end_date":"2026-03-05"}]}')::jsonb,
+    ('{"today":"2026-03-02","job":{"status":"In Progress"},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"' || lo || '","end_date":"2026-03-05"}]}')::jsonb);
+  -- baseline dates of infinity on a LOCKED baseline (planned % and the slip against the baseline end)
+  PERFORM pg_temp.eqc('baseline_end infinity (locked) = the late bound', ('{"today":"2026-03-04","job":{"status":"In Progress"},"baselineLocked":true,' || format(tasks_bl, 'infinity') || '}')::jsonb,
+                                                                          ('{"today":"2026-03-04","job":{"status":"In Progress"},"baselineLocked":true,' || format(tasks_bl, hi) || '}')::jsonb);
+  PERFORM pg_temp.eqc('baseline_start and baseline_end -infinity (locked) = the early bound',
+    '{"today":"2026-03-04","job":{"status":"In Progress"},"baselineLocked":true,"tasks":[{"key":"A","sort_order":1,"start_date":"2026-03-02","end_date":"2026-03-05","baseline_start":"-infinity","baseline_end":"-infinity","progress":30},{"key":"B","sort_order":2,"start_date":"2026-03-04","end_date":"2026-03-09","baseline_start":"2026-03-02","baseline_end":"2026-03-08"}],"links":[{"task":"B","pred":"A"}]}'::jsonb,
+    ('{"today":"2026-03-04","job":{"status":"In Progress"},"baselineLocked":true,"tasks":[{"key":"A","sort_order":1,"start_date":"2026-03-02","end_date":"2026-03-05","baseline_start":"' || lo || '","baseline_end":"' || lo || '","progress":30},{"key":"B","sort_order":2,"start_date":"2026-03-04","end_date":"2026-03-09","baseline_start":"2026-03-02","baseline_end":"2026-03-08"}],"links":[{"task":"B","pred":"A"}]}')::jsonb);
+  -- the job's due_date (raised inside job_sched_dadd)
+  PERFORM pg_temp.eqc('due_date infinity = the late bound', ('{"today":"2026-03-02","job":{"status":"In Progress","due_date":"infinity"},"baselineLocked":false,' || plain || '}')::jsonb,
+                                                             ('{"today":"2026-03-02","job":{"status":"In Progress","due_date":"' || hi || '"},"baselineLocked":false,' || plain || '}')::jsonb);
+  PERFORM pg_temp.eqc('due_date -infinity = the early bound', ('{"today":"2026-03-02","job":{"status":"In Progress","due_date":"-infinity"},"baselineLocked":false,' || plain || '}')::jsonb,
+                                                               ('{"today":"2026-03-02","job":{"status":"In Progress","due_date":"' || lo || '"},"baselineLocked":false,' || plain || '}')::jsonb);
+  PERFORM pg_temp.eqc('due_date infinity, no tasks = the late bound', '{"today":"2026-03-02","job":{"status":"In Progress","due_date":"infinity"},"baselineLocked":false,"tasks":[]}'::jsonb,
+                      ('{"today":"2026-03-02","job":{"status":"In Progress","due_date":"' || hi || '"},"baselineLocked":false,"tasks":[]}')::jsonb);
+  -- the p_today argument
+  PERFORM pg_temp.eqc('p_today infinity = the late bound', ('{"today":"infinity","job":{"status":"In Progress"},"baselineLocked":false,' || plain || '}')::jsonb,
+                                                            ('{"today":"' || hi || '","job":{"status":"In Progress"},"baselineLocked":false,' || plain || '}')::jsonb);
+  PERFORM pg_temp.eqc('p_today -infinity = the early bound', ('{"today":"-infinity","job":{"status":"In Progress"},"baselineLocked":false,' || plain || '}')::jsonb,
+                                                              ('{"today":"' || lo || '","job":{"status":"In Progress"},"baselineLocked":false,' || plain || '}')::jsonb);
+  PERFORM pg_temp.eqc('p_today infinity with a done and a started task and a link = the late bound',
+    '{"today":"infinity","job":{"status":"In Progress","due_date":"2026-04-01"},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"2026-03-02","end_date":"2026-03-05","progress":100},{"key":"B","sort_order":2,"start_date":"2026-03-02","end_date":"2026-03-05","progress":40}],"links":[{"task":"B","pred":"A"}]}'::jsonb,
+    ('{"today":"' || hi || '","job":{"status":"In Progress","due_date":"2026-04-01"},"baselineLocked":false,"tasks":[{"key":"A","sort_order":1,"start_date":"2026-03-02","end_date":"2026-03-05","progress":100},{"key":"B","sort_order":2,"start_date":"2026-03-02","end_date":"2026-03-05","progress":40}],"links":[{"task":"B","pred":"A"}]}')::jsonb);
+  -- everything at once: still exactly one row
+  PERFORM t_expect('r5 M-B: every date infinite at once: one row, no error',
+    left(pg_temp.a2run('{"today":"infinity","job":{"status":"In Progress","due_date":"-infinity"},"baselineLocked":true,"tasks":[{"key":"A","sort_order":1,"start_date":"-infinity","end_date":"infinity","baseline_start":"-infinity","baseline_end":"infinity"},{"key":"B","sort_order":2,"start_date":"infinity","end_date":"infinity","baseline_start":"infinity","baseline_end":"infinity"}],"links":[{"task":"B","pred":"A"}]}'::jsonb), 2), '1:');
+END $$;
+-- the helper functions themselves
+DO $$
+BEGIN
+  PERFORM t_expect('r5 M-B: struct: job_sched_dfin is IMMUTABLE SQL, executable by authenticated and service_role only',
+    (SELECT provolatile::text || (SELECT lanname FROM pg_language l WHERE l.oid = prolang) || has_function_privilege('authenticated', oid, 'EXECUTE')::text || has_function_privilege('service_role', oid, 'EXECUTE')::text
+        || has_function_privilege('anon', oid, 'EXECUTE')::text FROM pg_proc WHERE proname = 'job_sched_dfin'), 'isqltruetruefalse');
+  PERFORM t_expect('r5 M-B: dfin: finite dates (incl. both ends of the range) are returned unchanged, NULL stays NULL',
+    job_sched_dfin(DATE '2026-03-01')::text || '|' || job_sched_dfin(DATE '5874897-12-31')::text || '|' || job_sched_dfin(DATE '4714-11-24 BC')::text || '|' || coalesce(job_sched_dfin(NULL)::text, 'null'),
+    '2026-03-01|5874897-12-31|4714-11-24 BC|null');
+  PERFORM t_expect('r5 M-B: dfin: +infinity -> 5874897-12-31, -infinity -> 4714-11-24 BC',
+    job_sched_dfin(DATE 'infinity')::text || '|' || job_sched_dfin(DATE '-infinity')::text, '5874897-12-31|4714-11-24 BC');
+  PERFORM t_expect('r5 M-B: dadd: an infinite DATE saturates first (infinity+5, -infinity-5, infinity-5, -infinity+5)',
+    job_sched_dadd(DATE 'infinity', 5)::text || '|' || job_sched_dadd(DATE '-infinity', -5)::text || '|' || job_sched_dadd(DATE 'infinity', -5)::text || '|' || job_sched_dadd(DATE '-infinity', 5)::text,
+    '5874897-12-31|4714-11-24 BC|5874897-12-26|4714-11-29 BC');
+  PERFORM t_expect('r5 M-B: dadd: the most negative bigint (whose negation overflowed: 22003) saturates at the early bound',
+    job_sched_dadd(DATE '2026-01-01', -9223372036854775807 - 1)::text || '|' || job_sched_dadd(DATE '2026-01-01', 9223372036854775807)::text || '|' || job_sched_dadd(DATE 'infinity', -9223372036854775807 - 1)::text,
+    '4714-11-24 BC|5874897-12-31|4714-11-24 BC');
+  PERFORM t_expect('r5 M-B: dadd: NULL days stays NULL', coalesce(job_sched_dadd(DATE '2026-01-01', NULL)::text, 'null'), 'null');
+  PERFORM t_expect('r5 M-B: weight: an infinite end / start equals the saturated bound (no 22008)',
+    (job_task_weight(false, NULL, DATE '2026-03-01', DATE 'infinity') = job_task_weight(false, NULL, DATE '2026-03-01', DATE '5874897-12-31'))::text
+    || (job_task_weight(false, NULL, DATE '-infinity', DATE '2026-03-01') = job_task_weight(false, NULL, DATE '4714-11-24 BC', DATE '2026-03-01'))::text
+    || (job_task_weight(false, NULL, DATE '-infinity', DATE 'infinity') = job_task_weight(false, NULL, DATE '4714-11-24 BC', DATE '5874897-12-31'))::text
+    || (job_task_weight(false, NULL, DATE 'infinity', DATE '-infinity') = 1)::text, 'truetruetruetrue');
+  PERFORM t_expect('r5 M-B: weight: explicit weight and milestone ignore infinite dates', job_task_weight(false, 3, DATE '-infinity', DATE 'infinity')::text || job_task_weight(true, NULL, DATE 'infinity', DATE 'infinity')::text, '30');
+  PERFORM t_expect('r5 M-B: planned: infinite dates equal the saturated bounds (baseline, current, and p_on)',
+    (job_task_planned_pct(NULL, NULL, DATE '2026-03-01', DATE 'infinity', DATE '2026-03-10') = job_task_planned_pct(NULL, NULL, DATE '2026-03-01', DATE '5874897-12-31', DATE '2026-03-10'))::text
+    || (job_task_planned_pct(DATE '-infinity', DATE '2026-03-01', NULL, NULL, DATE '2026-03-10') = job_task_planned_pct(DATE '4714-11-24 BC', DATE '2026-03-01', NULL, NULL, DATE '2026-03-10'))::text
+    || (job_task_planned_pct(NULL, NULL, DATE '2026-03-01', DATE '2026-03-05', DATE 'infinity') = 100)::text
+    || (job_task_planned_pct(NULL, NULL, DATE '2026-03-01', DATE '2026-03-05', DATE '-infinity') = 0)::text
+    || (job_task_planned_pct(DATE 'infinity', DATE '-infinity', NULL, NULL, DATE '2026-03-10') = 0)::text, 'truetruetruetruetrue');
+  PERFORM t_expect('r5 M-B: planned: the extreme finite bounds themselves do not overflow',
+    (job_task_planned_pct(DATE '4714-11-24 BC', DATE '5874897-12-31', NULL, NULL, DATE '5874897-12-31') = 100)::text
+    || (job_task_planned_pct(DATE '4714-11-24 BC', DATE '5874897-12-31', NULL, NULL, DATE '4714-11-24 BC') > 0)::text, 'truetrue');
+END $$;
+
+DO $$
+BEGIN
+
 -- @@UNCHECKED@@
 END $$;
 ROLLBACK;

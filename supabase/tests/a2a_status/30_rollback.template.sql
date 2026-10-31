@@ -23,6 +23,21 @@ BEGIN
   PERFORM t_expect('down: the A2a columns are untouched by this down script',
     (SELECT count(*)::text FROM information_schema.columns WHERE table_schema = 'public' AND ((table_name = 'job_task_links' AND column_name = 'link_type')
       OR (table_name = 'job_tasks' AND column_name = 'parent_task_id'))), '2');
+  -- r5 M-B: the two Phase A helpers are back to their Phase A bodies (infinite dates raise again), the saturating helpers are gone
+  PERFORM t_expect('down: job_sched_dfin and job_sched_dadd are gone', (SELECT count(*)::text FROM pg_proc WHERE proname IN ('job_sched_dfin', 'job_sched_dadd')), '0');
+  PERFORM t_expect('down: job_task_weight / job_task_planned_pct do not mention job_sched_dfin',
+    (SELECT count(*)::text FROM pg_proc WHERE proname IN ('job_task_weight', 'job_task_planned_pct') AND prosrc LIKE '%job_sched_dfin%'), '0');
+  PERFORM t_expect('down: finite helper values are unchanged',
+    job_task_weight(false, NULL, DATE '2026-03-01', DATE '2026-03-10')::text || '|' || round(job_task_planned_pct(NULL, NULL, DATE '2026-03-06', DATE '2026-03-15', DATE '2026-03-10'), 2)::text, '10|50.00');
+  PERFORM t_expect('down: job_task_weight is IMMUTABLE with the pinned search_path and keeps its grants',
+    (SELECT provolatile::text || ',' || array_to_string(proconfig, ',') || ',' || has_function_privilege('authenticated', oid, 'EXECUTE')::text || has_function_privilege('anon', oid, 'EXECUTE')::text
+       FROM pg_proc WHERE proname = 'job_task_weight'), 'i,search_path=public, pg_temp,truefalse');
+  BEGIN
+    PERFORM job_task_weight(false, NULL, DATE '2026-03-01', DATE 'infinity');
+    PERFORM t_expect('down: Phase A job_task_weight raises on an infinite date again', 'no error', '22008');
+  EXCEPTION WHEN SQLSTATE '22008' THEN
+    PERFORM t_expect('down: Phase A job_task_weight raises on an infinite date again', '22008', '22008');
+  END;
 -- @@OLD@@
 END $$;
 ROLLBACK;

@@ -305,7 +305,7 @@ BEGIN
   INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f7000000-0000-0000-0000-0000000000d1', c1, 'b1000000-0000-0000-0000-0000000000a4', 1, 'top', 99999999);
   INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES ('f7000000-0000-0000-0000-0000000000d2', c1, 'b1000000-0000-0000-0000-0000000000a4', 2, 'n1');
   res := t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', 'b1000000-0000-0000-0000-0000000000a4'));
-  PERFORM t_expect('m3: exactly filling the space to 100000000 is accepted', res || '|' || (SELECT msp_uid::text FROM job_tasks WHERE id = 'f7000000-0000-0000-0000-0000000000d2'), 'ok:1|100000000');
+  PERFORM t_expect('m3/r3: a planted 99999999 is an outlier (2 rows): the counter starts at 0, the new row gets 1', res || '|' || (SELECT msp_uid::text FROM job_tasks WHERE id = 'f7000000-0000-0000-0000-0000000000d2'), 'ok:1|1');
   -- L1 as the reviewer found it: one row planted at the cap, three rows still to number; used numbers 1, 2 and 4 are skipped
   INSERT INTO jobs (id, company_id, job_no, status) VALUES ('b1000000-0000-0000-0000-0000000000a5', c1, 'WO-EA5', 'Open');
   INSERT INTO job_phases (id, company_id, job_id, sort_order, name, msp_uid) VALUES ('f6000000-0000-0000-0000-0000000000d3', c1, 'b1000000-0000-0000-0000-0000000000a5', 1, 'ph', 2), ('f6000000-0000-0000-0000-0000000000d4', c1, 'b1000000-0000-0000-0000-0000000000a5', 2, 'ph2', NULL);
@@ -363,6 +363,96 @@ BEGIN
   res := t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', jd));
   PERFORM t_expect('x26: a second export with nothing new assigns nothing', res, 'ok:0');
 END $$;
+-- ===== r3 (MEDIUM): a planted msp_uid cannot lock the export / uid space of a job =====
+DO $$
+DECLARE
+  ops uuid := '11111111-1111-1111-1111-111111111111'; wrt uuid := '12121212-1212-1212-1212-121212121212'; c1 constant uuid := 'c1000000-0000-0000-0000-000000000001';
+  j constant uuid := 'b1000000-0000-0000-0000-0000000000a9'; jd constant uuid := 'b1000000-0000-0000-0000-0000000000aa'; res text;
+BEGIN
+  INSERT INTO jobs (id, company_id, job_no, status) VALUES (j, c1, 'WO-EA9', 'Open'), (jd, c1, 'WO-EAA', 'Open');
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES ('f7000000-0000-0000-0000-0000000001b1', c1, j, 1, 'T');
+  PERFORM t_expect('r3: writer cannot plant 99999999 on the task', t_dml_api('authenticated', wrt, 'UPDATE job_tasks SET msp_uid = 99999999 WHERE id = ''f7000000-0000-0000-0000-0000000001b1'''), 'err:A2U01');
+  res := t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', j));
+  PERFORM t_expect('r3: export still numbers the task (1)', res || '|' || (SELECT msp_uid::text FROM job_tasks WHERE id = 'f7000000-0000-0000-0000-0000000001b1'), 'ok:1|1');
+  -- owner-planted outlier before the first uid request: the counter does not jump to the cap
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name, msp_uid) VALUES ('f7000000-0000-0000-0000-0000000001b2', c1, jd, 1, 'planted', 99999999);
+  INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES ('f7000000-0000-0000-0000-0000000001b3', c1, jd, 2, 'n');
+  res := t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', jd));
+  PERFORM t_expect('r3: net: export numbers the new task 1 and leaves the counter at 1', res || '|' || (SELECT msp_uid::text FROM job_tasks WHERE id = 'f7000000-0000-0000-0000-0000000001b3')
+    || '|' || (SELECT last_uid::text FROM job_schedule_uid_counter WHERE job_id = jd), 'ok:1|1|1');
+  UPDATE job_tasks SET msp_uid = NULL WHERE id = 'f7000000-0000-0000-0000-0000000001b2';
+  res := t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', jd));
+  PERFORM t_expect('r3: net: after the outlier is cleared the next export still works (uid 2, 1 not reused)', res || '|' || (SELECT msp_uid::text FROM job_tasks WHERE id = 'f7000000-0000-0000-0000-0000000001b2'), 'ok:1|2');
+END $$;
+
+
+-- ===== 6c. r4 M2: the numbering UPDATEs re-check the row after a lock wait (rule X26) =====
+-- A writer moving a uid-less row to another job while this export waits for the row's lock must not get this job's uid stamped on the row that
+-- is now in the OTHER job. The behaviour needs two sessions (bash supabase/tests/a2a_export/concurrency_move.sh); here the predicates are pinned in the body
+-- so a single-session run notices when one of them goes (the UPDATE is re-evaluated against the NEW row version after the wait).
+DO $$
+DECLARE d text := regexp_replace(pg_get_functiondef('schedule_export_core(uuid,text)'::regprocedure), '\s+', ' ', 'g');
+BEGIN
+  PERFORM t_expect('r4: struct: the task numbering UPDATE matches id AND job AND company AND "no uid yet"',
+    (d LIKE '%UPDATE job_tasks t SET msp_uid = v_free[v_pnull + n.rn] FROM n WHERE n.rn <= v_tnull AND t.id = n.id AND t.job_id = p_job_id AND t.company_id = v_company AND t.msp_uid IS NULL;%')::text, 'true');
+  PERFORM t_expect('r4: struct: the phase numbering UPDATE matches id AND job AND company AND "no uid yet"',
+    (d LIKE '%UPDATE job_phases p SET msp_uid = v_free[n.rn] FROM n WHERE n.rn <= v_pnull AND p.id = n.id AND p.job_id = p_job_id AND p.company_id = v_company AND p.msp_uid IS NULL;%')::text, 'true');
+END $$;
+
+-- ===== 6d. r5 M-A: rows inserted between the counting and the numbering never get a duplicate uid =====
+-- The two-session version is concurrency_move.sh S7/S8. Here the interleaving is made deterministic: sched_next_uids is wrapped so that it inserts
+-- a new row with sort_order 0 (phase or task, chosen by a setting) right before it returns - exactly what a concurrent writer does while the
+-- export waits for the uid counter. The caps are n.rn <= v_pnull (phases) and n.rn <= v_tnull (tasks). Rename and wrapper roll back with the transaction.
+INSERT INTO jobs (id, company_id, job_no, status) VALUES
+ ('b1000000-0000-0000-0000-0000000000d1','c1000000-0000-0000-0000-000000000001','WO-D01','Open'),
+ ('b1000000-0000-0000-0000-0000000000d2','c1000000-0000-0000-0000-000000000001','WO-D02','Open');
+INSERT INTO job_phases (id, company_id, job_id, sort_order, name) VALUES
+ ('f6000000-0000-0000-0000-000000000dd1','c1000000-0000-0000-0000-000000000001','b1000000-0000-0000-0000-0000000000d1',1,'D1 p1'),
+ ('f6000000-0000-0000-0000-000000000dd2','c1000000-0000-0000-0000-000000000001','b1000000-0000-0000-0000-0000000000d1',2,'D1 p2'),
+ ('f6000000-0000-0000-0000-000000000dd3','c1000000-0000-0000-0000-000000000001','b1000000-0000-0000-0000-0000000000d2',1,'D2 p1'),
+ ('f6000000-0000-0000-0000-000000000dd4','c1000000-0000-0000-0000-000000000001','b1000000-0000-0000-0000-0000000000d2',2,'D2 p2');
+INSERT INTO job_tasks (id, company_id, job_id, sort_order, task_name) VALUES
+ ('f7000000-0000-0000-0000-000000000dd1','c1000000-0000-0000-0000-000000000001','b1000000-0000-0000-0000-0000000000d1',1,'D1 t1'),
+ ('f7000000-0000-0000-0000-000000000dd2','c1000000-0000-0000-0000-000000000001','b1000000-0000-0000-0000-0000000000d1',2,'D1 t2'),
+ ('f7000000-0000-0000-0000-000000000dd3','c1000000-0000-0000-0000-000000000001','b1000000-0000-0000-0000-0000000000d2',1,'D2 t1'),
+ ('f7000000-0000-0000-0000-000000000dd4','c1000000-0000-0000-0000-000000000001','b1000000-0000-0000-0000-0000000000d2',2,'D2 t2');
+ALTER FUNCTION sched_next_uids(uuid, uuid, integer, boolean) RENAME TO sched_next_uids_real;
+CREATE FUNCTION sched_next_uids(p_job_id uuid, p_company uuid, p_n integer, p_replace boolean DEFAULT false) RETURNS integer[]
+LANGUAGE plpgsql AS $$
+DECLARE v integer[];
+BEGIN
+  v := sched_next_uids_real(p_job_id, p_company, p_n, p_replace);
+  IF current_setting('a2a.inject', true) = 'phase' THEN
+    INSERT INTO job_phases (company_id, job_id, sort_order, name) VALUES (p_company, p_job_id, 0, 'injected phase');
+  ELSIF current_setting('a2a.inject', true) = 'task' THEN
+    INSERT INTO job_tasks (company_id, job_id, sort_order, task_name) VALUES (p_company, p_job_id, 0, 'injected task');
+  END IF;
+  RETURN v;
+END $$;
+DO $$
+DECLARE ops uuid := '11111111-1111-1111-1111-111111111111'; d1 text := 'b1000000-0000-0000-0000-0000000000d1'; d2 text := 'b1000000-0000-0000-0000-0000000000d2';
+BEGIN
+  PERFORM set_config('a2a.inject', 'phase', true);
+  PERFORM t_expect('r5 M-A: phase injected mid-export: reports only the 4 rows it counted', t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', d1)), 'ok:4');
+  PERFORM t_expect('r5 M-A: phase injected mid-export: no duplicate uid across phases and tasks',
+    (SELECT (count(u) - count(DISTINCT u))::text FROM (SELECT msp_uid u FROM job_phases WHERE job_id = d1::uuid UNION ALL SELECT msp_uid FROM job_tasks WHERE job_id = d1::uuid) s), '0');
+  PERFORM t_expect('r5 M-A: phase injected mid-export: exactly one phase stays un-numbered',
+    (SELECT count(*)::text FROM job_phases WHERE job_id = d1::uuid AND msp_uid IS NULL), '1');
+  PERFORM t_expect('r5 M-A: phase injected mid-export: tasks got the two numbers after the phases', (SELECT string_agg(msp_uid::text, ',' ORDER BY msp_uid) FROM job_tasks WHERE job_id = d1::uuid), '3,4');
+  PERFORM set_config('a2a.inject', '', true);
+  PERFORM t_expect('r5 M-A: the next export numbers the leftover phase', t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', d1)), 'ok:1');
+  PERFORM t_expect('r5 M-A: ... with a fresh uid (no reuse)', (SELECT string_agg(msp_uid::text, ',' ORDER BY msp_uid) FROM (SELECT msp_uid FROM job_phases WHERE job_id = d1::uuid UNION ALL SELECT msp_uid FROM job_tasks WHERE job_id = d1::uuid) s), '1,2,3,4,5');
+
+  PERFORM set_config('a2a.inject', 'task', true);
+  PERFORM t_expect('r5 M-A: task injected mid-export: reports only the 4 rows it counted', t_msg('authenticated', ops, format('SELECT prepare_schedule_export(%L)', d2)), 'ok:4');
+  PERFORM t_expect('r5 M-A: task injected mid-export: exactly one task stays un-numbered',
+    (SELECT count(*)::text FROM job_tasks WHERE job_id = d2::uuid AND msp_uid IS NULL), '1');
+  PERFORM t_expect('r5 M-A: task injected mid-export: no duplicate uid',
+    (SELECT (count(u) - count(DISTINCT u))::text FROM (SELECT msp_uid u FROM job_phases WHERE job_id = d2::uuid UNION ALL SELECT msp_uid FROM job_tasks WHERE job_id = d2::uuid) s), '0');
+  PERFORM set_config('a2a.inject', '', true);
+END $$;
+DROP FUNCTION sched_next_uids(uuid, uuid, integer, boolean);
+ALTER FUNCTION sched_next_uids_real(uuid, uuid, integer, boolean) RENAME TO sched_next_uids;
 ROLLBACK;
 
 -- ===== 7. committed marker (idempotent) so 30_rollback can prove audit rows and uids survive the rollback =====

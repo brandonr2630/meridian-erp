@@ -34,10 +34,14 @@ BEGIN
     END IF;
   END LOOP;
   PERFORM set_config('session_replication_role', 'origin', true);
+  -- r3d M2: job_task_links_hierarchy_guard refuses a link between a task and its own ancestor / descendant, but job_schedule_status must keep
+  -- giving the same answer for such links already stored (DBA-planted / legacy data): the harness plants them with ONLY that trigger off
+  ALTER TABLE job_task_links DISABLE TRIGGER job_task_links_z_hierarchy_guard;
   FOR l IN SELECT * FROM jsonb_array_elements(coalesce(j->'links', '[]'::jsonb)) LOOP
     INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days, link_type)
     VALUES (co, jid, uu[array_position(keys, l->>'task')], uu[array_position(keys, l->>'pred')], coalesce((l->>'lag')::int, 0), coalesce(l->>'type', 'FS'));
   END LOOP;
+  ALTER TABLE job_task_links ENABLE TRIGGER job_task_links_z_hierarchy_guard;
   RETURN pg_temp.st(jid::text, (j->>'today')::date);
 END $$;
 -- a task in ANOTHER job, used as a foreign parent

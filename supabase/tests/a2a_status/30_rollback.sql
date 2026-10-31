@@ -33,10 +33,14 @@ BEGIN
     END IF;
   END LOOP;
   PERFORM set_config('session_replication_role', 'origin', true);
+  -- r3d M2: job_task_links_hierarchy_guard refuses a link between a task and its own ancestor / descendant, but job_schedule_status must keep
+  -- giving the same answer for such links already stored (DBA-planted / legacy data): the harness plants them with ONLY that trigger off
+  ALTER TABLE job_task_links DISABLE TRIGGER job_task_links_z_hierarchy_guard;
   FOR l IN SELECT * FROM jsonb_array_elements(coalesce(j->'links', '[]'::jsonb)) LOOP
     INSERT INTO job_task_links (company_id, job_id, task_id, predecessor_id, lag_days, link_type)
     VALUES (co, jid, uu[array_position(keys, l->>'task')], uu[array_position(keys, l->>'pred')], coalesce((l->>'lag')::int, 0), coalesce(l->>'type', 'FS'));
   END LOOP;
+  ALTER TABLE job_task_links ENABLE TRIGGER job_task_links_z_hierarchy_guard;
   RETURN pg_temp.st(jid::text, (j->>'today')::date);
 END $$;
 -- a task in ANOTHER job, used as a foreign parent
@@ -59,6 +63,21 @@ BEGIN
   PERFORM t_expect('down: the A2a columns are untouched by this down script',
     (SELECT count(*)::text FROM information_schema.columns WHERE table_schema = 'public' AND ((table_name = 'job_task_links' AND column_name = 'link_type')
       OR (table_name = 'job_tasks' AND column_name = 'parent_task_id'))), '2');
+  -- r5 M-B: the two Phase A helpers are back to their Phase A bodies (infinite dates raise again), the saturating helpers are gone
+  PERFORM t_expect('down: job_sched_dfin and job_sched_dadd are gone', (SELECT count(*)::text FROM pg_proc WHERE proname IN ('job_sched_dfin', 'job_sched_dadd')), '0');
+  PERFORM t_expect('down: job_task_weight / job_task_planned_pct do not mention job_sched_dfin',
+    (SELECT count(*)::text FROM pg_proc WHERE proname IN ('job_task_weight', 'job_task_planned_pct') AND prosrc LIKE '%job_sched_dfin%'), '0');
+  PERFORM t_expect('down: finite helper values are unchanged',
+    job_task_weight(false, NULL, DATE '2026-03-01', DATE '2026-03-10')::text || '|' || round(job_task_planned_pct(NULL, NULL, DATE '2026-03-06', DATE '2026-03-15', DATE '2026-03-10'), 2)::text, '10|50.00');
+  PERFORM t_expect('down: job_task_weight is IMMUTABLE with the pinned search_path and keeps its grants',
+    (SELECT provolatile::text || ',' || array_to_string(proconfig, ',') || ',' || has_function_privilege('authenticated', oid, 'EXECUTE')::text || has_function_privilege('anon', oid, 'EXECUTE')::text
+       FROM pg_proc WHERE proname = 'job_task_weight'), 'i,search_path=public, pg_temp,truefalse');
+  BEGIN
+    PERFORM job_task_weight(false, NULL, DATE '2026-03-01', DATE 'infinity');
+    PERFORM t_expect('down: Phase A job_task_weight raises on an infinite date again', 'no error', '22008');
+  EXCEPTION WHEN SQLSTATE '22008' THEN
+    PERFORM t_expect('down: Phase A job_task_weight raises on an infinite date again', '22008', '22008');
+  END;
   PERFORM t_expect('A2 SS link with lag 2 (Phase A forecast_end)', split_part(pg_temp.a2run($j${"today":"2026-03-02","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"A","sort_order":10,"start_date":"2026-03-09","end_date":"2026-03-13","progress":0,"is_milestone":false,"weight":null,"baseline_start":null,"baseline_end":null},{"key":"B","sort_order":20,"start_date":"2026-03-09","end_date":"2026-03-14","progress":0,"is_milestone":false,"weight":null,"baseline_start":null,"baseline_end":null}],"links":[{"task":"B","pred":"A","lag":2,"type":"SS"}]}$j$::jsonb), '|', 2), '2026-03-15');
   PERFORM t_expect('A2 FF link with lag 0 (Phase A forecast_end)', split_part(pg_temp.a2run($j${"today":"2026-03-02","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"A","sort_order":10,"start_date":"2026-03-09","end_date":"2026-03-13","progress":0,"is_milestone":false,"weight":null,"baseline_start":null,"baseline_end":null},{"key":"B","sort_order":20,"start_date":"2026-03-09","end_date":"2026-03-11","progress":0,"is_milestone":false,"weight":null,"baseline_start":null,"baseline_end":null}],"links":[{"task":"B","pred":"A","lag":0,"type":"FF"}]}$j$::jsonb), '|', 2), '2026-03-10');
   PERFORM t_expect('A2 SF link that does not bind (Phase A forecast_end)', split_part(pg_temp.a2run($j${"today":"2026-03-02","job":{"status":"In Progress","due_date":null},"baselineLocked":false,"tasks":[{"key":"A","sort_order":10,"start_date":"2026-03-09","end_date":"2026-03-12","progress":0,"is_milestone":false,"weight":null,"baseline_start":null,"baseline_end":null},{"key":"B","sort_order":20,"start_date":"2026-03-09","end_date":"2026-03-11","progress":0,"is_milestone":false,"weight":null,"baseline_start":null,"baseline_end":null}],"links":[{"task":"B","pred":"A","lag":0,"type":"SF"}]}$j$::jsonb), '|', 2), '2026-03-09');

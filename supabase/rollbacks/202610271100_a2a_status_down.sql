@@ -130,3 +130,23 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION job_schedule_status(uuid, date) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION job_schedule_status(uuid, date) TO authenticated;
+-- r4 M1(b): the saturating day-add helper the new body used (nothing else calls it)
+DROP FUNCTION IF EXISTS job_sched_dadd(date, bigint);
+-- r5 M-B: the two Phase A helpers go back to their exact Phase A bodies (copied from 202610210600_phase_a_sql.sql; they raise 22008 on infinite dates again),
+-- then the saturating-date helper is dropped (job_sched_dadd above no longer exists, so nothing uses it).
+CREATE OR REPLACE FUNCTION job_task_weight(p_milestone boolean, p_weight numeric, p_start date, p_end date)
+RETURNS numeric LANGUAGE sql IMMUTABLE PARALLEL SAFE SET search_path = public, pg_temp AS $$
+  SELECT CASE WHEN p_milestone THEN 0::numeric
+              ELSE COALESCE(p_weight,
+                            GREATEST(1, CASE WHEN p_start IS NOT NULL AND p_end IS NOT NULL
+                                             THEN p_end - p_start + 1 ELSE 1 END)::numeric) END
+$$;
+CREATE OR REPLACE FUNCTION job_task_planned_pct(p_bstart date, p_bend date, p_start date, p_end date, p_on date)
+RETURNS numeric LANGUAGE sql IMMUTABLE PARALLEL SAFE SET search_path = public, pg_temp AS $$
+  SELECT CASE
+    WHEN COALESCE(p_bstart, p_start) IS NULL OR COALESCE(p_bend, p_end) IS NULL THEN 0::numeric
+    ELSE 100 * LEAST(1::numeric, GREATEST(0::numeric,
+         (p_on - COALESCE(p_bstart, p_start) + 1)::numeric
+         / GREATEST(1, COALESCE(p_bend, p_end) - COALESCE(p_bstart, p_start) + 1)::numeric)) END
+$$;
+DROP FUNCTION IF EXISTS job_sched_dfin(date);

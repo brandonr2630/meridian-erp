@@ -117,12 +117,16 @@
  {
   "name": "h1: phase numbering touches rows of other companies",
   "find": "FROM job_phases WHERE job_id = p_job_id AND company_id = v_company AND msp_uid IS NULL)\n    UPDATE job_phases p",
-  "replace": "FROM job_phases WHERE job_id = p_job_id AND msp_uid IS NULL)\n    UPDATE job_phases p"
+  "replace": "FROM job_phases WHERE job_id = p_job_id AND msp_uid IS NULL)\n    UPDATE job_phases p",
+  "equivalent": true,
+  "reason": "since r4 M2 the numbering UPDATE itself re-checks company_id (and job_id), so a row of another company is never numbered even when the CTE selects it; the CTE predicate only keeps the row numbers dense"
  },
  {
   "name": "h1: task numbering touches rows of other companies",
   "find": "FROM job_tasks WHERE job_id = p_job_id AND company_id = v_company AND msp_uid IS NULL)\n    UPDATE job_tasks t",
-  "replace": "FROM job_tasks WHERE job_id = p_job_id AND msp_uid IS NULL)\n    UPDATE job_tasks t"
+  "replace": "FROM job_tasks WHERE job_id = p_job_id AND msp_uid IS NULL)\n    UPDATE job_tasks t",
+  "equivalent": true,
+  "reason": "since r4 M2 the numbering UPDATE itself re-checks company_id (and job_id), so a row of another company is never numbered even when the CTE selects it; the CTE predicate only keeps the row numbers dense"
  },
  {
   "name": "h1: audit counts phases of other companies",
@@ -141,13 +145,13 @@
  },
  {
   "name": "counter: phases take the tasks' slice of the numbers",
-  "find": "UPDATE job_phases p SET msp_uid = v_free[n.rn] FROM n WHERE p.id = n.id;",
-  "replace": "UPDATE job_phases p SET msp_uid = v_free[v_pnull + n.rn] FROM n WHERE p.id = n.id;"
+  "find": "UPDATE job_phases p SET msp_uid = v_free[n.rn] FROM n",
+  "replace": "UPDATE job_phases p SET msp_uid = v_free[v_pnull + n.rn] FROM n"
  },
  {
   "name": "counter: tasks reuse the phases' numbers",
-  "find": "UPDATE job_tasks t SET msp_uid = v_free[v_pnull + n.rn] FROM n WHERE t.id = n.id;",
-  "replace": "UPDATE job_tasks t SET msp_uid = v_free[n.rn] FROM n WHERE t.id = n.id;"
+  "find": "UPDATE job_tasks t SET msp_uid = v_free[v_pnull + n.rn] FROM n",
+  "replace": "UPDATE job_tasks t SET msp_uid = v_free[n.rn] FROM n"
  },
  {
   "name": "counter: numbers are asked for one row fewer",
@@ -163,5 +167,70 @@
   "name": "counter: export treats itself as a replace",
   "find": "v_free := sched_next_uids(p_job_id, v_company, v_pnull + v_tnull);",
   "replace": "v_free := sched_next_uids(p_job_id, v_company, v_pnull + v_tnull, true);"
+ },
+ {
+  "name": "r4 M2: task numbering UPDATE: job predicate dropped",
+  "find": "AND t.id = n.id AND t.job_id = p_job_id AND t.company_id = v_company AND t.msp_uid IS NULL;",
+  "replace": "AND t.id = n.id AND t.company_id = v_company AND t.msp_uid IS NULL;"
+ },
+ {
+  "name": "r4 M2: task numbering UPDATE: company predicate dropped",
+  "find": "AND t.id = n.id AND t.job_id = p_job_id AND t.company_id = v_company AND t.msp_uid IS NULL;",
+  "replace": "AND t.id = n.id AND t.job_id = p_job_id AND t.msp_uid IS NULL;"
+ },
+ {
+  "name": "r4 M2: task numbering UPDATE: 'no uid yet' predicate dropped",
+  "find": "AND t.id = n.id AND t.job_id = p_job_id AND t.company_id = v_company AND t.msp_uid IS NULL;",
+  "replace": "AND t.id = n.id AND t.job_id = p_job_id AND t.company_id = v_company;"
+ },
+ {
+  "name": "r4 M2: task numbering UPDATE: back to id only",
+  "find": "AND t.id = n.id AND t.job_id = p_job_id AND t.company_id = v_company AND t.msp_uid IS NULL;",
+  "replace": "AND t.id = n.id;"
+ },
+ {
+  "name": "r4 M2: phase numbering UPDATE: job predicate dropped",
+  "find": "AND p.id = n.id AND p.job_id = p_job_id AND p.company_id = v_company AND p.msp_uid IS NULL;",
+  "replace": "AND p.id = n.id AND p.company_id = v_company AND p.msp_uid IS NULL;"
+ },
+ {
+  "name": "r4 M2: phase numbering UPDATE: company predicate dropped",
+  "find": "AND p.id = n.id AND p.job_id = p_job_id AND p.company_id = v_company AND p.msp_uid IS NULL;",
+  "replace": "AND p.id = n.id AND p.job_id = p_job_id AND p.msp_uid IS NULL;"
+ },
+ {
+  "name": "r4 M2: phase numbering UPDATE: 'no uid yet' predicate dropped",
+  "find": "AND p.id = n.id AND p.job_id = p_job_id AND p.company_id = v_company AND p.msp_uid IS NULL;",
+  "replace": "AND p.id = n.id AND p.job_id = p_job_id AND p.company_id = v_company;"
+ },
+ {
+  "name": "r4 M2: phase numbering UPDATE: back to id only",
+  "find": "AND p.id = n.id AND p.job_id = p_job_id AND p.company_id = v_company AND p.msp_uid IS NULL;",
+  "replace": "AND p.id = n.id;"
+ },
+ {
+  "name": "r5 M-A: phase numbering not capped at the counted phases",
+  "find": "WHERE n.rn <= v_pnull AND p.id = n.id",
+  "replace": "WHERE p.id = n.id"
+ },
+ {
+  "name": "r5 M-A: task numbering not capped at the counted tasks",
+  "find": "WHERE n.rn <= v_tnull AND t.id = n.id",
+  "replace": "WHERE t.id = n.id"
+ },
+ {
+  "name": "r5 M-A: phase cap off by one",
+  "find": "WHERE n.rn <= v_pnull AND p.id = n.id",
+  "replace": "WHERE n.rn <= v_pnull + 1 AND p.id = n.id"
+ },
+ {
+  "name": "r5 M-A: task cap off by one",
+  "find": "WHERE n.rn <= v_tnull AND t.id = n.id",
+  "replace": "WHERE n.rn <= v_tnull + 1 AND t.id = n.id"
+ },
+ {
+  "name": "r5 M-A: phase cap uses the task count",
+  "find": "WHERE n.rn <= v_pnull AND p.id = n.id",
+  "replace": "WHERE n.rn <= v_tnull AND p.id = n.id"
  }
 ]
