@@ -1,4 +1,8 @@
-# CLAUDE.md — Meridian ERP
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+# Meridian ERP
 
 Live URL: `erp.terranresources.com` · Repo: `brandonr2630/meridian-erp`
 
@@ -11,6 +15,28 @@ Live URL: `erp.terranresources.com` · Repo: `brandonr2630/meridian-erp`
 - **Multi-company:** every record scoped to `currentCompany.id`. Company switcher in topbar; `switchCompany(id)` reloads view data.
 - **Navigation:** `navigate(view)` sets `currentView` and calls `loadViewData(view)`.
 - **State:** global vars declared at `// ── STATE ──` (~line 3373): `currentUser`, `currentCompany`, `accounts`, `contacts`, `journalEntries`, `bankAccounts`, etc.
+
+## Commands
+
+No build step, linter or CI. Tests are plain Node (`node:test`) and slice blocks out of `index.html` into a `node:vm` context.
+
+```bash
+node --test scripts/tests/ui/*.test.mjs scripts/tests/schedule/*.test.mjs   # all JS tests
+node --test scripts/tests/schedule/msp.test.mjs                             # a single file
+node scripts/tests/ui/schedule-gantt-mutate.mjs                             # mutation harness: every mutant must be killed
+node scripts/verify-spec.mjs <spec>.md                                      # also verify-roadmap.mjs, verify-guards.mjs
+bash supabase/tests/d0c_common/run.sh <family>                              # SQL suites on throwaway Postgres (needs Docker, postgres:17-alpine)
+bash supabase/tests/phase_a_sql/run.sh                                      # schedule SQL baseline
+```
+
+Mutation harnesses require each mutant pattern to occur **exactly once** in the target text; when you change code a mutant quotes, update the mutant.
+
+## Schedule / project portal (job cards)
+
+- `jcSchedCompute` (block `// ── SCHEDULE COMPUTE (shared) ──`) and the SQL `job_schedule_status` must implement identical rules; `scripts/tests/schedule/fixture.json` is the shared case list run on both (`sql-fixture-runner.mjs` for SQL).
+- `schedule-msp.js` (repo root, loaded by a `<script>` tag before the main script) is the pure, DOM-free MS Project XML codec. The read-only schedule window (`#/schedule/<job_id>`) is the `SCHEDULE WINDOW` block in `index.html`.
+- Design specs live in `docs/specs/project-portal/` (`00-overview.md` holds cross-phase rules X1–X30). They, `scripts/`, `supabase/` and `handoff.md` are not deployed.
+- **No SQL reaches prod unproven:** migration + rollback under `supabase/migrations` / `supabase/rollbacks`, proven on throwaway Postgres with mutation checks, then applied one step at a time. This needs Docker.
 
 ## Roles
 
