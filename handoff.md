@@ -1,6 +1,6 @@
 # Meridian ERP — Handoff
 
-*Last updated: 2026-10-29 · Session 76*
+*Last updated: 2026-11-19 · Session 77*
 
 ---
 
@@ -30,7 +30,7 @@
 8. Older: PO module live click-through (S48) and PO list search/pagination (S49); `www.erp` alias/cert (S51); rotate the ERP password; confirm the BMS Bar Stock cost in Job Config; watch for GreenGeeks WAF block recurrence (S47).
 
 **Claude-side, waiting on a go-ahead or a trigger:**
-- **A2a SQL (S73-S74): built, fixed after two independent attack reviews, uid counter done (X26), all gates green. MERGED to master as files in PR #187 (49a8ad3, 2026-10-29); NOT applied to prod** (`supabase/` and `scripts/` are not deployed and the PR touched no web file). **Update S76: M2 (#190) and E1 (#189, audit reserved actions) are also merged as files, and the JS Apply/Replace import is merged and deployed but dormant (#191). Still nothing applied to prod.** The four migrations are `supabase/migrations/202610271000..1300_a2a_*.sql` (rollbacks in `supabase/rollbacks/`). See Session 74 for what is proven, the open item M2 and the prod pre-checks; E1 is closed as a separate migration in Session 75 (PR open, not applied).
+- **A2a SQL (S73-S74): built, fixed after two independent attack reviews, uid counter done (X26), all gates green. MERGED to master as files in PR #187 (49a8ad3, 2026-10-29); NOT applied to prod** (`supabase/` and `scripts/` are not deployed and the PR touched no web file). **Update S76: M2 (#190) and E1 (#189, audit reserved actions) are also merged as files, and the JS Apply/Replace import is merged and deployed but dormant (#191). Still nothing applied to prod.** **Update S77: review rounds 3-6 of the A2a SQL are also merged as files (#193, 2026-10-31); the migrations in master now differ from what Session 74 describes. Re-read `supabase/tests/a2a_schema/KNOWN-LIMITS.md` before applying. Still nothing applied to prod.** The four migrations are `supabase/migrations/202610271000..1300_a2a_*.sql` (rollbacks in `supabase/rollbacks/`). See Session 74 for what is proven, the open item M2 and the prod pre-checks; E1 is closed as a separate migration in Session 75 (PR open, not applied).
 - **A2a, JS side DONE and merged (S71)**: link types FS/SS/FF/SF and task hierarchy in `jcSchedCompute` (PRs #175, #176), the MSPDI codec `schedule-msp.js` (#176), the read-only schedule window with Export XML and an import dry run (#177), and (S72) **Gantt arrows by link type** (#180, dormant until the migration adds `link_type`). **A2a still open:** (1) the SQL side, which needs **Docker** (not installed on the machine used in S71; install it first): the A2 migration (`link_type`, `msp_uid`, `parent_task_id` + cycle guard, depth cap), `job_schedule_status` rewritten with the same link-type and hierarchy rules as the JS (the 52+3 shared fixture cases must pass on SQL too: update `scripts/tests/schedule/sql-fixture-runner.mjs`, which does not pass `link_type` or the new `parent` key yet, so the new cases fail loudly against the old SQL), `prepare_schedule_export`, `import_job_schedule` (needs an independent attack review like D0d), all proven on throwaway Postgres with mutation checks and then applied to prod one step at a time; (2) window editing and Apply import once the RPCs exist; (3) audit row per export; (4) Gantt nesting by `parent_task_id` (summary rows, indent, collapse) once that column exists. Then **A2b** (resources, `task_id` on labour and equipment entries, `jcSaveJobData` change) and **A2c** (undo/redo).
 - A2 spec accepted (S71) and **recorded 2026-10-27 (S72, PR #179)**: roadmap row, sequencing steps 2a/2b/2c, decisions 24-25, risks, effort, X1 amendment and rules X24-X30 are in `00-overview.md` / `99-roadmap.md`, and the shared-codec note is at the top of `phase-d-client-portal.md`. Still to settle in the specs when their SQL is written: names of the Phase D agreement tables (X29), and the A2b table names are only reserved (`job_resources`, `job_task_assignments`).
 - Pre-existing, not from S72: `node scripts/verify-spec.mjs phase-a-schedule-v2.md` fails on master ("DROP in up-migration without a -- down section"; the Phase A spec embeds the migration executed in Session 61). Decide whether to fix the spec text or relax the check.
@@ -39,6 +39,28 @@
 - Parked: staging deploy gate (S52, blocked on the Supabase project cap); Supabase Branching `main` record stuck in `MIGRATIONS_FAILED` (S52, not the prod database).
 
 **Gotcha:** Edit/Write are blocked on the base repo's worktrees. Write the file to the scratchpad and `cp` it in. Pull or branch from `origin/master` before reading this file (a stale checkout once stopped at Session 51).
+
+---
+
+## Session 77 - A2a SQL review rounds 3-6 merged as files (PR #193, 2026-10-31); handoff caught up (2026-11-19)
+
+**Master: `7cff12b` (PR #193).** #193 landed on 2026-10-31 after Session 76 and was not in this file until now. SQL only, no `index.html` change, **NOT applied to prod**.
+
+**What #193 changed in `supabase/migrations/202610271000..1300_a2a_*.sql` (and the two rollbacks):**
+- `msp_uid`: API roles cannot write it, it cannot move between jobs, and the uid counter ignores implausible seeds (rule X26).
+- The company guard also covers `phase_id` and `depends_on`.
+- Links between a task and its own ancestor or descendant, and any link that closes a cycle through the hierarchy, are refused (A2L01-A2L03); the import pre-checks files. This keeps `job_schedule_status` on its fast path.
+- `job_schedule_status`: linear-time sweep for links into summary tasks (601 tasks / 599 links: 13.3 s to 35 ms), saturating date math, total on infinite dates. Output unchanged for finite dates (0 differences over 3,280 old-vs-new evaluations).
+- Export numbering cannot hand out a duplicate uid or stamp a uid onto a row that moved jobs.
+- Accepted limits are written up in `supabase/tests/a2a_schema/KNOWN-LIMITS.md`.
+
+**Proof recorded in the PR (throwaway Postgres, rollback + re-apply each):** phase_a_sql 381, a2a_schema 330, a2a_status 1326, a2a_export 118, a2a_import 624; shared fixture 55/55; combined stack with reverse rollbacks; three two-session concurrency scripts; JS suite 273/273.
+
+**Not re-run in #193:** the full import and phase_a_sql mutant sets. Re-run them before the prod apply (`node supabase/tests/d0c_common/mutate.mjs <family>`).
+
+**Still open (unchanged from Session 76):** the owner's 5-row read-only pre-check in the Supabase SQL Editor; then, with explicit go-ahead, apply one migration at a time with simulated-identity verification (schema, status, export, import, then audit-reserved); owner live checks (Open schedule, ProjectLibre round trip, lawyer's agreement); JS follow-ups (export via `prepare_schedule_export`, window editing, Gantt nesting by `parent_task_id`); A2b, A2c, Phases B-D.
+
+**Housekeeping:** the root checkout `z-master` is 39 commits behind origin/master; merged worktrees still sit under `.worktrees/` (`handoff-s76` and `handoff-s77` join the list).
 
 ---
 
